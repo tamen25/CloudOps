@@ -1,0 +1,82 @@
+# CloudOps - Terraform Variables Template
+# Copy this file to terraform.tfvars and customize for your environment
+# cp terraform.tfvars.example terraform.tfvars
+
+# Module Toggle Controls
+# Deploy order: bootstrap (always) → networking → compute
+enable_networking = false
+enable_compute    = false # Enable after networking is deployed
+
+# DANGER ZONE: Complete Infrastructure Teardown
+# Set to true ONLY when destroying everything (networking and compute must be false first)
+destroy_all = false
+
+# General Configuration
+region       = "us-east-1"  # Your AWS region
+environment  = "dev"        # Environment: dev, staging, prod
+project_name = "cloudops"   # Project identifier (used in resource names)
+owner        = "YOUR_NAME"  # CHANGE THIS: Your name or team
+
+# Networking Configuration
+az_count = 2  # Number of availability zones (2-3 recommended)
+vpc_cidr = "10.0.0.0/16"
+
+# Subnet CIDRs (set to null for auto-generation)
+public_subnet_cidrs  = null
+private_subnet_cidrs = null
+db_subnet_cidrs      = null
+
+# NAT Gateway (set to false in dev to save ~$64/month for 2 AZs)
+enable_nat_gateway = false
+
+# VPC Flow Logs
+enable_flow_logs         = false
+flow_logs_retention_days = 7
+
+# Security Groups
+allowed_cidr_blocks = ["0.0.0.0/0"]  # IPs allowed to access ALB (0.0.0.0/0 = public)
+enable_https        = true
+enable_http         = true
+custom_alb_ports    = []
+rds_port            = 5432
+
+# Compute Configuration (ECS Fargate)
+# NOTE: container_image will be auto-updated by deploy.sh during build
+container_image = "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/PROJECT-ENV-app:latest"
+container_port  = 3000
+desired_count   = 1
+cpu             = "256"   # 256 (.25 vCPU) or 512 (.5 vCPU)
+memory          = "512"   # 512 MB or 1024 MB
+
+# Autoscaling
+autoscaling_min_capacity  = 1
+autoscaling_max_capacity  = 10
+autoscaling_cpu_target    = 70  # CPU % to trigger scale up
+autoscaling_memory_target = 80  # Memory % to trigger scale up
+
+# Health Check
+health_check_path = "/health"
+
+# Existing Infrastructure (for compute-only deployments)
+# Only required if enable_networking = false and enable_compute = true
+existing_vpc_id             = ""
+existing_private_subnet_ids = []
+existing_public_subnet_ids  = []
+existing_alb_sg_id          = ""
+existing_ecs_task_sg_id     = ""
+
+# Bootstrap Configuration
+# IMPORTANT: S3 bucket name must be globally unique across ALL AWS accounts
+# Format: projectname-tfstate-bucket-yourname
+bootstrap_bucket_name = "cloudops-tfstate-bucket-YOURNAME"  # CHANGE THIS
+
+# KMS Encryption
+bootstrap_create_kms          = true
+bootstrap_kms_deletion_window = 30  # Days before key is permanently deleted
+
+# IAM Deployer Role (optional)
+bootstrap_additional_trusted_arns = []
+bootstrap_require_mfa             = false
+bootstrap_external_id             = ""
+bootstrap_max_session_duration    = 3600
+bootstrap_additional_policy_arns  = []
