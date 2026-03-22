@@ -1,0 +1,36 @@
+# Wildcard certificate for *.tamendutta.com (also covers root domain via SAN)
+resource "aws_acm_certificate" "main" {
+  domain_name               = "*.tamendutta.com"
+  subject_alternative_names = ["tamendutta.com"]
+  validation_method         = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(local.common_tags, { Name = "tamendutta-wildcard-cert" })
+}
+
+# DNS validation records in the existing Route 53 hosted zone
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  zone_id         = data.aws_route53_zone.main.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
+}
+
+# Blocks until ACM confirms the certificate is issued
+resource "aws_acm_certificate_validation" "main" {
+  certificate_arn         = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}

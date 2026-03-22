@@ -31,9 +31,9 @@ output "alb_sg_id" {
   value       = aws_security_group.alb.id
 }
 
-output "ecs_tasks_sg_id" {
-  description = "ECS tasks security group ID"
-  value       = aws_security_group.ecs_tasks.id
+output "eks_nodes_sg_id" {
+  description = "EKS nodes security group ID"
+  value       = aws_security_group.eks_nodes.id
 }
 
 output "rds_sg_id" {

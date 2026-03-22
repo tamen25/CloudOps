@@ -1,0 +1,138 @@
+{
+  "annotations": { "list": [] },
+  "description": "Loki log explorer — filter by service and level, cloudops namespace",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "loki", "uid": "${loki_ds}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "bucketSize": "auto",
+        "fillOpacity": 50,
+        "gradientMode": "none",
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${loki_ds}" },
+          "expr": "sum(count_over_time({namespace=\"cloudops\", service_name=~\"$service\"}[1m]))",
+          "legendFormat": "Log volume",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Volume",
+      "type": "histogram"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${loki_ds}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 4 },
+      "id": 2,
+      "options": {
+        "bucketSize": "auto",
+        "fillOpacity": 70,
+        "gradientMode": "none",
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${loki_ds}" },
+          "expr": "sum(count_over_time({namespace=\"cloudops\", level=~\"error|ERROR|Error\"}[1m]))",
+          "legendFormat": "Errors",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Spike",
+      "type": "histogram"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${loki_ds}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${loki_ds}" },
+          "expr": "{namespace=\"cloudops\", service_name=~\"$service\", level=~\"$level\"}",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["loki", "logs"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Loki Datasource",
+        "multi": false,
+        "name": "loki_ds",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "text": ".*", "value": ".*" },
+        "datasource": { "type": "loki", "uid": "${loki_ds}" },
+        "definition": "label_values({namespace=\"cloudops\"}, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": "label_values({namespace=\"cloudops\"}, service_name)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": { "text": ".*", "value": ".*" },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Level",
+        "multi": false,
+        "name": "level",
+        "options": [
+          { "selected": true,  "text": "All",   "value": ".*" },
+          { "selected": false, "text": "info",  "value": "info" },
+          { "selected": false, "text": "warn",  "value": "warn" },
+          { "selected": false, "text": "error", "value": "error" }
+        ],
+        "query": ".*,info,warn,error",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Logs Explorer",
+  "uid": "logs-explorer",
+  "version": 1
+}

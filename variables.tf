@@ -9,14 +9,50 @@ variable "enable_networking" {
   default     = false
 }
 
-variable "enable_compute" {
-  description = "Enable/disable compute module deployment"
+variable "enable_eks" {
+  description = "Enable/disable EKS module deployment"
   type        = bool
   default     = false
 }
 
+variable "enable_database" {
+  description = "Enable/disable database module deployment"
+  type        = bool
+  default     = false
+}
+
+variable "enable_ingress" {
+  description = "Enable/disable ingress module deployment (requires EKS cluster to exist first)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_observability" {
+  description = "Enable/disable observability module (LGTM stack — requires enable_eks and enable_ingress first)"
+  type        = bool
+  default     = false
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID — used for globally unique S3 bucket names in the observability module"
+  type        = string
+  default     = ""
+}
+
+variable "alb_dns_name" {
+  description = "ALB DNS name created by the Load Balancer Controller (set after first deploy)"
+  type        = string
+  default     = ""
+}
+
+variable "alb_zone_id" {
+  description = "ALB hosted zone ID for Route 53 alias records (set after first deploy)"
+  type        = string
+  default     = ""
+}
+
 variable "destroy_all" {
-  description = "DANGER: Set to true to destroy ALL infrastructure including bootstrap. Set networking and compute to false first!"
+  description = "DANGER: Set to true to destroy ALL infrastructure including bootstrap. Set networking and eks to false first!"
   type        = bool
   default     = false
 }
@@ -199,96 +235,72 @@ variable "rds_port" {
   }
 }
 
-# Compute Module Variables
+# EKS Module Variables
 
-variable "container_image" {
-  description = "Docker image to deploy (e.g., 'nginx:latest' or ECR URL with tag)"
+variable "eks_kubernetes_version" {
+  description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "nginx:latest"
+  default     = "1.32"
 }
 
-variable "container_port" {
-  description = "Port the container listens on"
-  type        = number
-  default     = 3000
+variable "eks_node_instance_types" {
+  description = "EC2 instance types for the EKS managed node group"
+  type        = list(string)
+  default     = ["t3.large"]
 }
 
-variable "desired_count" {
-  description = "Desired number of ECS tasks"
+variable "eks_node_min_size" {
+  description = "Minimum number of nodes in the EKS node group"
   type        = number
   default     = 2
 }
 
-variable "cpu" {
-  description = "CPU units for Fargate task (256, 512, 1024, 2048, 4096)"
+variable "eks_node_max_size" {
+  description = "Maximum number of nodes in the EKS node group"
+  type        = number
+  default     = 6
+}
+
+variable "eks_node_desired_size" {
+  description = "Desired number of nodes in the EKS node group"
+  type        = number
+  default     = 2
+}
+
+variable "order_api_namespace" {
+  description = "Kubernetes namespace for the order-api service account (IRSA)"
   type        = string
-  default     = "256"
+  default     = "cloudops"
 }
 
-variable "memory" {
-  description = "Memory for Fargate task in MB (512, 1024, 2048, etc.)"
+variable "order_api_service_account" {
+  description = "Kubernetes service account name for order-api IRSA"
   type        = string
-  default     = "512"
+  default     = "order-api"
 }
 
-variable "autoscaling_min_capacity" {
-  description = "Minimum number of tasks for autoscaling"
-  type        = number
-  default     = 1
-}
-
-variable "autoscaling_max_capacity" {
-  description = "Maximum number of tasks for autoscaling"
-  type        = number
-  default     = 10
-}
-
-variable "autoscaling_cpu_target" {
-  description = "Target CPU utilization percentage for autoscaling"
-  type        = number
-  default     = 70
-}
-
-variable "autoscaling_memory_target" {
-  description = "Target memory utilization percentage for autoscaling"
-  type        = number
-  default     = 80
-}
-
-variable "health_check_path" {
-  description = "Health check path for ALB target group"
-  type        = string
-  default     = "/health"
-}
-
-# Existing Infrastructure (for compute-only deployments)
+# Existing Infrastructure (for EKS-only deployments without networking module)
 
 variable "existing_vpc_id" {
-  description = "Existing VPC ID (required if enable_networking is false and enable_compute is true)"
+  description = "Existing VPC ID (required if enable_networking is false and enable_eks is true)"
   type        = string
   default     = ""
 }
 
 variable "existing_private_subnet_ids" {
-  description = "Existing private subnet IDs (required if enable_networking is false and enable_compute is true)"
+  description = "Existing private subnet IDs (required if enable_networking is false and enable_eks is true)"
   type        = list(string)
   default     = []
 }
 
 variable "existing_public_subnet_ids" {
-  description = "Existing public subnet IDs (required if enable_networking is false and enable_compute is true)"
+  description = "Existing public subnet IDs (required if enable_networking is false and enable_eks is true)"
   type        = list(string)
   default     = []
 }
 
-variable "existing_alb_sg_id" {
-  description = "Existing ALB security group ID (required if enable_networking is false and enable_compute is true)"
-  type        = string
-  default     = ""
-}
-
-variable "existing_ecs_task_sg_id" {
-  description = "Existing ECS task security group ID (required if enable_networking is false and enable_compute is true)"
+variable "existing_node_sg_id" {
+  description = "Existing EKS node security group ID (required if enable_networking is false and enable_eks is true)"
   type        = string
   default     = ""
 }
@@ -344,12 +356,6 @@ variable "bootstrap_additional_policy_arns" {
 }
 
 # Database Module Variables
-
-variable "enable_database" {
-  description = "Enable/disable database module deployment"
-  type        = bool
-  default     = false
-}
 
 variable "database_instance_class" {
   description = "RDS instance class (e.g., db.t3.micro for dev, db.r6g.large for prod)"

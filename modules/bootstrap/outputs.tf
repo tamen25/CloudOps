@@ -29,3 +29,13 @@ output "deployer_role_name" {
   description = "IAM deployer role name"
   value       = aws_iam_role.deployer.name
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC authentication"
+  value       = aws_iam_role.github_actions.arn
+}
+
+output "oidc_provider_arn" {
+  description = "GitHub Actions OIDC provider ARN"
+  value       = aws_iam_openid_connect_provider.github.arn
+}

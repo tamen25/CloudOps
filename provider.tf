@@ -1,5 +1,3 @@
-# AWS Provider Configuration
-
 terraform {
   required_version = ">= 1.5.0"
 
@@ -8,10 +6,24 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.15"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.33"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
-  # S3 Backend for Remote State
-  # The S3 bucket is created by ./modules/bootstrap/create-s3-bucket.sh
   backend "s3" {
     bucket       = "cloudops-tfstate-bucket-tamen"
     key          = "main/terraform.tfstate"
@@ -31,4 +43,30 @@ provider "aws" {
       ManagedBy   = "Terraform"
     }
   }
+}
+
+# Helm and Kubernetes providers require the EKS cluster to exist.
+# Deploy order: enable_eks=true first, then enable_ingress=true on a second apply.
+data "aws_eks_cluster" "this" {
+  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  name  = local.eks_cluster_name
+}
+
+data "aws_eks_cluster_auth" "this" {
+  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  name  = local.eks_cluster_name
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+    cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+    token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
+  }
+}
+
+provider "kubernetes" {
+  host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+  cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+  token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
 }

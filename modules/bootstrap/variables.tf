@@ -62,3 +62,9 @@ variable "additional_policy_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "github_repo" {
+  description = "GitHub repository in owner/name format used to scope the OIDC trust policy"
+  type        = string
+  default     = "tamen25/CloudOps"
+}

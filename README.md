@@ -10,6 +10,7 @@ CloudOps provisions and manages AWS resources across multiple environments (dev,
 - Application Load Balancer
 - RDS PostgreSQL with encryption, backups, and Multi-AZ support
 - Secure S3 remote state with native locking (Terraform 1.11+)
+- Full CI/CD pipeline via GitHub Actions with OIDC authentication (no long-lived AWS credentials)
 
 ## Prerequisites
 
@@ -60,7 +61,7 @@ This script will:
 2. Initialize Terraform with S3 backend
 3. Deploy infrastructure in stages:
    - **Stage 4a**: Bootstrap + Networking (~2 minutes)
-   - **Stage 4b**: Database/RDS (~5-10 minutes) ⏳
+   - **Stage 4b**: Database/RDS (~5-10 minutes)
    - **Stage 4c**: Compute/ECS (~3 minutes)
    - **Stage 4d**: Final synchronization
 4. Store state in S3 with automatic locking
@@ -87,37 +88,169 @@ Then deploy:
 - Networking + Compute: ~5 minutes
 - Full stack (Networking + Database + Compute): ~12-15 minutes
 
+---
+
+## CI/CD Setup
+
+All four workflows authenticate to AWS via **GitHub Actions OIDC** — no long-lived AWS access keys are stored as secrets. The OIDC provider and GitHub Actions IAM role are provisioned by `module.bootstrap`.
+
+### Step 1 — Bootstrap OIDC
+
+Bootstrap must be applied locally before the pipelines can run. This creates the OIDC provider, the GitHub Actions IAM role, and the Terraform state bucket.
+
+```bash
+# Apply bootstrap only
+terraform apply -target=module.bootstrap
+
+# Retrieve the IAM role ARN to configure as a secret
+terraform output -raw bootstrap_github_actions_role_arn
+```
+
+### Step 2 — Configure GitHub Secrets
+
+Go to **Settings → Secrets and variables → Actions → New repository secret** and add each of the following:
+
+| Secret | Description | How to get the value |
+|--------|-------------|----------------------|
+| `AWS_GITHUB_ACTIONS_ROLE_ARN` | IAM role ARN that GitHub Actions assumes via OIDC | `terraform output -raw bootstrap_github_actions_role_arn` |
+| `AWS_REGION` | AWS region for all workflows | The `region` value from your `terraform.tfvars` (e.g. `us-east-1`) |
+| `TF_VARS` | Full contents of your `terraform.tfvars` file | Copy the file contents: `cat terraform.tfvars` |
+| `INFRACOST_API_KEY` | Infracost API key for cost estimation on PRs | [infracost.io/docs](https://www.infracost.io/docs/#2-get-api-key) |
+| `ECR_REPOSITORY_URL` | ECR repository URI without tag | `terraform output -raw ecr_repository_url` (after compute module applied) |
+| `EKS_CLUSTER_NAME` | EKS cluster name | `terraform output -raw eks_cluster_name` (after EKS module applied) |
+| `GRAFANA_API_KEY` | Grafana service account token for OTel trace verification | Grafana → Administration → Service accounts → New token |
+
+### Step 3 — Create the `production` GitHub Environment
+
+The infra pipeline's apply job and the destroy workflow both require manual approval via a **GitHub Environment** named `production`. Without this, applies run unattended after any push to `main`.
+
+1. Go to **Settings → Environments → New environment**
+2. Name it exactly `production`
+3. Under **Deployment protection rules**, enable **Required reviewers**
+4. Add yourself and any other approvers (minimum one reviewer required)
+5. Optionally set a **Wait timer** (e.g. 5 minutes) as an additional safety buffer
+
+### Step 4 — Configure Branch Protection
+
+Go to **Settings → Branches → Add branch protection rule** for `main`:
+
+| Rule | Setting |
+|------|---------|
+| Require a pull request before merging | Enabled |
+| Require approvals | 1 (or more) |
+| Require status checks to pass before merging | Enabled |
+| Required status checks | `quality`, `plan` |
+| Require branches to be up to date before merging | Enabled |
+| Do not allow bypassing the above settings | Enabled |
+| Allow force pushes | **Disabled** |
+| Allow deletions | **Disabled** |
+
+The `quality` and `plan` jobs from the infra pipeline run on every PR targeting `main`. With these checks required, a PR cannot be merged if Terraform formatting, validation, linting, or planning fails.
+
+### Workflow Summary
+
+| Workflow | File | Trigger | What it does |
+|----------|------|---------|--------------|
+| **App Pipeline** | `app.yml` | Push to `main` on `apps/order-api/**`; `workflow_dispatch` | Unit tests → manifest validation → Docker build+push to ECR → Trivy image scan → deploy to EKS with automatic rollback → integration tests (health, orders, metrics, Tempo traces) |
+| **Infra Pipeline** | `infra.yml` | Push or PR to `main` on `*.tf` / `modules/**`; `workflow_dispatch` | fmt/validate/lint/tfsec → cost diff (PR only) → `terraform plan` → security scan + manifest validation → manual approval gate (`production` env) → staged `terraform apply` |
+| **Destroy Infrastructure** | `destroy.yml` | `workflow_dispatch` only | Double-gated full teardown: typed confirmation + `production` environment approval → empty S3 data buckets → disable modules in order → destroy bootstrap → delete state bucket |
+| **Drift Detection** | `drift-detection.yml` | Nightly at 02:00 UTC; `workflow_dispatch` | Runs `terraform plan -detailed-exitcode`; opens a GitHub issue labeled `drift` if changes detected; closes the issue automatically when drift is resolved |
+
+### Using the Destroy Workflow Safely
+
+The destroy workflow is intentionally hard to trigger accidentally. It requires **both** gates to pass before any AWS resource is touched:
+
+1. **GitHub Environment approval** — a configured reviewer must approve the `destroy` job in the `production` environment (same gate as infra apply)
+2. **Typed confirmation** — the `confirm` input must be the exact string `destroy-everything`
+
+To trigger a destroy:
+
+1. Go to **Actions → Destroy Infrastructure → Run workflow**
+2. Set `confirm` to `destroy-everything` (copy-paste to avoid typos)
+3. Select the target environment (`dev`, `staging`, or `prod`)
+4. Click **Run workflow**
+5. When the job reaches the approval gate, a reviewer must click **Review deployments → Approve**
+
+The workflow destroys resources in dependency order:
+1. Empties Loki and Tempo S3 buckets (handles versioned and Glacier-transitioned objects)
+2. Disables observability → ingress → database → EKS → networking (each as a separate `terraform apply`)
+3. Destroys bootstrap resources (KMS key, OIDC provider, IAM roles) via `destroy_all = true`
+4. Empties and deletes the Terraform state bucket
+
+> **Note:** The state bucket is created outside Terraform by `create-s3-bucket.sh`, so it must be deleted explicitly. After the destroy workflow completes, nothing remains in AWS.
+
+### Drift Detection
+
+The drift detection workflow runs every night at 02:00 UTC and compares live AWS infrastructure against Terraform state using `terraform plan -detailed-exitcode`.
+
+| Exit code | Meaning | Action taken |
+|-----------|---------|--------------|
+| `0` | No changes — infrastructure matches state | Closes any open `drift` issue with a "resolved" comment |
+| `1` | Terraform error (plan failed) | Fails the workflow run; no issue action |
+| `2` | Drift detected — live state differs from Terraform | Opens a new `drift` issue (or comments on the existing one) with the full plan output |
+
+**When a drift issue is opened:**
+
+1. Open the issue and review the plan output in the details block
+2. Determine whether the change was intentional (someone applied a manual change) or unintentional (resource modified or deleted outside Terraform)
+3. **If intentional:** import the resource into state (`terraform import`) or update the Terraform config to match, then apply
+4. **If unintentional:** run `terraform apply` to restore the intended state
+5. The next nightly run will automatically close the issue once `terraform plan` returns exit code 0
+
+The `drift` label is created automatically on first run if it does not exist in the repository.
+
+---
+
 ## Project Structure
 
 ```
 CloudOps/
-├── main.tf              # Root configuration
-├── provider.tf          # AWS provider + backend config
-├── variables.tf         # Variable definitions
-├── outputs.tf           # Output definitions
-├── terraform.tfvars     # Your configuration values
-├── deploy.sh            # Automated deployment script
-├── destroy.sh           # Infrastructure teardown script
+├── main.tf                    # Root configuration
+├── provider.tf                # AWS provider + backend config
+├── variables.tf               # Variable definitions
+├── outputs.tf                 # Output definitions
+├── terraform.tfvars           # Your configuration values
+├── deploy.sh                  # Automated deployment script
+├── destroy.sh                 # Infrastructure teardown script
+├── .github/
+│   └── workflows/
+│       ├── app.yml            # App CI/CD pipeline
+│       ├── infra.yml          # Infrastructure CI/CD pipeline
+│       ├── destroy.yml        # Manual destroy workflow
+│       └── drift-detection.yml# Nightly drift detection
 └── modules/
-    ├── bootstrap/       # S3 state bucket + IAM deployer role
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── create-s3-bucket.sh
-    ├── networking/      # VPC, subnets, security groups
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── security_groups.tf
-    ├── compute/         # ECS Fargate, ALB, autoscaling
-    │   ├── main.tf
+    ├── bootstrap/             # S3 state bucket + IAM deployer role + GitHub OIDC
+    │   ├── iam.tf
+    │   ├── github_oidc.tf
+    │   ├── kms.tf
+    │   ├── locals.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    └── database/        # RDS PostgreSQL, Secrets Manager
+    ├── networking/            # VPC, subnets, security groups, flow logs
+    │   ├── vpc.tf
+    │   ├── subnets.tf
+    │   ├── nat_gateway.tf
+    │   ├── route_tables.tf
+    │   ├── flow_logs.tf
+    │   ├── security_groups.tf
+    │   ├── locals.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    ├── compute/               # ECS Fargate, ALB, autoscaling, ECR
+    │   ├── alb.tf
+    │   ├── autoscaling.tf
+    │   ├── ecr.tf
+    │   ├── ecs_cluster.tf
+    │   ├── ecs_service.tf
+    │   ├── iam.tf
+    │   ├── task_definition.tf
+    │   ├── locals.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── database/              # RDS PostgreSQL, Secrets Manager
         ├── main.tf
         ├── variables.tf
-        ├── outputs.tf
-        └── README.md
+        └── outputs.tf
 ```
 
 ## Module Toggle System
@@ -137,6 +270,7 @@ destroy_all       = false  # DANGER: Complete teardown
 - S3 bucket for Terraform state (encrypted, versioned)
 - KMS key for encryption (optional)
 - IAM deployer role with infrastructure permissions
+- GitHub Actions OIDC provider and federated IAM role (no long-lived credentials needed)
 
 ### Networking Module
 - VPC with configurable CIDR
@@ -170,23 +304,28 @@ destroy_all       = false  # DANGER: Complete teardown
 - S3 native state locking (no DynamoDB needed)
 - Public access blocking on state bucket
 - IAM deployer role with least-privilege
+- GitHub Actions OIDC — no AWS access keys stored in GitHub
+- OIDC trust scoped to this repository's `main`, `feature/*` branches and pull requests only
 - Security groups with minimal required access
 - KMS encryption for additional security
 - VPC Flow Logs for network monitoring
+- Trivy scanning on both Terraform config (infra pipeline) and container images (app pipeline)
+- Checkov policy checks on every infra PR
 
 ## Infrastructure Teardown
 
-To destroy all infrastructure:
+**Preferred: use the destroy workflow** (see [CI/CD Setup — Using the Destroy Workflow Safely](#using-the-destroy-workflow-safely) above). It handles versioned S3 objects, Glacier-transitioned objects, and progressive module disabling automatically.
+
+**Manual teardown:**
 
 ```bash
 ./destroy.sh
 ```
 
-Or manually:
+Or step by step:
 
 ```bash
-# 1. Disable modules progressively
-# Edit terraform.tfvars:
+# 1. Disable modules progressively (edit terraform.tfvars before each apply)
 enable_database   = false
 terraform apply
 
@@ -260,6 +399,25 @@ Ensure your AWS credentials have administrative permissions for initial bootstra
 1. Verify S3 bucket exists: `aws s3 ls s3://your-bucket-name`
 2. Check backend configuration matches bootstrap outputs
 3. Ensure you have S3 access permissions
+
+### GitHub Actions OIDC Failure
+
+If workflows fail with `Error assuming role` or `No OpenIDConnect provider found`:
+
+1. Confirm bootstrap has been applied: `terraform state list | grep bootstrap`
+2. Confirm the `AWS_GITHUB_ACTIONS_ROLE_ARN` secret matches the output: `terraform output -raw bootstrap_github_actions_role_arn`
+3. Confirm the branch or event type is in the OIDC trust policy (`main`, `feature/*`, or `pull_request`)
+4. Confirm `id-token: write` permission is set on the job (required for OIDC token generation)
+
+### Drift Issue Opened — What to Do
+
+See [Drift Detection](#drift-detection) above for a full remediation guide. Quick steps:
+
+1. Open the drift issue and read the plan output
+2. Run `terraform plan` locally to reproduce
+3. If unintentional: run `terraform apply` to restore intended state
+4. If intentional: update the Terraform config or run `terraform import` to record the change
+5. The issue closes automatically on the next nightly run once `terraform plan` returns no changes
 
 ## Support
 

@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: order-api
+  namespace: cloudops
+  labels:
+    # Must match the Prometheus operator serviceMonitorSelector label
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: order-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

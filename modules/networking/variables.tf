@@ -34,6 +34,13 @@ variable "primary_region" {
   }
 }
 
+# EKS Configuration
+
+variable "eks_cluster_name" {
+  description = "EKS cluster name used for subnet tags (kubernetes.io/cluster/<name>=shared). Must match the cluster name in the compute module."
+  type        = string
+}
+
 # Availability Zone Configuration
 
 variable "az_count" {

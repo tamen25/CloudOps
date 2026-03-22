@@ -1,110 +1,137 @@
-# CloudOps - Terraform Variables Template
-# Copy this file to terraform.tfvars and customize for your environment
-# cp terraform.tfvars.example terraform.tfvars
+# CloudOps — Terraform Variables Template
+# Copy to terraform.tfvars and fill in the values marked CHANGE THIS
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Deploy order:
+#   1. bootstrap (always on) + networking
+#   2. eks              (requires networking)
+#   3. ingress          (requires eks — ACM + LBC + Route 53)
+#   4. observability    (requires eks + ingress)
+#   5. database         (requires networking; independent of eks)
+#   After steps 3–4: set alb_dns_name + alb_zone_id, then re-apply
 
+# ─────────────────────────────────────────────────────────────
 # Module Toggle Controls
-# Deploy order: bootstrap (always) → networking → compute → database
-enable_networking = false
-enable_compute    = false # Enable after networking is deployed
-enable_database   = false # Enable after networking is deployed
+# ─────────────────────────────────────────────────────────────
+enable_networking    = false
+enable_eks           = false  # Enable after networking is deployed
+enable_database      = false  # Enable after networking is deployed
+enable_ingress       = false  # Enable after eks is deployed
+enable_observability = false  # Enable after ingress is deployed
 
-# DANGER ZONE: Complete Infrastructure Teardown
-# Set to true ONLY when destroying everything (networking and compute must be false first)
+# DANGER ZONE: set to true ONLY when running destroy.sh
 destroy_all = false
 
+# ─────────────────────────────────────────────────────────────
 # General Configuration
-region       = "us-east-1"  # Your AWS region
-environment  = "dev"        # Environment: dev, staging, prod
-project_name = "cloudops"   # Project identifier (used in resource names)
-owner        = "YOUR_NAME"  # CHANGE THIS: Your name or team
+# ─────────────────────────────────────────────────────────────
+region       = "us-east-1"  # AWS region
+environment  = "dev"        # dev | staging | prod
+project_name = "cloudops"   # Used in all resource names — keep short (≤32 chars)
+owner        = "CHANGE_THIS" # Your name or team name
 
-# Networking Configuration
-az_count = 2  # Number of availability zones (2-3 recommended)
+# AWS account ID — used for globally unique S3 bucket names in the observability module.
+# Leave empty to auto-detect from the AWS caller identity at plan time.
+aws_account_id = ""
+
+# ─────────────────────────────────────────────────────────────
+# ALB / Route 53  (set after first ingress deploy)
+# ─────────────────────────────────────────────────────────────
+# After deploying with enable_ingress = true, run:
+#   kubectl get ingress -n cloudops -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
+# Then fill in the values below and re-apply to create Route 53 A records.
+alb_dns_name = ""
+alb_zone_id  = ""
+
+# ─────────────────────────────────────────────────────────────
+# Networking
+# ─────────────────────────────────────────────────────────────
+az_count = 2          # Number of AZs (2–3 recommended)
 vpc_cidr = "10.0.0.0/16"
 
-# Subnet CIDRs (set to null for auto-generation)
+# Subnet CIDRs — set to null to auto-generate from vpc_cidr
 public_subnet_cidrs  = null
 private_subnet_cidrs = null
 db_subnet_cidrs      = null
 
-# NAT Gateway (set to false in dev to save ~$64/month for 2 AZs)
+# NAT gateways: ~$32/month per AZ — set false in dev to save cost
 enable_nat_gateway = false
 
 # VPC Flow Logs
 enable_flow_logs         = false
 flow_logs_retention_days = 7
 
-# Security Groups
-allowed_cidr_blocks = ["0.0.0.0/0"]  # IPs allowed to access ALB (0.0.0.0/0 = public)
+# Security groups
+allowed_cidr_blocks = ["0.0.0.0/0"]  # IPs allowed to reach the ALB
 enable_https        = true
 enable_http         = true
 custom_alb_ports    = []
 rds_port            = 5432
 
-# Compute Configuration (ECS Fargate)
-# NOTE: container_image will be auto-updated by deploy.sh during build
-container_image = "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/PROJECT-ENV-app:latest"
-container_port  = 3000
-desired_count   = 1
-cpu             = "256"   # 256 (.25 vCPU) or 512 (.5 vCPU)
-memory          = "512"   # 512 MB or 1024 MB
+# ─────────────────────────────────────────────────────────────
+# EKS Configuration
+# ─────────────────────────────────────────────────────────────
+eks_kubernetes_version = "1.32"
 
-# Autoscaling
-autoscaling_min_capacity  = 1
-autoscaling_max_capacity  = 10
-autoscaling_cpu_target    = 70  # CPU % to trigger scale up
-autoscaling_memory_target = 80  # Memory % to trigger scale up
+# Node instance types — t3.large gives 2 vCPU / 8 GiB per node
+eks_node_instance_types = ["t3.large"]
 
-# Health Check
-health_check_path = "/health"
+eks_node_min_size     = 2  # Always keep ≥2 for HA
+eks_node_max_size     = 6
+eks_node_desired_size = 2
 
-# Existing Infrastructure (for compute-only deployments)
-# Only required if enable_networking = false and enable_compute = true
+# Kubernetes namespace and service account for the order-api IRSA role
+order_api_namespace       = "cloudops"
+order_api_service_account = "order-api"
+
+# ─────────────────────────────────────────────────────────────
+# Existing Infrastructure  (EKS-only deployments without networking module)
+# ─────────────────────────────────────────────────────────────
 existing_vpc_id             = ""
 existing_private_subnet_ids = []
 existing_public_subnet_ids  = []
-existing_alb_sg_id          = ""
-existing_ecs_task_sg_id     = ""
+existing_node_sg_id         = ""
 
+# ─────────────────────────────────────────────────────────────
 # Bootstrap Configuration
-# IMPORTANT: S3 bucket name must be globally unique across ALL AWS accounts
-# Format: projectname-tfstate-bucket-yourname
-bootstrap_bucket_name = "cloudops-tfstate-bucket-YOURNAME"  # CHANGE THIS
+# ─────────────────────────────────────────────────────────────
+# S3 bucket name must be globally unique across all AWS accounts
+bootstrap_bucket_name = "cloudops-tfstate-bucket-CHANGE_THIS"  # CHANGE THIS
 
-# KMS Encryption
+# KMS key for state encryption
 bootstrap_create_kms          = true
-bootstrap_kms_deletion_window = 30  # Days before key is permanently deleted
+bootstrap_kms_deletion_window = 30  # Days before key is permanently deleted (7–30)
 
-# IAM Deployer Role (optional)
+# IAM deployer role (optional cross-account / MFA setup)
 bootstrap_additional_trusted_arns = []
 bootstrap_require_mfa             = false
 bootstrap_external_id             = ""
-bootstrap_max_session_duration    = 3600
+bootstrap_max_session_duration    = 3600  # Seconds (3600–43200)
 bootstrap_additional_policy_arns  = []
 
+# ─────────────────────────────────────────────────────────────
 # Database Configuration (RDS PostgreSQL)
-# Deploy order: Enable after networking module is deployed
+# ─────────────────────────────────────────────────────────────
+# Instance sizing
+database_instance_class        = "db.t3.micro"  # Dev: db.t3.micro (~$13/mo) | Prod: db.r6g.large
+database_allocated_storage     = 20             # Initial GB
+database_max_allocated_storage = 100            # Max GB for autoscaling (0 to disable)
 
-# Instance Configuration
-database_instance_class       = "db.t3.micro"  # Dev: db.t3.micro (~$13/mo), Prod: db.r6g.large (~$146/mo)
-database_allocated_storage    = 20             # Initial storage in GB
-database_max_allocated_storage = 100           # Max storage for autoscaling (0 to disable)
-
-# Database Settings
+# Engine
 database_engine         = "postgres"
-database_engine_version = "15.15"
-database_name           = "cloudops"  # Initial database name
+database_engine_version = "15.5"
+database_name           = "cloudops"
 database_port           = 5432
 
-# High Availability & Disaster Recovery
-database_multi_az            = false  # Dev: false, Prod: true (automatic failover)
-database_create_read_replica = false  # Set true for DR and read scaling
+# High availability
+database_multi_az            = false  # Dev: false | Prod: true
+database_create_read_replica = false  # Set true for DR / read scaling
 
-# Backup & Recovery
-database_backup_retention_period = 7     # Days to retain backups (0-35), Prod: 30
-database_skip_final_snapshot     = true  # Dev: true, Prod: false (creates snapshot on deletion)
-database_deletion_protection     = false # Dev: false, Prod: true (prevents accidental deletion)
+# Backup & safety
+database_backup_retention_period = 7     # Days (0–35) | Prod: 30
+database_skip_final_snapshot     = true  # Dev: true | Prod: false
+database_deletion_protection     = false # Dev: false | Prod: true
 
 # Monitoring
-database_performance_insights_enabled = true  # Enable query performance monitoring
-database_monitoring_interval         = 60    # Enhanced monitoring interval (0, 1, 5, 10, 15, 30, 60)
+database_performance_insights_enabled = true
+database_monitoring_interval          = 60  # Seconds: 0 | 1 | 5 | 10 | 15 | 30 | 60

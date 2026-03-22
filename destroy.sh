@@ -1,8 +1,8 @@
 #!/bin/bash
 # CloudOps Complete Infrastructure Teardown Script
-# Safely destroys all infrastructure including S3 bucket
+# Safely destroys all infrastructure including observability S3 buckets and state bucket
 
-set -e  # Exit on error
+set -e
 
 # Colors
 RED='\033[0;31m'
@@ -17,40 +17,54 @@ echo ""
 echo -e "${RED}WARNING: This will destroy ALL infrastructure!${NC}"
 echo ""
 
+# Validate dependencies
+if ! command -v aws &> /dev/null; then
+    echo "Error: aws CLI not found in PATH"
+    exit 1
+fi
+if ! command -v terraform &> /dev/null; then
+    echo "Error: terraform not found in PATH"
+    exit 1
+fi
+
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Function to extract value from tfvars
+# Read values from terraform.tfvars
 get_tfvar() {
     local var_name=$1
-    local value=$(grep "^$var_name" terraform.tfvars | sed 's/.*=\s*"\(.*\)"/\1/' | tr -d ' ')
-    echo "$value"
+    grep "^$var_name" terraform.tfvars 2>/dev/null | sed 's/.*=\s*"\(.*\)"/\1/' | tr -d ' "'
 }
 
-# Read values from terraform.tfvars
-REGION=$(get_tfvar "region" | tr -d '"')
-ENVIRONMENT=$(get_tfvar "environment" | tr -d '"')
-PROJECT_NAME=$(get_tfvar "project_name" | tr -d '"')
-BUCKET_NAME=$(get_tfvar "bootstrap_bucket_name" | tr -d '"')
+REGION=$(get_tfvar "region")
+ENVIRONMENT=$(get_tfvar "environment")
+PROJECT_NAME=$(get_tfvar "project_name")
+BUCKET_NAME=$(get_tfvar "bootstrap_bucket_name")
 
-# Generate bucket name using project-tfstate-bucket format
 if [ -z "$BUCKET_NAME" ]; then
     BUCKET_NAME="${PROJECT_NAME}-tfstate-bucket"
 fi
 
+# Resolve AWS account ID for observability bucket names
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region "$REGION" 2>/dev/null || echo "")
+LOKI_BUCKET="cloudops-loki-chunks-${ACCOUNT_ID}"
+TEMPO_BUCKET="cloudops-tempo-traces-${ACCOUNT_ID}"
+
 echo -e "${YELLOW}Configuration:${NC}"
-echo "  Project: $PROJECT_NAME"
-echo "  Region: $REGION"
-echo "  Environment: $ENVIRONMENT"
-echo "  S3 Bucket: $BUCKET_NAME"
+echo "  Project:      $PROJECT_NAME"
+echo "  Region:       $REGION"
+echo "  Environment:  $ENVIRONMENT"
+echo "  State bucket: $BUCKET_NAME"
+echo "  Loki bucket:  $LOKI_BUCKET"
+echo "  Tempo bucket: $TEMPO_BUCKET"
 echo ""
 
-# Final confirmation
 echo -e "${RED}This will:${NC}"
-echo "  1. Destroy all Terraform-managed infrastructure"
-echo "  2. Delete the S3 bucket: $BUCKET_NAME"
-echo "  3. Delete all state files and versions"
+echo "  1. Empty and delete Loki + Tempo S3 buckets (observability data)"
+echo "  2. Destroy all Terraform-managed infrastructure"
+echo "  3. Delete the Terraform state S3 bucket: $BUCKET_NAME"
+echo "  4. Delete all state files and local Terraform artifacts"
 echo ""
 echo -e "${RED}THIS CANNOT BE UNDONE!${NC}"
 echo ""
@@ -62,140 +76,174 @@ if [[ "$REPLY" != "destroy-everything" ]]; then
     exit 0
 fi
 
-# Step 1: Delete RDS instances FIRST (takes 5-10 minutes)
+# ---------------------------------------------------------------------------
+# Helper: empty a versioned S3 bucket
+# ---------------------------------------------------------------------------
+empty_s3_bucket() {
+    local bucket=$1
+    if aws s3api head-bucket --bucket "$bucket" --region "$REGION" 2>/dev/null; then
+        echo "  Emptying $bucket..."
+
+        # Delete all current objects
+        aws s3 rm "s3://$bucket" --recursive --region "$REGION" 2>/dev/null || true
+
+        # Delete all object versions (handles versioning and Glacier-transitioned objects)
+        VERSIONS=$(aws s3api list-object-versions --bucket "$bucket" --region "$REGION" \
+            --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+            --output json 2>/dev/null || echo '{"Objects":[]}')
+        if echo "$VERSIONS" | grep -q '"Key"'; then
+            aws s3api delete-objects --bucket "$bucket" --region "$REGION" \
+                --delete "$VERSIONS" 2>/dev/null || true
+        fi
+
+        # Delete all delete markers
+        MARKERS=$(aws s3api list-object-versions --bucket "$bucket" --region "$REGION" \
+            --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+            --output json 2>/dev/null || echo '{"Objects":[]}')
+        if echo "$MARKERS" | grep -q '"Key"'; then
+            aws s3api delete-objects --bucket "$bucket" --region "$REGION" \
+                --delete "$MARKERS" 2>/dev/null || true
+        fi
+
+        echo -e "${GREEN}  ✓ $bucket emptied${NC}"
+    else
+        echo "  $bucket not found, skipping"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Step 1: Empty Loki and Tempo observability buckets
+# These buckets may contain Glacier-transitioned objects that block Terraform
+# destroy even with force_destroy = true.
+# ---------------------------------------------------------------------------
 echo ""
-echo -e "${YELLOW}Step 1: Deleting RDS instances (if any)${NC}"
+echo -e "${YELLOW}Step 1: Emptying observability S3 buckets${NC}"
+echo -e "${YELLOW}==========================================${NC}"
+
+if [ -n "$ACCOUNT_ID" ]; then
+    empty_s3_bucket "$LOKI_BUCKET"
+    empty_s3_bucket "$TEMPO_BUCKET"
+else
+    echo -e "${YELLOW}⚠ Could not determine AWS account ID — skipping observability bucket empty${NC}"
+    echo "  You may need to empty cloudops-loki-chunks-* and cloudops-tempo-traces-* manually"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: Delete RDS instances FIRST (takes 5-10 minutes, blocks destroy)
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${YELLOW}Step 2: Deleting RDS instances (if any)${NC}"
 echo -e "${YELLOW}========================================${NC}"
 
 RDS_INSTANCE="${PROJECT_NAME}-db-primary"
 if aws rds describe-db-instances --db-instance-identifier "$RDS_INSTANCE" --region "$REGION" 2>/dev/null | grep -q "$RDS_INSTANCE"; then
     echo "Deleting RDS instance: $RDS_INSTANCE (this takes 5-10 minutes)..."
-    aws rds delete-db-instance --db-instance-identifier "$RDS_INSTANCE" --skip-final-snapshot --region "$REGION" 2>/dev/null || true
+    aws rds delete-db-instance \
+        --db-instance-identifier "$RDS_INSTANCE" \
+        --skip-final-snapshot \
+        --region "$REGION" 2>/dev/null || true
 
     echo "Waiting for RDS deletion to complete..."
     WAIT_COUNT=0
-    MAX_WAIT=30  # 30 checks * 30 seconds = 15 minutes max
+    MAX_WAIT=30  # 30 × 30s = 15 minutes max
     while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-        if ! aws rds describe-db-instances --db-instance-identifier "$RDS_INSTANCE" --region "$REGION" 2>&1 | grep -q "$RDS_INSTANCE"; then
+        if ! aws rds describe-db-instances \
+                --db-instance-identifier "$RDS_INSTANCE" \
+                --region "$REGION" 2>&1 | grep -q "$RDS_INSTANCE"; then
             echo -e "${GREEN}✓ RDS instance deleted${NC}"
             break
         fi
-        echo "  RDS still deleting... (checking every 30 seconds, $WAIT_COUNT/$MAX_WAIT)"
+        echo "  Still deleting... ($WAIT_COUNT/$MAX_WAIT checks)"
         sleep 30
         WAIT_COUNT=$((WAIT_COUNT + 1))
     done
 
     if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
-        echo -e "${YELLOW}⚠ RDS deletion taking longer than expected, continuing anyway${NC}"
+        echo -e "${YELLOW}⚠ RDS taking longer than expected, continuing anyway${NC}"
     fi
 else
     echo -e "${YELLOW}No RDS instance found, skipping${NC}"
 fi
 
-# Step 2: Disable modules via Terraform
+# ---------------------------------------------------------------------------
+# Step 3: Disable all modules via Terraform apply before full destroy
+# Reduces time and avoids dependency-ordering issues during terraform destroy
+# ---------------------------------------------------------------------------
 echo ""
-echo -e "${YELLOW}Step 2: Disabling all modules${NC}"
+echo -e "${YELLOW}Step 3: Disabling all modules${NC}"
 echo -e "${YELLOW}==============================${NC}"
 
-# Check if networking, compute, or database is enabled
-NETWORKING_ENABLED=$(grep "^enable_networking" terraform.tfvars | grep -o "true\|false")
-COMPUTE_ENABLED=$(grep "^enable_compute" terraform.tfvars | grep -o "true\|false")
-DATABASE_ENABLED=$(grep "^enable_database" terraform.tfvars | grep -o "true\|false")
+cp terraform.tfvars terraform.tfvars.backup
 
-if [ "$NETWORKING_ENABLED" == "true" ] || [ "$COMPUTE_ENABLED" == "true" ] || [ "$DATABASE_ENABLED" == "true" ]; then
-    echo -e "${YELLOW}Active modules detected. Disabling them...${NC}"
+# Disable in reverse dependency order: observability → ingress → database → eks → networking
+sed -i 's/^enable_observability = true/enable_observability = false/' terraform.tfvars
+sed -i 's/^enable_ingress       = true/enable_ingress       = false/' terraform.tfvars
+sed -i 's/^enable_ingress = true/enable_ingress = false/'             terraform.tfvars
+sed -i 's/^enable_database = true/enable_database = false/'           terraform.tfvars
+sed -i 's/^enable_eks = true/enable_eks = false/'                     terraform.tfvars
+sed -i 's/^enable_networking = true/enable_networking = false/'       terraform.tfvars
 
-    # Backup original tfvars
-    cp terraform.tfvars terraform.tfvars.backup
+terraform apply -auto-approve
+echo -e "${GREEN}✓ Modules disabled${NC}"
 
-    # Disable modules (database first, then compute, then networking)
-    sed -i 's/^enable_database = true/enable_database = false/' terraform.tfvars
-    sed -i 's/^enable_compute = true/enable_compute = false/' terraform.tfvars
-    sed -i 's/^enable_networking = true/enable_networking = false/' terraform.tfvars
-
-    terraform apply -auto-approve
-
-    echo -e "${GREEN}✓ Modules disabled${NC}"
-else
-    echo -e "${YELLOW}No active modules, skipping${NC}"
-fi
-
-# Step 3: Delete ECR images
-echo ""
-echo -e "${YELLOW}Step 3: Deleting ECR repository and images${NC}"
-echo -e "${YELLOW}===========================================${NC}"
-
-ECR_REPO_NAME="${PROJECT_NAME}-${ENVIRONMENT}-app"
-
-if aws ecr describe-repositories --repository-names "$ECR_REPO_NAME" --region "$REGION" 2>/dev/null; then
-    echo "Deleting ECR repository: $ECR_REPO_NAME"
-    aws ecr delete-repository --repository-name "$ECR_REPO_NAME" --region "$REGION" --force
-    echo -e "${GREEN}✓ ECR repository deleted${NC}"
-else
-    echo -e "${YELLOW}ECR repository does not exist, skipping${NC}"
-fi
-
-# Step 4: Destroy bootstrap
+# ---------------------------------------------------------------------------
+# Step 4: Destroy bootstrap (KMS key, IAM deployer role)
+# ---------------------------------------------------------------------------
 echo ""
 echo -e "${YELLOW}Step 4: Destroying bootstrap infrastructure${NC}"
 echo -e "${YELLOW}============================================${NC}"
 
-# Set destroy_all = true
 sed -i 's/^destroy_all = false/destroy_all = true/' terraform.tfvars
-
 terraform apply -auto-approve
-
 echo -e "${GREEN}✓ Bootstrap infrastructure destroyed${NC}"
 
-# Step 5: Delete S3 bucket
+# ---------------------------------------------------------------------------
+# Step 5: Delete Terraform state S3 bucket
+# ---------------------------------------------------------------------------
 echo ""
-echo -e "${YELLOW}Step 5: Deleting S3 bucket and all versions${NC}"
-echo -e "${YELLOW}===========================================${NC}"
+echo -e "${YELLOW}Step 5: Deleting Terraform state S3 bucket${NC}"
+echo -e "${YELLOW}==========================================${NC}"
 
-# Check if bucket exists
 if aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$REGION" 2>/dev/null; then
-    echo "Emptying S3 bucket..."
+    echo "Emptying state bucket: $BUCKET_NAME"
 
-    # Delete all objects
     aws s3 rm "s3://$BUCKET_NAME" --recursive --region "$REGION" 2>/dev/null || true
 
-    # Delete all versions
-    aws s3api delete-objects --bucket "$BUCKET_NAME" --region "$REGION" \
-        --delete "$(aws s3api list-object-versions --bucket "$BUCKET_NAME" --region "$REGION" \
-        --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' --output json)" 2>/dev/null || true
+    VERSIONS=$(aws s3api list-object-versions --bucket "$BUCKET_NAME" --region "$REGION" \
+        --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+        --output json 2>/dev/null || echo '{"Objects":[]}')
+    if echo "$VERSIONS" | grep -q '"Key"'; then
+        aws s3api delete-objects --bucket "$BUCKET_NAME" --region "$REGION" \
+            --delete "$VERSIONS" 2>/dev/null || true
+    fi
 
-    # Delete all delete markers
-    aws s3api delete-objects --bucket "$BUCKET_NAME" --region "$REGION" \
-        --delete "$(aws s3api list-object-versions --bucket "$BUCKET_NAME" --region "$REGION" \
-        --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' --output json)" 2>/dev/null || true
+    MARKERS=$(aws s3api list-object-versions --bucket "$BUCKET_NAME" --region "$REGION" \
+        --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+        --output json 2>/dev/null || echo '{"Objects":[]}')
+    if echo "$MARKERS" | grep -q '"Key"'; then
+        aws s3api delete-objects --bucket "$BUCKET_NAME" --region "$REGION" \
+            --delete "$MARKERS" 2>/dev/null || true
+    fi
 
-    # Delete the bucket
     aws s3api delete-bucket --bucket "$BUCKET_NAME" --region "$REGION"
-
-    echo -e "${GREEN}✓ S3 bucket deleted${NC}"
+    echo -e "${GREEN}✓ State bucket deleted${NC}"
 else
-    echo -e "${YELLOW}Bucket does not exist, skipping${NC}"
+    echo -e "${YELLOW}State bucket not found, skipping${NC}"
 fi
 
-# Step 6: Clean up local state files
+# ---------------------------------------------------------------------------
+# Step 6: Clean up local Terraform artifacts
+# ---------------------------------------------------------------------------
 echo ""
 echo -e "${YELLOW}Step 6: Cleaning up local files${NC}"
 echo -e "${YELLOW}================================${NC}"
 
-rm -f terraform.tfstate terraform.tfstate.backup
-rm -f tfplan
+rm -f terraform.tfstate terraform.tfstate.backup tfplan
 rm -rf .terraform
 rm -f .terraform.lock.hcl
 
-# Restore original tfvars or reset
-if [ -f terraform.tfvars.backup ]; then
-    mv terraform.tfvars.backup terraform.tfvars
-else
-    sed -i 's/^enable_networking = .*/enable_networking = false/' terraform.tfvars
-    sed -i 's/^enable_compute = .*/enable_compute = false/' terraform.tfvars
-    sed -i 's/^enable_database = .*/enable_database = false/' terraform.tfvars
-    sed -i 's/^destroy_all = .*/destroy_all = false/' terraform.tfvars
-fi
+# Restore tfvars (backup has original module toggles)
+mv terraform.tfvars.backup terraform.tfvars
 
 echo -e "${GREEN}✓ Local files cleaned${NC}"
 
@@ -205,5 +253,5 @@ echo -e "${GREEN}   Complete Teardown Finished!${NC}"
 echo -e "${GREEN}================================================${NC}"
 echo ""
 echo "All infrastructure has been destroyed."
-echo "You can run ./deploy.sh to start fresh."
+echo "Run ./deploy.sh to start fresh."
 echo ""
