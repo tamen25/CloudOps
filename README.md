@@ -73,9 +73,11 @@ This script will:
 Edit `terraform.tfvars` to enable modules progressively:
 
 ```hcl
-enable_networking = true  # Enable VPC and networking
-enable_compute    = true  # Enable ECS Fargate and ALB
-enable_database   = true  # Enable RDS PostgreSQL
+enable_networking    = true  # Enable VPC and networking
+enable_eks           = true  # Enable EKS cluster and node groups
+enable_ingress       = true  # Enable ALB controller, ACM, Route 53
+enable_observability = true  # Enable Grafana, Loki, Tempo, Prometheus
+enable_database      = true  # Enable RDS PostgreSQL
 ```
 
 Then deploy:
@@ -258,10 +260,12 @@ CloudOps/
 Control which modules are deployed via `terraform.tfvars`:
 
 ```hcl
-enable_networking = false  # VPC and networking resources
-enable_compute    = false  # ECS Fargate and ALB
-enable_database   = false  # RDS PostgreSQL database
-destroy_all       = false  # DANGER: Complete teardown
+enable_networking    = false  # VPC, subnets, security groups
+enable_eks           = false  # EKS cluster and node groups
+enable_ingress       = false  # ALB controller, ACM cert, Route 53
+enable_observability = false  # Grafana, Loki, Tempo, Prometheus
+enable_database      = false  # RDS PostgreSQL
+destroy_all          = false  # DANGER: destroys bootstrap (set others false first)
 ```
 
 ## What Gets Created
@@ -326,20 +330,26 @@ Or step by step:
 
 ```bash
 # 1. Disable modules progressively (edit terraform.tfvars before each apply)
-enable_database   = false
+enable_observability = false
 terraform apply
 
-enable_compute    = false
+enable_ingress = false
+terraform apply
+
+enable_database = false
+terraform apply
+
+enable_eks = false
 terraform apply
 
 enable_networking = false
 terraform apply
 
-# 2. Destroy bootstrap (and everything else)
+# 2. Destroy bootstrap (OIDC provider, IAM roles, KMS key, state bucket config)
 destroy_all = true
 terraform apply
 
-# 3. Delete S3 bucket manually (has deletion protection)
+# 3. Delete S3 state bucket manually (created outside Terraform)
 aws s3 rb s3://your-bucket-name --force
 ```
 
