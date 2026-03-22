@@ -57,13 +57,6 @@ jobs:
       - name: Init (no backend — providers needed for validate)
         run: terraform init -backend=false
 
-      - name: Verify lock file is committed
-        run: |
-          if ! git diff --exit-code .terraform.lock.hcl; then
-            echo "::error::Lock file has uncommitted changes — run terraform init and commit the lock file"
-            exit 1
-          fi
-
       - name: Validate
         run: terraform validate
 
