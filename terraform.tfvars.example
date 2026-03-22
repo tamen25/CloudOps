@@ -3,9 +3,10 @@
 # cp terraform.tfvars.example terraform.tfvars
 
 # Module Toggle Controls
-# Deploy order: bootstrap (always) → networking → compute
+# Deploy order: bootstrap (always) → networking → compute → database
 enable_networking = false
 enable_compute    = false # Enable after networking is deployed
+enable_database   = false # Enable after networking is deployed
 
 # DANGER ZONE: Complete Infrastructure Teardown
 # Set to true ONLY when destroying everything (networking and compute must be false first)
@@ -80,3 +81,30 @@ bootstrap_require_mfa             = false
 bootstrap_external_id             = ""
 bootstrap_max_session_duration    = 3600
 bootstrap_additional_policy_arns  = []
+
+# Database Configuration (RDS PostgreSQL)
+# Deploy order: Enable after networking module is deployed
+
+# Instance Configuration
+database_instance_class       = "db.t3.micro"  # Dev: db.t3.micro (~$13/mo), Prod: db.r6g.large (~$146/mo)
+database_allocated_storage    = 20             # Initial storage in GB
+database_max_allocated_storage = 100           # Max storage for autoscaling (0 to disable)
+
+# Database Settings
+database_engine         = "postgres"
+database_engine_version = "15.15"
+database_name           = "cloudops"  # Initial database name
+database_port           = 5432
+
+# High Availability & Disaster Recovery
+database_multi_az            = false  # Dev: false, Prod: true (automatic failover)
+database_create_read_replica = false  # Set true for DR and read scaling
+
+# Backup & Recovery
+database_backup_retention_period = 7     # Days to retain backups (0-35), Prod: 30
+database_skip_final_snapshot     = true  # Dev: true, Prod: false (creates snapshot on deletion)
+database_deletion_protection     = false # Dev: false, Prod: true (prevents accidental deletion)
+
+# Monitoring
+database_performance_insights_enabled = true  # Enable query performance monitoring
+database_monitoring_interval         = 60    # Enhanced monitoring interval (0, 1, 5, 10, 15, 30, 60)

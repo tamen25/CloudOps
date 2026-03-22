@@ -62,33 +62,67 @@ if [[ "$REPLY" != "destroy-everything" ]]; then
     exit 0
 fi
 
-# Step 1: Destroy networking and compute modules first
+# Step 1: Delete RDS instances FIRST (takes 5-10 minutes)
 echo ""
-echo -e "${YELLOW}Step 1: Checking for active modules${NC}"
-echo -e "${YELLOW}====================================${NC}"
+echo -e "${YELLOW}Step 1: Deleting RDS instances (if any)${NC}"
+echo -e "${YELLOW}========================================${NC}"
 
-# Check if networking or compute is enabled
+RDS_INSTANCE="${PROJECT_NAME}-db-primary"
+if aws rds describe-db-instances --db-instance-identifier "$RDS_INSTANCE" --region "$REGION" 2>/dev/null | grep -q "$RDS_INSTANCE"; then
+    echo "Deleting RDS instance: $RDS_INSTANCE (this takes 5-10 minutes)..."
+    aws rds delete-db-instance --db-instance-identifier "$RDS_INSTANCE" --skip-final-snapshot --region "$REGION" 2>/dev/null || true
+
+    echo "Waiting for RDS deletion to complete..."
+    WAIT_COUNT=0
+    MAX_WAIT=30  # 30 checks * 30 seconds = 15 minutes max
+    while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+        if ! aws rds describe-db-instances --db-instance-identifier "$RDS_INSTANCE" --region "$REGION" 2>&1 | grep -q "$RDS_INSTANCE"; then
+            echo -e "${GREEN}✓ RDS instance deleted${NC}"
+            break
+        fi
+        echo "  RDS still deleting... (checking every 30 seconds, $WAIT_COUNT/$MAX_WAIT)"
+        sleep 30
+        WAIT_COUNT=$((WAIT_COUNT + 1))
+    done
+
+    if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+        echo -e "${YELLOW}⚠ RDS deletion taking longer than expected, continuing anyway${NC}"
+    fi
+else
+    echo -e "${YELLOW}No RDS instance found, skipping${NC}"
+fi
+
+# Step 2: Disable modules via Terraform
+echo ""
+echo -e "${YELLOW}Step 2: Disabling all modules${NC}"
+echo -e "${YELLOW}==============================${NC}"
+
+# Check if networking, compute, or database is enabled
 NETWORKING_ENABLED=$(grep "^enable_networking" terraform.tfvars | grep -o "true\|false")
 COMPUTE_ENABLED=$(grep "^enable_compute" terraform.tfvars | grep -o "true\|false")
+DATABASE_ENABLED=$(grep "^enable_database" terraform.tfvars | grep -o "true\|false")
 
-if [ "$NETWORKING_ENABLED" == "true" ] || [ "$COMPUTE_ENABLED" == "true" ]; then
-    echo -e "${YELLOW}Active modules detected. Disabling them first...${NC}"
+if [ "$NETWORKING_ENABLED" == "true" ] || [ "$COMPUTE_ENABLED" == "true" ] || [ "$DATABASE_ENABLED" == "true" ]; then
+    echo -e "${YELLOW}Active modules detected. Disabling them...${NC}"
 
     # Backup original tfvars
     cp terraform.tfvars terraform.tfvars.backup
 
-    # Disable modules
-    sed -i 's/^enable_networking = true/enable_networking = false/' terraform.tfvars
+    # Disable modules (database first, then compute, then networking)
+    sed -i 's/^enable_database = true/enable_database = false/' terraform.tfvars
     sed -i 's/^enable_compute = true/enable_compute = false/' terraform.tfvars
+    sed -i 's/^enable_networking = true/enable_networking = false/' terraform.tfvars
 
     terraform apply -auto-approve
 
     echo -e "${GREEN}✓ Modules disabled${NC}"
+else
+    echo -e "${YELLOW}No active modules, skipping${NC}"
 fi
 
-# Step 2: Delete ECR images BEFORE Terraform destroy
+# Step 3: Delete ECR images
 echo ""
-echo -e "${YELLOW}Step 2: Deleting ECR repository and images${NC}"
+echo -e "${YELLOW}Step 3: Deleting ECR repository and images${NC}"
 echo -e "${YELLOW}===========================================${NC}"
 
 ECR_REPO_NAME="${PROJECT_NAME}-${ENVIRONMENT}-app"
@@ -101,9 +135,9 @@ else
     echo -e "${YELLOW}ECR repository does not exist, skipping${NC}"
 fi
 
-# Step 3: Enable destroy_all and destroy bootstrap
+# Step 4: Destroy bootstrap
 echo ""
-echo -e "${YELLOW}Step 3: Destroying bootstrap infrastructure${NC}"
+echo -e "${YELLOW}Step 4: Destroying bootstrap infrastructure${NC}"
 echo -e "${YELLOW}============================================${NC}"
 
 # Set destroy_all = true
@@ -113,19 +147,19 @@ terraform apply -auto-approve
 
 echo -e "${GREEN}✓ Bootstrap infrastructure destroyed${NC}"
 
-# Step 4: Delete S3 bucket
+# Step 5: Delete S3 bucket
 echo ""
-echo -e "${YELLOW}Step 4: Deleting S3 bucket and all versions${NC}"
+echo -e "${YELLOW}Step 5: Deleting S3 bucket and all versions${NC}"
 echo -e "${YELLOW}===========================================${NC}"
 
 # Check if bucket exists
 if aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$REGION" 2>/dev/null; then
     echo "Emptying S3 bucket..."
 
-    # Use s3 rm to delete all objects and versions (no jq needed)
+    # Delete all objects
     aws s3 rm "s3://$BUCKET_NAME" --recursive --region "$REGION" 2>/dev/null || true
 
-    # Delete all versions using AWS CLI without jq
+    # Delete all versions
     aws s3api delete-objects --bucket "$BUCKET_NAME" --region "$REGION" \
         --delete "$(aws s3api list-object-versions --bucket "$BUCKET_NAME" --region "$REGION" \
         --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' --output json)" 2>/dev/null || true
@@ -143,9 +177,9 @@ else
     echo -e "${YELLOW}Bucket does not exist, skipping${NC}"
 fi
 
-# Step 5: Clean up local state files
+# Step 6: Clean up local state files
 echo ""
-echo -e "${YELLOW}Step 5: Cleaning up local files${NC}"
+echo -e "${YELLOW}Step 6: Cleaning up local files${NC}"
 echo -e "${YELLOW}================================${NC}"
 
 rm -f terraform.tfstate terraform.tfstate.backup
@@ -159,6 +193,7 @@ if [ -f terraform.tfvars.backup ]; then
 else
     sed -i 's/^enable_networking = .*/enable_networking = false/' terraform.tfvars
     sed -i 's/^enable_compute = .*/enable_compute = false/' terraform.tfvars
+    sed -i 's/^enable_database = .*/enable_database = false/' terraform.tfvars
     sed -i 's/^destroy_all = .*/destroy_all = false/' terraform.tfvars
 fi
 

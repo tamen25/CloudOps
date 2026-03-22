@@ -342,3 +342,95 @@ variable "bootstrap_additional_policy_arns" {
   type        = list(string)
   default     = []
 }
+
+# Database Module Variables
+
+variable "enable_database" {
+  description = "Enable/disable database module deployment"
+  type        = bool
+  default     = false
+}
+
+variable "database_instance_class" {
+  description = "RDS instance class (e.g., db.t3.micro for dev, db.r6g.large for prod)"
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "database_allocated_storage" {
+  description = "Allocated storage in GB"
+  type        = number
+  default     = 20
+}
+
+variable "database_max_allocated_storage" {
+  description = "Maximum storage for autoscaling (0 to disable)"
+  type        = number
+  default     = 100
+}
+
+variable "database_engine" {
+  description = "Database engine (postgres, mysql, etc.)"
+  type        = string
+  default     = "postgres"
+}
+
+variable "database_engine_version" {
+  description = "Database engine version"
+  type        = string
+  default     = "15.5"
+}
+
+variable "database_name" {
+  description = "Initial database name to create"
+  type        = string
+  default     = "cloudops"
+}
+
+variable "database_port" {
+  description = "Database port"
+  type        = number
+  default     = 5432
+}
+
+variable "database_multi_az" {
+  description = "Enable Multi-AZ deployment for automatic failover"
+  type        = bool
+  default     = false
+}
+
+variable "database_create_read_replica" {
+  description = "Create a read replica for DR/scaling"
+  type        = bool
+  default     = false
+}
+
+variable "database_backup_retention_period" {
+  description = "Number of days to retain automated backups (0-35)"
+  type        = number
+  default     = 7
+}
+
+variable "database_deletion_protection" {
+  description = "Enable deletion protection (recommended for production)"
+  type        = bool
+  default     = false
+}
+
+variable "database_skip_final_snapshot" {
+  description = "Skip final snapshot on deletion (set false for production)"
+  type        = bool
+  default     = true
+}
+
+variable "database_performance_insights_enabled" {
+  description = "Enable Performance Insights"
+  type        = bool
+  default     = true
+}
+
+variable "database_monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds (0, 1, 5, 10, 15, 30, 60)"
+  type        = number
+  default     = 60
+}

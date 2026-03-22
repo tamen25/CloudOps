@@ -8,6 +8,7 @@ CloudOps provisions and manages AWS resources across multiple environments (dev,
 - VPC networking with public/private/database subnets
 - ECS Fargate compute with autoscaling
 - Application Load Balancer
+- RDS PostgreSQL with encryption, backups, and Multi-AZ support
 - Secure S3 remote state with native locking (Terraform 1.11+)
 
 ## Prerequisites
@@ -57,8 +58,14 @@ backend "s3" {
 This script will:
 1. Create S3 bucket for Terraform state
 2. Initialize Terraform with S3 backend
-3. Deploy infrastructure (bootstrap module with KMS + IAM)
-4. Store state in S3 immediately
+3. Deploy infrastructure in stages:
+   - **Stage 4a**: Bootstrap + Networking (~2 minutes)
+   - **Stage 4b**: Database/RDS (~5-10 minutes) ⏳
+   - **Stage 4c**: Compute/ECS (~3 minutes)
+   - **Stage 4d**: Final synchronization
+4. Store state in S3 with automatic locking
+
+**Note:** RDS creation takes 5-10 minutes. This is normal AWS behavior - do not interrupt!
 
 ### 4. Enable Additional Modules
 
@@ -67,12 +74,18 @@ Edit `terraform.tfvars` to enable modules progressively:
 ```hcl
 enable_networking = true  # Enable VPC and networking
 enable_compute    = true  # Enable ECS Fargate and ALB
+enable_database   = true  # Enable RDS PostgreSQL
 ```
 
-Then apply:
+Then deploy:
 ```bash
-terraform apply
+./deploy.sh  # Automatically handles staged deployment
 ```
+
+**Deployment Time Estimates:**
+- Networking only: ~2 minutes
+- Networking + Compute: ~5 minutes
+- Full stack (Networking + Database + Compute): ~12-15 minutes
 
 ## Project Structure
 
@@ -96,10 +109,15 @@ CloudOps/
     │   ├── variables.tf
     │   ├── outputs.tf
     │   └── security_groups.tf
-    └── compute/         # ECS Fargate, ALB, autoscaling
+    ├── compute/         # ECS Fargate, ALB, autoscaling
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── database/        # RDS PostgreSQL, Secrets Manager
         ├── main.tf
         ├── variables.tf
-        └── outputs.tf
+        ├── outputs.tf
+        └── README.md
 ```
 
 ## Module Toggle System
@@ -109,6 +127,7 @@ Control which modules are deployed via `terraform.tfvars`:
 ```hcl
 enable_networking = false  # VPC and networking resources
 enable_compute    = false  # ECS Fargate and ALB
+enable_database   = false  # RDS PostgreSQL database
 destroy_all       = false  # DANGER: Complete teardown
 ```
 
@@ -135,6 +154,16 @@ destroy_all       = false  # DANGER: Complete teardown
 - Auto-scaling policies (CPU and memory-based)
 - IAM roles for task execution
 
+### Database Module
+- RDS PostgreSQL instance with encryption at rest
+- AWS Secrets Manager for credential management
+- Multi-AZ deployment for automatic failover (optional)
+- Read replica for disaster recovery (optional)
+- Automated backups with point-in-time recovery
+- CloudWatch monitoring and alarms
+- Enhanced monitoring and Performance Insights
+- IAM integration with ECS tasks
+
 ## Security Features
 
 - S3 state encryption with versioning
@@ -158,6 +187,9 @@ Or manually:
 ```bash
 # 1. Disable modules progressively
 # Edit terraform.tfvars:
+enable_database   = false
+terraform apply
+
 enable_compute    = false
 terraform apply
 
@@ -183,6 +215,12 @@ enable_flow_logs   = false
 desired_count      = 1
 cpu                = "256"
 memory             = "512"
+
+# Database (cost-optimized)
+database_instance_class        = "db.t3.micro"
+database_multi_az              = false
+database_create_read_replica   = false
+database_backup_retention_period = 7
 ```
 
 ### Production Environment
@@ -194,6 +232,13 @@ enable_flow_logs   = true
 desired_count      = 3
 cpu                = "1024"
 memory             = "2048"
+
+# Database (resilience-optimized)
+database_instance_class        = "db.r6g.large"
+database_multi_az              = true
+database_create_read_replica   = true
+database_backup_retention_period = 30
+database_deletion_protection     = true
 ```
 
 ## Troubleshooting

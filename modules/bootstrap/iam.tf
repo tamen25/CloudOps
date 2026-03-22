@@ -1,54 +1,4 @@
-# CloudOps Bootstrap Module
-# Creates KMS keys and IAM deployer role
-# S3 bucket is created via bash script
-
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
-locals {
-  common_tags = {
-    Project     = var.project_name
-    Environment = var.environment
-    Owner       = var.owner
-    ManagedBy   = "Terraform"
-  }
-
-  deployer_role_name = "${var.project_name}-deployer"
-  bucket_name        = var.bucket_name != "" ? var.bucket_name : "${var.project_name}-tfstate-bucket"
-}
-
-# KMS Key for S3 Bucket Encryption (Optional)
-
-resource "aws_kms_key" "terraform_state" {
-  count = var.create_kms ? 1 : 0
-
-  description             = "${var.project_name} Terraform state encryption key"
-  deletion_window_in_days = var.kms_deletion_window
-  enable_key_rotation     = true
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${var.project_name}-tfstate-kms"
-    }
-  )
-}
-
-resource "aws_kms_alias" "terraform_state" {
-  count = var.create_kms ? 1 : 0
-
-  name          = "alias/${var.project_name}-tfstate-kms"
-  target_key_id = aws_kms_key.terraform_state[0].key_id
-}
-
-# Data source for S3 bucket (created by bash script)
-
-data "aws_s3_bucket" "terraform_state" {
-  bucket = local.bucket_name
-}
-
-# IAM Role for CloudOps Deployer
-
+# Defines the trust policy for the deployer role, allowing trusted principals to assume it
 data "aws_iam_policy_document" "deployer_assume_role" {
   statement {
     effect = "Allow"
@@ -63,7 +13,6 @@ data "aws_iam_policy_document" "deployer_assume_role" {
 
     actions = ["sts:AssumeRole"]
 
-    # Optional: Require MFA
     dynamic "condition" {
       for_each = var.require_mfa ? [1] : []
       content {
@@ -73,7 +22,6 @@ data "aws_iam_policy_document" "deployer_assume_role" {
       }
     }
 
-    # Optional: Require external ID
     dynamic "condition" {
       for_each = var.external_id != "" ? [1] : []
       content {
@@ -85,6 +33,7 @@ data "aws_iam_policy_document" "deployer_assume_role" {
   }
 }
 
+# Creates an IAM role for deploying infrastructure with Terraform
 resource "aws_iam_role" "deployer" {
   name               = local.deployer_role_name
   assume_role_policy = data.aws_iam_policy_document.deployer_assume_role.json
@@ -100,7 +49,7 @@ resource "aws_iam_role" "deployer" {
   )
 }
 
-# Policy for Terraform state management (S3 access only, no DynamoDB)
+# Defines permissions for accessing the Terraform state S3 bucket and KMS encryption key
 data "aws_iam_policy_document" "deployer_state_access" {
   statement {
     sid    = "TerraformStateS3Access"
@@ -132,7 +81,6 @@ data "aws_iam_policy_document" "deployer_state_access" {
     ]
   }
 
-  # KMS permissions if enabled
   dynamic "statement" {
     for_each = var.create_kms ? [1] : []
     content {
@@ -151,13 +99,14 @@ data "aws_iam_policy_document" "deployer_state_access" {
   }
 }
 
+# Attaches the Terraform state access policy to the deployer role
 resource "aws_iam_role_policy" "deployer_state_access" {
   name   = "${local.deployer_role_name}-state-access"
   role   = aws_iam_role.deployer.id
   policy = data.aws_iam_policy_document.deployer_state_access.json
 }
 
-# Full admin policy for infrastructure deployment
+# Defines broad permissions for deploying AWS infrastructure resources
 data "aws_iam_policy_document" "deployer_infrastructure" {
   statement {
     sid    = "InfrastructureDeployment"
@@ -182,13 +131,14 @@ data "aws_iam_policy_document" "deployer_infrastructure" {
   }
 }
 
+# Attaches the infrastructure deployment policy to the deployer role
 resource "aws_iam_role_policy" "deployer_infrastructure" {
   name   = "${local.deployer_role_name}-infrastructure"
   role   = aws_iam_role.deployer.id
   policy = data.aws_iam_policy_document.deployer_infrastructure.json
 }
 
-# Attach additional managed policies if provided
+# Attaches any additional managed IAM policies to the deployer role
 resource "aws_iam_role_policy_attachment" "additional_policies" {
   count = length(var.additional_policy_arns)
 

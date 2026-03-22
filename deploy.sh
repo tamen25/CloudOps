@@ -53,14 +53,55 @@ if [ "$ENABLE_COMPUTE" = "true" ]; then
     fi
 fi
 
-# Step 4: Deploy full infrastructure
+# Step 4: Deploy infrastructure in stages (to handle RDS timing)
 echo ""
-echo "Step 4: Deploying infrastructure"
-echo "================================"
+echo "Step 4: Deploying infrastructure in stages"
+echo "=========================================="
+
+# Check which modules are enabled
+ENABLE_NETWORKING=$(grep '^enable_networking' terraform.tfvars | sed 's/.*=\s*\([a-z]*\).*/\1/')
+ENABLE_DATABASE=$(grep '^enable_database' terraform.tfvars | sed 's/.*=\s*\([a-z]*\).*/\1/')
+
+# Stage 4a: Deploy Bootstrap + Networking first
+if [ "$ENABLE_NETWORKING" = "true" ]; then
+    echo ""
+    echo "Stage 4a: Deploying Bootstrap + Networking (~2 minutes)"
+    echo "-------------------------------------------------------"
+    terraform apply -target=module.bootstrap -target=module.networking -auto-approve
+    echo "✓ Networking deployed successfully"
+fi
+
+# Stage 4b: Deploy Database (takes 5-10 minutes)
+if [ "$ENABLE_DATABASE" = "true" ]; then
+    echo ""
+    echo "Stage 4b: Deploying Database (RDS takes 5-10 minutes, please wait...)"
+    echo "---------------------------------------------------------------------"
+    echo "Creating RDS PostgreSQL instance..."
+    echo "⏳ This is normal - RDS creation is slow. Do not interrupt!"
+    echo ""
+
+    terraform apply -target=module.database -auto-approve
+
+    echo "✓ Database deployed successfully"
+fi
+
+# Stage 4c: Deploy Compute (ECS requires database to be ready)
+if [ "$ENABLE_COMPUTE" = "true" ]; then
+    echo ""
+    echo "Stage 4c: Deploying Compute (ECS Fargate + ALB) (~3 minutes)"
+    echo "------------------------------------------------------------"
+    terraform apply -target=module.compute -auto-approve
+    echo "✓ Compute deployed successfully"
+fi
+
+# Stage 4d: Final apply to ensure everything is in sync
+echo ""
+echo "Stage 4d: Final synchronization"
+echo "-------------------------------"
 terraform apply -auto-approve
 
 echo ""
 echo "=========================================="
-echo "   Deployment Complete!"
+echo "   ✓ Deployment Complete!"
 echo "=========================================="
 echo ""

@@ -1,17 +1,5 @@
 # VPC Endpoints for Private Subnet Access to AWS Services
 # Enables ECS tasks in private subnets to pull images from ECR without NAT Gateway
-#
-# Architecture Rationale:
-# - ECS Fargate tasks in private subnets need to pull container images from ECR
-# - ECR requires access to three endpoints:
-#   1. ecr.api - ECR API for authentication and image metadata
-#   2. ecr.dkr - Docker registry endpoint for pulling image layers
-#   3. s3 - Amazon S3 where ECR stores image layers
-# - Using VPC endpoints instead of NAT Gateway provides:
-#   - Lower cost (no hourly NAT charges)
-#   - Better security (traffic never leaves AWS network)
-#   - Controlled access via security groups
-#   - Production-grade architecture for regulated environments
 
 # ECR API Interface Endpoint
 # Required for ECS to authenticate with ECR and retrieve image manifests

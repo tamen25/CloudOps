@@ -100,3 +100,29 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# Database Integration
+
+variable "enable_database_integration" {
+  description = "Enable database integration (must be known at plan time)"
+  type        = bool
+  default     = false
+}
+
+variable "database_secret_arn" {
+  description = "Secrets Manager ARN containing database credentials (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "database_endpoint" {
+  description = "Database endpoint (host:port) for environment variable (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "database_name" {
+  description = "Database name for environment variable (optional)"
+  type        = string
+  default     = ""
+}

@@ -110,6 +110,57 @@ module "compute" {
   # Health Check
   health_check_path = var.health_check_path
 
+  # Database Integration (optional)
+  enable_database_integration = var.enable_database
+  database_secret_arn         = var.enable_database ? module.database[0].rds_secret_arn : ""
+  database_endpoint           = var.enable_database ? module.database[0].rds_endpoint : ""
+  database_name               = var.enable_database ? module.database[0].database_name : ""
+
+  # Tags
+  tags = local.common_tags
+}
+
+# Database Module (RDS PostgreSQL)
+
+module "database" {
+  count  = var.enable_database ? 1 : 0
+  source = "./modules/database"
+
+  # Basic Configuration
+  environment = var.environment
+  name_prefix = local.name_prefix
+
+  # Networking (depends on networking module)
+  vpc_id                 = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
+  db_subnet_ids          = var.enable_networking ? module.networking[0].database_subnet_ids : []
+  db_subnet_group_name   = var.enable_networking ? module.networking[0].db_subnet_group_name : ""
+  rds_security_group_id  = var.enable_networking ? module.networking[0].rds_sg_id : ""
+
+  # Database Configuration
+  engine                = var.database_engine
+  engine_version        = var.database_engine_version
+  instance_class        = var.database_instance_class
+  allocated_storage     = var.database_allocated_storage
+  max_allocated_storage = var.database_max_allocated_storage
+  database_name         = var.database_name
+  database_port         = var.database_port
+
+  # High Availability
+  multi_az            = var.database_multi_az
+  create_read_replica = var.database_create_read_replica
+
+  # Backup & Recovery
+  backup_retention_period = var.database_backup_retention_period
+  skip_final_snapshot     = var.database_skip_final_snapshot
+
+  # Security
+  deletion_protection = var.database_deletion_protection
+  storage_encrypted   = true
+
+  # Monitoring
+  performance_insights_enabled = var.database_performance_insights_enabled
+  monitoring_interval          = var.database_monitoring_interval
+
   # Tags
   tags = local.common_tags
 }
