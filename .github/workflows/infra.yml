@@ -1,0 +1,508 @@
+# Required GitHub Actions secrets:
+#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#   AWS_REGION                   — AWS region (e.g. us-east-1)
+#   INFRACOST_API_KEY            — From https://www.infracost.io/docs/#2-get-api-key
+#   TF_VARS                      — Full contents of your terraform.tfvars file (store as a secret)
+#
+# GitHub Environment required:
+#   production  — Settings → Environments → production; add required reviewers as the approval gate
+
+name: Infra Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**'
+      - '*.tf'
+      - '.github/workflows/infra.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'modules/**'
+      - '*.tf'
+      - '.github/workflows/infra.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  TF_VERSION: 1.7.0
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Static quality — formatting, validation, lint, tfsec, lock file check
+  # ─────────────────────────────────────────────────────────────────────────────
+  quality:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend — providers needed for validate)
+        run: terraform init -backend=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Setup tflint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: tflint init
+        run: tflint --init
+
+      - name: tflint
+        run: tflint --recursive
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          soft_fail: true
+          format: sarif
+
+      - name: Upload tfsec SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Cost estimation — PR events only
+  # Compares base branch vs PR branch; fails if monthly cost increases > $50.
+  # ─────────────────────────────────────────────────────────────────────────────
+  cost:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-infracost
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Breakdown — base branch
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+          infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
+
+      - name: Breakdown — PR branch
+        run: |
+          git checkout ${{ github.event.pull_request.head.sha }}
+          infracost breakdown --path . --format json --out-file /tmp/infracost-pr.json
+
+      - name: Generate diff
+        run: |
+          infracost diff \
+            --path . \
+            --compare-to /tmp/infracost-base.json \
+            --format json \
+            --out-file /tmp/infracost-diff.json
+
+      - name: Enforce cost threshold ($50/month max increase)
+        run: |
+          DIFF=$(jq -r '.diffTotalMonthlyCost // "0"' /tmp/infracost-diff.json)
+          DIFF=${DIFF:-0}
+          echo "Monthly cost change: \$$DIFF"
+          if (( $(echo "${DIFF} > 50" | bc -l) )); then
+            echo "::error::Cost increase of \$${DIFF}/month exceeds the \$50 threshold — review resources before merging"
+            exit 1
+          fi
+          echo "✓ Cost change (\$$DIFF/month) is within the \$50 threshold"
+
+      - name: Post PR cost comment
+        uses: infracost/actions/comment@v1
+        with:
+          path: /tmp/infracost-diff.json
+          behavior: update
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Terraform plan — all triggers
+  # ─────────────────────────────────────────────────────────────────────────────
+  plan:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-plan
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Write terraform.tfvars
+        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform plan
+        id: plan
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform plan -out=tfplan -no-color 2>&1 | tee plan-output.txt
+
+      - name: Post plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let output = fs.readFileSync('plan-output.txt', 'utf8');
+
+            if (output.length > 65000) {
+              output = output.substring(0, 65000) + '\n\n... output truncated (exceeded 65000 chars)';
+            }
+
+            const marker = '<!-- terraform-plan-comment -->';
+            const body = `## Terraform Plan
+
+            <details><summary>Show Plan Output</summary>
+
+            \`\`\`hcl
+            ${output}
+            \`\`\`
+
+            </details>
+
+            *Triggered by @${{ github.actor }} — \`${{ github.event_name }}\` on \`${{ github.ref }}\`*
+            ${marker}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated existing plan comment (id: ${existing.id})`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created new plan comment');
+            }
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+          retention-days: 5
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov (soft)
+  # Runs in parallel with plan.
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: quality
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy on Terraform config
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Install Checkov
+        run: pip install checkov --quiet
+
+      - name: Run Checkov (soft fail — informational)
+        run: |
+          checkov -d . --framework terraform --output github_failed_only || true
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 5: Manifest validation — kubeval + kubeconform + kubectl dry-run + helm lint
+  # Runs in parallel with plan.
+  # ─────────────────────────────────────────────────────────────────────────────
+  manifest-validation:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeval
+        run: |
+          wget -q https://github.com/instrumenta/kubeval/releases/download/v0.16.1/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin/
+          kubeval --version
+
+      - name: Install kubeconform
+        run: |
+          wget -q https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          kubeconform -v
+
+      - name: kubeval — strict schema validation
+        run: |
+          kubeval --strict apps/order-api/k8s/*.yaml
+
+      - name: kubeconform — schema validation
+        run: |
+          kubeconform -strict -summary apps/order-api/k8s/
+
+      - name: kubectl apply --dry-run=client
+        run: |
+          # Create a minimal mock kubeconfig — dry-run=client never contacts the server
+          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
+          cat > "$KUBECONFIG" <<'KUBECFG'
+          apiVersion: v1
+          kind: Config
+          current-context: mock
+          clusters:
+          - cluster:
+              server: https://localhost:6443
+            name: mock
+          contexts:
+          - context:
+              cluster: mock
+              user: mock
+            name: mock
+          users:
+          - name: mock
+            user: {}
+          KUBECFG
+          kubectl apply --dry-run=client -f apps/order-api/k8s/
+
+      - name: Helm lint — observability values files
+        run: |
+          # Validate any standalone YAML files in the observability module as valid YAML.
+          # Helm lint requires a full chart directory (Chart.yaml); if none exist, report and skip.
+          YAML_FILES=$(find modules/observability -name '*.yaml' -o -name '*.yml' 2>/dev/null | sort)
+          if [ -z "$YAML_FILES" ]; then
+            echo "No standalone YAML files found in modules/observability/ — skipping helm lint"
+            exit 0
+          fi
+
+          echo "Validating YAML files:"
+          echo "$YAML_FILES"
+
+          # Validate each file is parseable YAML
+          echo "$YAML_FILES" | while IFS= read -r f; do
+            python3 -c "import sys, yaml; yaml.safe_load(open('$f'))" \
+              && echo "  ✓ $f" \
+              || { echo "  ✗ $f — invalid YAML"; exit 1; }
+          done
+
+          # Run helm lint on any full chart directories (those containing Chart.yaml)
+          CHARTS=$(find modules/observability -name 'Chart.yaml' -exec dirname {} \; 2>/dev/null)
+          if [ -n "$CHARTS" ]; then
+            echo "$CHARTS" | while IFS= read -r chart_dir; do
+              echo "Running helm lint on $chart_dir"
+              helm lint "$chart_dir"
+            done
+          else
+            echo "No Helm chart directories found — helm lint skipped"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 6: Manual approval gate — push to main only
+  # Gate also waits for security-scan and manifest-validation to pass.
+  # Configure the "production" GitHub Environment with required reviewers in
+  # repo Settings → Environments → production.
+  # ─────────────────────────────────────────────────────────────────────────────
+  approve:
+    runs-on: ubuntu-latest
+    needs: [plan, security-scan, manifest-validation]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Awaiting approval
+        run: echo "Waiting for manual approval via GitHub environment protection"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 7: Terraform apply — staged to match deploy.sh order
+  # Runs fresh targeted applies (saved plan files are incompatible with -target).
+  # After final apply, key outputs are posted to the step summary.
+  # ─────────────────────────────────────────────────────────────────────────────
+  apply:
+    runs-on: ubuntu-latest
+    needs: approve
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-apply
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Write terraform.tfvars
+        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+
+      - name: terraform init
+        run: terraform init
+
+      # Staged applies match deploy.sh ordering.
+      # Each stage runs a fresh plan+apply for the targeted modules.
+      # terraform apply -target cannot be combined with a saved plan file.
+      - name: Apply bootstrap + networking
+        run: terraform apply -target=module.bootstrap -target=module.networking -auto-approve
+
+      - name: Apply EKS
+        run: terraform apply -target=module.eks -auto-approve
+
+      - name: Apply ingress
+        run: terraform apply -target=module.ingress -auto-approve
+
+      - name: Apply observability
+        run: terraform apply -target=module.observability -auto-approve
+
+      - name: Apply database
+        run: terraform apply -target=module.database -auto-approve
+
+      - name: Final sync
+        run: terraform apply -auto-approve
+
+      - name: Capture and summarize outputs
+        if: always()
+        run: |
+          # Capture outputs — suppress error if no outputs exist yet
+          terraform output -json > tf-outputs.json 2>/dev/null || echo '{}' > tf-outputs.json
+
+          ORDER_API_URL=$(jq -r '.order_api_url.value   // "not deployed"' tf-outputs.json)
+          GRAFANA_URL=$(jq -r   '.grafana_url.value      // "not deployed"' tf-outputs.json)
+          OTEL_ENDPOINT=$(jq -r '.otel_endpoint.value    // "not deployed"' tf-outputs.json)
+          EKS_CLUSTER=$(jq -r   '.eks_cluster_name.value // "not deployed"' tf-outputs.json)
+          VPC_ID=$(jq -r        '.vpc_id.value           // "not deployed"' tf-outputs.json)
+
+          # Sensitive outputs — never print values, only indicate whether they were set
+          GRAFANA_PASS_SET=$(jq -r 'if .grafana_admin_password.value and .grafana_admin_password.value != "" then "✓ set" else "not deployed" end' tf-outputs.json)
+          OTEL_KEY_SET=$(jq -r     'if .otel_api_key.value and .otel_api_key.value != "" then "✓ set" else "not deployed" end' tf-outputs.json)
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ Terraform Apply Complete
+
+          | | |
+          |---|---|
+          | **Commit** | \`${{ github.sha }}\` |
+          | **Actor**  | @${{ github.actor }} |
+          | **Run**    | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          **Modules applied (in order):**
+          1. \`module.bootstrap\` + \`module.networking\`
+          2. \`module.eks\`
+          3. \`module.ingress\`
+          4. \`module.observability\`
+          5. \`module.database\`
+          6. Final full sync
+
+          **Key Outputs:**
+
+          | Output | Value |
+          |--------|-------|
+          | Order API URL | ${ORDER_API_URL} |
+          | Grafana URL | ${GRAFANA_URL} |
+          | OTel Endpoint | ${OTEL_ENDPOINT} |
+          | EKS Cluster | ${EKS_CLUSTER} |
+          | VPC ID | ${VPC_ID} |
+          | Grafana Admin Password | ${GRAFANA_PASS_SET} — \`terraform output -raw grafana_admin_password\` |
+          | OTel API Key | ${OTEL_KEY_SET} — \`terraform output -raw otel_api_key\` |
+          EOF
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 8: Notify — always runs after apply
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify:
+    runs-on: ubuntu-latest
+    needs: apply
+    if: always()
+    steps:
+      - name: Write pipeline summary
+        run: |
+          if [[ "${{ needs.apply.result }}" == "success" ]]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ Infra Pipeline Succeeded
+
+          | | |
+          |---|---|
+          | **Result**  | Apply completed successfully |
+          | **Commit**  | \`${{ github.sha }}\` |
+          | **Modules** | bootstrap, networking, eks, ingress, observability, database |
+          | **Run**     | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+          else
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ Infra Pipeline Failed
+
+          | | |
+          |---|---|
+          | **Result** | \`${{ needs.apply.result }}\` |
+          | **Commit** | \`${{ github.sha }}\` |
+          | **Run**    | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          Check the failed job above for details. If apply was not reached,
+          the failure may be in \`quality\`, \`security-scan\`, \`manifest-validation\`,
+          \`plan\`, or \`approve\`.
+          EOF
+          fi

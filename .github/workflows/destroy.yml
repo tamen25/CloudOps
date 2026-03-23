@@ -1,0 +1,273 @@
+# Required GitHub Actions secrets:
+#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#   AWS_REGION                   — AWS region (e.g. us-east-1)
+#   TF_VARS                      — Full contents of your terraform.tfvars file
+#
+# GitHub Environment required:
+#   production  — Settings → Environments → production; add required reviewers
+#
+# Double-gated: GitHub environment approval + typed confirmation string.
+
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'destroy-everything' to confirm full teardown"
+        required: true
+        type: string
+      environment:
+        description: "Environment to destroy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  TF_VERSION: 1.7.0
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: production  # requires manual approval from configured reviewers
+    steps:
+
+      # ── 1. Validate confirmation string ────────────────────────────────────
+      - name: Validate confirmation input
+        run: |
+          if [ "${{ inputs.confirm }}" != "destroy-everything" ]; then
+            echo "::error::Confirmation input was '${{ inputs.confirm }}'"
+            echo "::error::Must be exactly: destroy-everything"
+            exit 1
+          fi
+          echo "✓ Confirmation accepted"
+          echo "  Environment: ${{ inputs.environment }}"
+          echo "  Triggered by: ${{ github.actor }}"
+
+      # ── 2–4. Bootstrap ─────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-destroy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false  # disable wrapper so terraform output -raw returns clean strings
+
+      - name: Write terraform.tfvars
+        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+
+      - name: terraform init
+        run: terraform init
+
+      # ── 5. Install bucket-emptying helper ──────────────────────────────────
+      # Written once to /usr/local/bin and reused for Loki, Tempo, and state buckets.
+      # Handles three cases that `aws s3 rm` alone misses:
+      #   • versioned objects (bucket versioning enabled)
+      #   • Glacier-transitioned objects (s3 rm fails; s3api delete-objects succeeds)
+      #   • delete markers left behind by previous partial deletes
+      - name: Install empty-s3-bucket helper
+        run: |
+          cat > /usr/local/bin/empty-s3-bucket << 'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+          BUCKET=$1
+          REGION=${AWS_REGION:-us-east-1}
+
+          if ! aws s3api head-bucket --bucket "$BUCKET" --region "$REGION" 2>/dev/null; then
+            echo "  Bucket $BUCKET not found — skipping"
+            exit 0
+          fi
+
+          echo "Emptying s3://$BUCKET ..."
+
+          # Pass 1 — fast recursive delete for current (non-versioned) objects
+          aws s3 rm "s3://$BUCKET" --recursive --region "$REGION" 2>/dev/null || true
+
+          # Pass 2 — delete all object versions in pages of 1000
+          # Glacier-transitioned objects are deleted here (s3api delete-objects
+          # removes any storage class without requiring a restore first)
+          while true; do
+            BATCH=$(aws s3api list-object-versions \
+              --bucket "$BUCKET" \
+              --region "$REGION" \
+              --max-items 1000 \
+              --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+              --output json 2>/dev/null || echo '{"Objects":[]}')
+            COUNT=$(echo "$BATCH" | jq '.Objects | length')
+            [ "$COUNT" -eq 0 ] && break
+            aws s3api delete-objects \
+              --bucket "$BUCKET" \
+              --region "$REGION" \
+              --delete "$BATCH" > /dev/null
+            echo "  Deleted $COUNT version(s)"
+          done
+
+          # Pass 3 — delete all delete markers (pagination loop)
+          while true; do
+            BATCH=$(aws s3api list-object-versions \
+              --bucket "$BUCKET" \
+              --region "$REGION" \
+              --max-items 1000 \
+              --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+              --output json 2>/dev/null || echo '{"Objects":[]}')
+            COUNT=$(echo "$BATCH" | jq '.Objects | length')
+            [ "$COUNT" -eq 0 ] && break
+            aws s3api delete-objects \
+              --bucket "$BUCKET" \
+              --region "$REGION" \
+              --delete "$BATCH" > /dev/null
+            echo "  Deleted $COUNT delete marker(s)"
+          done
+
+          echo "✓ s3://$BUCKET is empty"
+          SCRIPT
+          chmod +x /usr/local/bin/empty-s3-bucket
+
+      # ── 6–8. Capture bucket names before any apply runs ────────────────────
+      # Must happen before applies because bootstrap output becomes null after
+      # destroy_all=true and observability output becomes null after disabling it.
+      - name: Get Loki bucket name
+        run: |
+          LOKI_BUCKET=$(terraform output -raw loki_bucket 2>/dev/null || \
+            echo "cloudops-loki-chunks-$(aws sts get-caller-identity --query Account --output text)")
+          echo "LOKI_BUCKET=$LOKI_BUCKET" >> "$GITHUB_ENV"
+          echo "Loki bucket: $LOKI_BUCKET"
+
+      - name: Get Tempo bucket name
+        run: |
+          TEMPO_BUCKET=$(terraform output -raw tempo_bucket 2>/dev/null || \
+            echo "cloudops-tempo-traces-$(aws sts get-caller-identity --query Account --output text)")
+          echo "TEMPO_BUCKET=$TEMPO_BUCKET" >> "$GITHUB_ENV"
+          echo "Tempo bucket: $TEMPO_BUCKET"
+
+      - name: Get Terraform state bucket name
+        run: |
+          # Capture before any apply — bootstrap output becomes null after destroy_all=true
+          STATE_BUCKET=$(terraform output -raw bootstrap_bucket_name 2>/dev/null || \
+            grep '^bootstrap_bucket_name' terraform.tfvars \
+              | awk -F'=' '{print $2}' | tr -d ' "' | head -1)
+          if [ -z "$STATE_BUCKET" ]; then
+            echo "::error::Could not determine state bucket name from terraform output or tfvars"
+            exit 1
+          fi
+          echo "STATE_BUCKET=$STATE_BUCKET" >> "$GITHUB_ENV"
+          echo "State bucket: $STATE_BUCKET"
+
+      # ── 9–10. Empty observability data buckets ─────────────────────────────
+      # Must happen before disabling observability — Terraform's force_destroy=true
+      # can still fail on Glacier-transitioned objects, so we empty them manually first.
+      - name: Empty Loki bucket
+        run: empty-s3-bucket "$LOKI_BUCKET"
+
+      - name: Empty Tempo bucket
+        run: empty-s3-bucket "$TEMPO_BUCKET"
+
+      # ── 11–15. Disable modules in reverse dependency order ─────────────────
+      # Each step writes the variable to terraform.tfvars before applying so that
+      # previously-disabled modules are not re-enabled on the next apply.
+      - name: Disable observability
+        run: |
+          sed -i "s|^enable_observability *=.*|enable_observability = false|" terraform.tfvars
+          grep -q "^enable_observability" terraform.tfvars || echo "enable_observability = false" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      - name: Disable ingress
+        run: |
+          sed -i "s|^enable_ingress *=.*|enable_ingress = false|" terraform.tfvars
+          grep -q "^enable_ingress" terraform.tfvars || echo "enable_ingress = false" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      - name: Disable database
+        run: |
+          sed -i "s|^enable_database *=.*|enable_database = false|" terraform.tfvars
+          grep -q "^enable_database" terraform.tfvars || echo "enable_database = false" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      - name: Disable EKS
+        run: |
+          sed -i "s|^enable_eks *=.*|enable_eks = false|" terraform.tfvars
+          grep -q "^enable_eks" terraform.tfvars || echo "enable_eks = false" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      - name: Disable networking
+        run: |
+          sed -i "s|^enable_networking *=.*|enable_networking = false|" terraform.tfvars
+          grep -q "^enable_networking" terraform.tfvars || echo "enable_networking = false" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      # ── 16. Destroy bootstrap (KMS key, IAM deployer role, OIDC provider) ──
+      - name: Destroy bootstrap infrastructure
+        run: |
+          sed -i "s|^destroy_all *=.*|destroy_all = true|" terraform.tfvars
+          grep -q "^destroy_all" terraform.tfvars || echo "destroy_all = true" >> terraform.tfvars
+          terraform apply -auto-approve
+
+      # ── 17–18. Delete Terraform state bucket ───────────────────────────────
+      # State bucket was created by create-s3-bucket.sh (outside Terraform), so
+      # Terraform destroy does not remove it — we must do so explicitly.
+      - name: Empty Terraform state bucket
+        run: empty-s3-bucket "$STATE_BUCKET"
+
+      - name: Delete Terraform state bucket
+        run: |
+          if aws s3api head-bucket --bucket "$STATE_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
+            aws s3api delete-bucket --bucket "$STATE_BUCKET" --region "$AWS_REGION"
+            echo "✓ State bucket $STATE_BUCKET deleted"
+          else
+            echo "State bucket $STATE_BUCKET not found — already deleted or never created"
+          fi
+
+      # ── 19. Summary ─────────────────────────────────────────────────────────
+      - name: Write destroy summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"
+            RESULT="Complete — all infrastructure destroyed"
+          else
+            ICON="❌"
+            RESULT="Failed or incomplete — check failed step above"
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ${ICON} Infrastructure Destroy — ${RESULT}
+
+          | | |
+          |---|---|
+          | **Environment** | \`${{ inputs.environment }}\` |
+          | **Triggered by** | @${{ github.actor }} |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          **Resources destroyed (in order):**
+
+          | Step | Resource |
+          |------|----------|
+          | 1 | Loki S3 bucket emptied: \`$LOKI_BUCKET\` |
+          | 2 | Tempo S3 bucket emptied: \`$TEMPO_BUCKET\` |
+          | 3 | \`module.observability\` disabled and destroyed |
+          | 4 | \`module.ingress\` disabled and destroyed |
+          | 5 | \`module.database\` disabled and destroyed |
+          | 6 | \`module.eks\` disabled and destroyed |
+          | 7 | \`module.networking\` disabled and destroyed |
+          | 8 | Bootstrap (KMS, IAM, OIDC) destroyed via \`destroy_all=true\` |
+          | 9 | TF state bucket emptied and deleted: \`$STATE_BUCKET\` |
+
+          $([ "$STATUS" != "success" ] && echo "> ⚠️ Teardown may be incomplete. Run \`terraform state list\` with a fresh backend to check for remaining resources.")
+          EOF

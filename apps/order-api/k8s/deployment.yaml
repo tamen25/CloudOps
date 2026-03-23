@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+  namespace: cloudops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-api
+  template:
+    metadata:
+      labels:
+        app: order-api
+    spec:
+      serviceAccountName: order-api
+      containers:
+        - name: order-api
+          # Populate with your ECR repo URI, e.g. <account>.dkr.ecr.us-east-1.amazonaws.com/order-api:latest
+          image: "<REPLACE_WITH_ECR_REPO_URI>:latest"
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: "256m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: NODE_ENV
+              value: "dev"
+            - name: PORT
+              value: "3000"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: DB_NAME
+              value: "cloudops"
+            # Populate with the Secrets Manager ARN from the database module output
+            - name: DB_SECRET_ARN
+              value: "<REPLACE_WITH_database_secret_arn>"
+            # OTel Collector external HTTPS endpoint
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "https://otel.tamendutta.com"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            # Bearer token injected from the otel-auth secret (managed by the observability module)
+            # NOTE: otel-auth must exist in the cloudops namespace — see modules/observability/secrets.tf
+            - name: OTEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: otel-auth
+                  key: api-key
+            - name: OTEL_SERVICE_NAME
+              value: "order-api"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment=dev,k8s.cluster.name=cloudops-dev-cluster"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

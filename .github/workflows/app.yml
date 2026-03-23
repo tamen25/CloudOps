@@ -1,0 +1,500 @@
+# Required GitHub Actions secrets:
+#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#   AWS_REGION                   — AWS region (e.g. us-east-1)
+#   ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
+#   EKS_CLUSTER_NAME             — EKS cluster name from: terraform output -raw eks_cluster_name
+#   GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
+
+name: App Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/order-api/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION:         ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+  EKS_CLUSTER_NAME:   ${{ secrets.EKS_CLUSTER_NAME }}
+  IMAGE_TAG:          ${{ github.sha }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Unit tests and dependency audit
+  # ─────────────────────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/order-api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/order-api
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        working-directory: apps/order-api
+
+      - name: Run tests
+        run: npm test
+        working-directory: apps/order-api
+        continue-on-error: true  # placeholder test script — remove once real tests exist
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Kubernetes manifest validation — runs in parallel with build-and-push
+  # ─────────────────────────────────────────────────────────────────────────────
+  manifest-validation:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeval
+        run: |
+          wget -q https://github.com/instrumenta/kubeval/releases/download/v0.16.1/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin/
+
+      - name: kubeval — strict schema validation
+        run: kubeval --strict apps/order-api/k8s/*.yaml
+
+      - name: kubectl apply --dry-run=client
+        run: |
+          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
+          cat > "$KUBECONFIG" <<'KUBECFG'
+          apiVersion: v1
+          kind: Config
+          current-context: mock
+          clusters:
+          - cluster:
+              server: https://localhost:6443
+            name: mock
+          contexts:
+          - context:
+              cluster: mock
+              user: mock
+            name: mock
+          users:
+          - name: mock
+            user: {}
+          KUBECFG
+          kubectl apply --dry-run=client -f apps/order-api/k8s/
+
+      - name: Verify deployment manifest container name
+        run: |
+          # The container name must match what `kubectl set image` targets in the deploy job
+          CONTAINER=$(python3 - <<'PY'
+          import yaml, sys
+          with open("apps/order-api/k8s/deployment.yaml") as f:
+              doc = yaml.safe_load(f)
+          containers = doc["spec"]["template"]["spec"]["containers"]
+          print(containers[0]["name"])
+          PY
+          )
+          echo "Container name in deployment.yaml: $CONTAINER"
+          if [ "$CONTAINER" != "order-api" ]; then
+            echo "::error::Container name is '$CONTAINER' — kubectl set image expects 'order-api'"
+            exit 1
+          fi
+          echo "✓ Container name matches deploy target"
+
+      - name: Verify deployment targets cloudops namespace
+        run: |
+          NS=$(python3 - <<'PY'
+          import yaml
+          with open("apps/order-api/k8s/deployment.yaml") as f:
+              doc = yaml.safe_load(f)
+          print(doc.get("metadata", {}).get("namespace", ""))
+          PY
+          )
+          echo "Namespace in deployment.yaml: $NS"
+          if [ "$NS" != "cloudops" ]; then
+            echo "::error::Namespace is '$NS' — expected 'cloudops'"
+            exit 1
+          fi
+          echo "✓ Namespace matches deploy target"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Build and push Docker image to ECR
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-app
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/order-api
+          push: true
+          tags: |
+            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REPOSITORY_URL }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: Trivy image scan — blocks deploy on CRITICAL vulnerabilities
+  # ─────────────────────────────────────────────────────────────────────────────
+  image-scan:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-scan
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Scan image for CRITICAL vulnerabilities
+        id: trivy
+        continue-on-error: true  # allow summary step to run before failing
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          exit-code: '1'
+          severity: CRITICAL
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload image scan SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Post scan failure to step summary
+        if: steps.trivy.outcome == 'failure'
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ Image Scan Failed — CRITICAL Vulnerabilities Found
+
+          | | |
+          |---|---|
+          | **Image** | \`${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}\` |
+          | **Severity** | CRITICAL |
+          | **Action** | Review the Security tab for full findings — fix before deploying |
+
+          The deploy job has been blocked. SARIF results have been uploaded to the
+          repository Security tab (Code scanning alerts).
+          EOF
+
+      - name: Fail job on CRITICAL findings
+        if: steps.trivy.outcome == 'failure'
+        run: exit 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 5: Deploy to EKS with automatic rollback on failure
+  # Waits for both image-scan (security gate) and manifest-validation (schema gate).
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [image-scan, manifest-validation]
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-app
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      - name: Capture current image for rollback
+        run: |
+          PREVIOUS_IMAGE=$(kubectl get deployment order-api -n cloudops \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          echo "Previous image: $PREVIOUS_IMAGE"
+          echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy and verify rollout
+        run: |
+          set -e
+
+          echo "Deploying image: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
+          kubectl set image deployment/order-api \
+            order-api=${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }} \
+            -n cloudops
+
+          if ! kubectl rollout status deployment/order-api -n cloudops --timeout=300s; then
+            echo "::error::Rollout failed — initiating automatic rollback to $PREVIOUS_IMAGE"
+
+            kubectl rollout undo deployment/order-api -n cloudops
+            # Wait for rollback to settle (best-effort — don't fail if this also times out)
+            kubectl rollout status deployment/order-api -n cloudops --timeout=120s || true
+
+            ROLLED_BACK_TO=$(kubectl get deployment order-api -n cloudops \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "unknown")
+
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ Deployment Failed — Automatically Rolled Back
+
+          | | |
+          |---|---|
+          | **Attempted image** | \`${{ env.IMAGE_TAG }}\` |
+          | **Previous image**  | \`$PREVIOUS_IMAGE\` |
+          | **Rolled back to**  | \`$ROLLED_BACK_TO\` |
+          | **Action required** | Investigate the rollout failure before re-deploying |
+
+          Run \`kubectl describe deployment order-api -n cloudops\` and
+          \`kubectl logs -n cloudops -l app=order-api --previous\` for details.
+          EOF
+            exit 1
+          fi
+
+          echo "✓ Rollout succeeded"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 6: Integration tests against live endpoints
+  # ─────────────────────────────────────────────────────────────────────────────
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      BASE_URL: https://api.tamendutta.com
+      GRAFANA_URL: https://grafana.tamendutta.com
+    steps:
+      - name: "Test 1 — GET /health → 200 with status:ok"
+        id: t1
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i/5"
+            BODY=$(curl -sf "$BASE_URL/health" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health")
+            echo "  HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "  Body: $BODY"
+              if echo "$BODY" | grep -q '"status"'; then
+                echo "✓ PASS: /health returned 200 with status field"
+                exit 0
+              fi
+              echo "✗ FAIL: /health returned 200 but body missing 'status' field"
+              echo "  Body was: $BODY"
+              exit 1
+            fi
+            [ "$i" -lt 5 ] && sleep 15
+          done
+          echo "✗ FAIL: /health did not return 200 after 5 attempts"
+          exit 1
+
+      - name: "Test 2 — POST /order → 201 with orderId"
+        id: t2
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i/5"
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/order" \
+              -H "Content-Type: application/json" \
+              -d '{"items":[{"name":"test","price":9.99}]}')
+            STATUS=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+            echo "  HTTP $STATUS"
+            echo "  Body: $BODY"
+            if [ "$STATUS" = "201" ]; then
+              if echo "$BODY" | grep -q '"orderId"\|"id"\|"order_id"'; then
+                echo "✓ PASS: POST /order returned 201 with order identifier"
+                # Store order ID for downstream assertions
+                ORDER_ID=$(echo "$BODY" | python3 -c \
+                  "import sys,json; d=json.load(sys.stdin); print(d.get('orderId',d.get('id',d.get('order_id',''))))" 2>/dev/null || echo "")
+                echo "ORDER_ID=$ORDER_ID" >> "$GITHUB_ENV"
+                exit 0
+              fi
+              echo "✗ FAIL: POST /order returned 201 but body missing order identifier"
+              echo "  Body was: $BODY"
+              exit 1
+            fi
+            [ "$i" -lt 5 ] && sleep 15
+          done
+          echo "✗ FAIL: POST /order did not return 201 after 5 attempts"
+          exit 1
+
+      - name: "Test 3 — GET /orders → 200, array, count >= 1"
+        id: t3
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i/5"
+            BODY=$(curl -sf "$BASE_URL/orders" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/orders")
+            echo "  HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "  Body (first 200 chars): ${BODY:0:200}"
+              COUNT=$(echo "$BODY" | python3 -c \
+                "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else -1)" 2>/dev/null || echo "-1")
+              if [ "$COUNT" = "-1" ]; then
+                echo "✗ FAIL: GET /orders response is not a JSON array"
+                exit 1
+              fi
+              if [ "$COUNT" -ge 1 ]; then
+                echo "✓ PASS: GET /orders returned 200, array with $COUNT item(s)"
+                exit 0
+              fi
+              echo "✗ FAIL: GET /orders returned empty array (expected >= 1 after POST)"
+              exit 1
+            fi
+            [ "$i" -lt 5 ] && sleep 15
+          done
+          echo "✗ FAIL: GET /orders did not return 200 after 5 attempts"
+          exit 1
+
+      - name: "Test 4 — GET /metrics → 200 with http_requests_total"
+        id: t4
+        run: |
+          for i in $(seq 1 5); do
+            echo "Attempt $i/5"
+            BODY=$(curl -sf "$BASE_URL/metrics" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/metrics")
+            echo "  HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              if echo "$BODY" | grep -q "http_requests_total"; then
+                echo "✓ PASS: /metrics returned 200 and contains http_requests_total"
+                exit 0
+              fi
+              echo "✗ FAIL: /metrics returned 200 but missing http_requests_total"
+              echo "  Body (first 300 chars): ${BODY:0:300}"
+              exit 1
+            fi
+            [ "$i" -lt 5 ] && sleep 15
+          done
+          echo "✗ FAIL: /metrics did not return 200 after 5 attempts"
+          exit 1
+
+      - name: "Test 5 — Verify OTel traces flowing in Tempo (last 5 min)"
+        id: t5
+        env:
+          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+        run: |
+          END=$(date +%s)
+          START=$((END - 300))
+
+          echo "Querying Tempo via Grafana proxy for order-api traces (${START}–${END})..."
+          RESPONSE=$(curl -sf \
+            -H "Authorization: Bearer $GRAFANA_API_KEY" \
+            "${GRAFANA_URL}/api/datasources/proxy/uid/tempo/api/search?tags=service.name%3Dorder-api&limit=5&start=${START}&end=${END}" \
+            2>/dev/null || echo '{"traces":[]}')
+
+          echo "Tempo response: $RESPONSE" | head -c 500
+
+          TRACE_COUNT=$(echo "$RESPONSE" | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); print(len(d.get('traces',d.get('data',[]))))" \
+            2>/dev/null || echo "0")
+
+          echo "Traces found in last 5 minutes: $TRACE_COUNT"
+
+          if [ "$TRACE_COUNT" -ge 1 ]; then
+            echo "✓ PASS: $TRACE_COUNT trace(s) found for order-api in Tempo"
+            exit 0
+          fi
+          echo "✗ FAIL: No traces found for order-api in Tempo in the last 5 minutes"
+          echo "  Verify the OTel Collector is running and otel-auth secret is present in the cloudops namespace"
+          exit 1
+
+      - name: Write integration test summary
+        if: always()
+        run: |
+          T1="${{ steps.t1.outcome }}"
+          T2="${{ steps.t2.outcome }}"
+          T3="${{ steps.t3.outcome }}"
+          T4="${{ steps.t4.outcome }}"
+          T5="${{ steps.t5.outcome }}"
+
+          pass_icon() { [ "$1" = "success" ] && echo "✅ Pass" || echo "❌ Fail"; }
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Integration Test Results
+
+          | Test | Endpoint | Assertion | Result |
+          |------|----------|-----------|--------|
+          | 1 | \`GET /health\` | HTTP 200, body contains \`status\` field | $(pass_icon "$T1") |
+          | 2 | \`POST /order\` | HTTP 201, body contains order identifier | $(pass_icon "$T2") |
+          | 3 | \`GET /orders\` | HTTP 200, JSON array with ≥1 item | $(pass_icon "$T3") |
+          | 4 | \`GET /metrics\` | HTTP 200, contains \`http_requests_total\` | $(pass_icon "$T4") |
+          | 5 | Tempo traces | ≥1 trace for \`order-api\` in last 5 min | $(pass_icon "$T5") |
+
+          | | |
+          |---|---|
+          | **Image** | \`${{ env.IMAGE_TAG }}\` |
+          | **Cluster** | \`${{ env.EKS_CLUSTER_NAME }}\` |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 7: Pipeline summary — always runs
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, image-scan, deploy, integration-test]
+    if: always()
+    steps:
+      - name: Write pipeline summary
+        run: |
+          if [[ "${{ needs.integration-test.result }}" == "success" ]]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ Deployment Successful
+
+          | | |
+          |---|---|
+          | **Image tag**        | \`${{ env.IMAGE_TAG }}\` |
+          | **Cluster**          | \`${{ env.EKS_CLUSTER_NAME }}\` |
+          | **Integration tests** | All passed ✓ |
+          EOF
+          else
+            FAILED=""
+            [[ "${{ needs.build-and-push.result }}"   == "failure" ]] && FAILED="build-and-push"
+            [[ "${{ needs.image-scan.result }}"        == "failure" ]] && FAILED="image-scan"
+            [[ "${{ needs.deploy.result }}"            == "failure" ]] && FAILED="deploy"
+            [[ "${{ needs.integration-test.result }}"  == "failure" ]] && FAILED="integration-test"
+            [[ -z "$FAILED" ]] && FAILED="(skipped or cancelled)"
+
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ Deployment Failed
+
+          | | |
+          |---|---|
+          | **Failed job** | \`${FAILED}\` |
+          | **Image tag**  | \`${{ env.IMAGE_TAG }}\` |
+          | **Run**        | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+          fi
