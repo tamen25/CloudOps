@@ -1,0 +1,1309 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Security posture for CloudOps — compliance scanner findings, MTTD/MTTR SLOs, auto-remediation health, kube-bench CIS benchmark results, and Falco runtime alerts. Sourced from CloudWatch namespace CloudOps/Security and CloudWatch Logs Insights on Lambda structured logs.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Security Runbooks",
+      "tooltip": "Open CloudOps security runbooks",
+      "type": "link",
+      "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/"
+    },
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "SLO Dashboard",
+      "tooltip": "Open order-api SLO dashboard",
+      "type": "link",
+      "url": "/d/slo-dashboard"
+    }
+  ],
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Security Posture Summary",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Total findings currently in OPEN status across all severities and sources. Green=0, Yellow=1–5, Red=6+.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "Clean" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 6 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/Security,Severity} MetricName=\"FindingsOpen\"', 'Sum', 300))",
+          "id": "total_open",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Total Open Findings",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "CRITICAL findings currently open. Any non-zero value triggers a page via SNS.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "None" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 5, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["CRITICAL"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "CRITICAL Open Findings",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Mean time to detect new security findings. SLO target: ≤5 min (300 s) for CRITICAL. Green=within SLO, Red=breach.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 180 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 10, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "AVG(SEARCH('{CloudOps/Security,Severity} MetricName=\"MeanTimeToDetect\"', 'Average', 300))",
+          "id": "mttd_avg",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "MTTD (Mean Time to Detect)",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Mean time to auto-remediate findings. SLO target: ≤15 min (900 s). Green=within SLO, Red=breach.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 600 },
+              { "color": "red", "value": 900 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 15, "y": 1 },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["success"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "MeanTimeToRemediate",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Average"
+        }
+      ],
+      "title": "MTTR (Auto-Remediation)",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Ratio of successful auto-remediation attempts in the last 5 minutes. Target: ≥80%. Green=above target, Red=below.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "green", "value": 80 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["success"] },
+          "expression": "",
+          "id": "rem_success",
+          "matchExact": true,
+          "metricName": "AutoRemediationAttempts",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["failure"] },
+          "expression": "",
+          "id": "rem_failure",
+          "matchExact": true,
+          "metricName": "AutoRemediationAttempts",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "100 * rem_success / (rem_success + rem_failure + 0.001)",
+          "hide": false,
+          "id": "success_rate",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default"
+        }
+      ],
+      "title": "Auto-Remediation Success Rate",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "id": 200,
+      "title": "Security SLOs",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Mean time to detect security findings over the selected time range, broken down by severity. Red threshold line at 300 s (5 min) represents the CRITICAL SLO target.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "seconds",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "id": 10,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["CRITICAL"] },
+          "expression": "",
+          "label": "CRITICAL",
+          "matchExact": true,
+          "metricName": "MeanTimeToDetect",
+          "namespace": "CloudOps/Security",
+          "period": "${__interval_ms}",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Average"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["HIGH"] },
+          "expression": "",
+          "label": "HIGH",
+          "matchExact": true,
+          "metricName": "MeanTimeToDetect",
+          "namespace": "CloudOps/Security",
+          "period": "${__interval_ms}",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Average"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["MEDIUM"] },
+          "expression": "",
+          "label": "MEDIUM",
+          "matchExact": true,
+          "metricName": "MeanTimeToDetect",
+          "namespace": "CloudOps/Security",
+          "period": "${__interval_ms}",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default",
+          "statistic": "Average"
+        }
+      ],
+      "title": "MTTD over Time (SLO: 5 min for CRITICAL)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Mean time to auto-remediate findings over the selected time range. Red threshold line at 900 s (15 min) represents the SLO target.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "seconds",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 900 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": ["mean", "max", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["success"] },
+          "expression": "",
+          "label": "Success",
+          "matchExact": true,
+          "metricName": "MeanTimeToRemediate",
+          "namespace": "CloudOps/Security",
+          "period": "${__interval_ms}",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Average"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["failure"] },
+          "expression": "",
+          "label": "Failure",
+          "matchExact": true,
+          "metricName": "MeanTimeToRemediate",
+          "namespace": "CloudOps/Security",
+          "period": "${__interval_ms}",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Average"
+        }
+      ],
+      "title": "MTTR over Time (SLO: 15 min)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Current open finding count by severity. Filtered by $severity template variable.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 3 },
+              { "color": "red", "value": 6 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CRITICAL" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "HIGH" },     "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MEDIUM" },   "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "LOW" },      "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 12,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["CRITICAL"] },
+          "expression": "",
+          "label": "CRITICAL",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["HIGH"] },
+          "expression": "",
+          "label": "HIGH",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["MEDIUM"] },
+          "expression": "",
+          "label": "MEDIUM",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["LOW"] },
+          "expression": "",
+          "label": "LOW",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "D",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Open Findings by Severity",
+      "type": "bargauge"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Distribution of current open findings by source system. Filtered by $source template variable.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 13,
+      "options": {
+        "displayLabels": ["name", "percent"],
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"] },
+        "pieType": "pie",
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Source": ["compliance-scanner"] },
+          "expression": "",
+          "label": "Compliance Scanner",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Source": ["falco"] },
+          "expression": "",
+          "label": "Falco",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Source": ["kube-bench"] },
+          "expression": "",
+          "label": "kube-bench",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Open Findings by Source",
+      "type": "piechart"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 300,
+      "title": "Findings Timeline",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "New security findings detected per hour, broken down by severity. Spike indicates a scan run that found new issues.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "findings/hr",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "CRITICAL" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "HIGH" },     "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "MEDIUM" },   "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "LOW" },      "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["CRITICAL"] },
+          "expression": "",
+          "label": "CRITICAL",
+          "matchExact": true,
+          "metricName": "FindingsDetected",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["HIGH"] },
+          "expression": "",
+          "label": "HIGH",
+          "matchExact": true,
+          "metricName": "FindingsDetected",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["MEDIUM"] },
+          "expression": "",
+          "label": "MEDIUM",
+          "matchExact": true,
+          "metricName": "FindingsDetected",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Severity": ["LOW"] },
+          "expression": "",
+          "label": "LOW",
+          "matchExact": true,
+          "metricName": "FindingsDetected",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "D",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "New Findings Detected per Hour (by Severity)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Auto-remediation attempts per hour split by outcome (success vs failure). Diverging bars highlight remediation reliability.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "attempts/hr",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Success" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Failure" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 21,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["success"] },
+          "expression": "",
+          "label": "Success",
+          "matchExact": true,
+          "metricName": "AutoRemediationAttempts",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "Outcome": ["failure"] },
+          "expression": "",
+          "label": "Failure",
+          "matchExact": true,
+          "metricName": "AutoRemediationAttempts",
+          "namespace": "CloudOps/Security",
+          "period": "3600",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Auto-Remediations per Hour (Success vs Failure)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Top 10 open findings sorted by severity then age (oldest first). Sourced from CloudWatch Logs Insights on the compliance scanner Lambda log group. Columns: severity, check name, resource ID, age, status, recommendation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "left",
+            "cellOptions": { "type": "auto" },
+            "filterable": true,
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 6 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "severity" },
+            "properties": [
+              { "id": "custom.width", "value": 100 },
+              {
+                "id": "mappings",
+                "value": [
+                  { "options": { "CRITICAL": { "color": "red",    "index": 0 }, "HIGH": { "color": "orange", "index": 1 }, "MEDIUM": { "color": "yellow", "index": 2 }, "LOW": { "color": "green", "index": 3 } }, "type": "value" }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "check_name" },    "properties": [{ "id": "custom.width", "value": 220 }] },
+          { "matcher": { "id": "byName", "options": "resource_id" },   "properties": [{ "id": "custom.width", "value": 200 }] },
+          { "matcher": { "id": "byName", "options": "@timestamp" },    "properties": [{ "id": "displayName", "value": "detected_at" }, { "id": "custom.width", "value": 180 }] },
+          { "matcher": { "id": "byName", "options": "status" },        "properties": [{ "id": "custom.width", "value": 100 }] },
+          { "matcher": { "id": "byName", "options": "recommendation" },"properties": [{ "id": "custom.width", "value": 320 }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
+      "id": 22,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": false, "displayName": "severity" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, severity, check_name, resource_id, status, recommendation | filter status = \"OPEN\" | sort severity asc, @timestamp asc | limit 10",
+          "logGroupNames": ["/aws/lambda/cloudops-compliance-scanner"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Top 10 Open Findings (sorted by severity, then age)",
+      "type": "table"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 400,
+      "title": "Compliance Status",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the S3 check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 43 },
+      "id": 30,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["S3"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "S3",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the RDS check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 43 },
+      "id": 31,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["RDS"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "RDS",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the EKS check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 43 },
+      "id": 32,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["EKS"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "EKS",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the IAM check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 43 },
+      "id": 33,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["IAM"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "IAM",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the Security Groups check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 43 },
+      "id": 34,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["SecurityGroups"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Security Groups",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Open findings in the Secrets Manager check category. Green=0 open, Red=any open.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [{ "options": { "0": { "color": "green", "index": 0, "text": "Pass" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 43 },
+      "id": 35,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": { "CheckCategory": ["Secrets"] },
+          "expression": "",
+          "matchExact": true,
+          "metricName": "FindingsOpen",
+          "namespace": "CloudOps/Security",
+          "period": "300",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "Sum"
+        }
+      ],
+      "title": "Secrets Manager",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Latest kube-bench CIS benchmark run: last run date, pass/fail/warn counts per section, and top failures. Sourced from CloudWatch Logs Insights on the kube-bench processor Lambda log group.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "left",
+            "cellOptions": { "type": "auto" },
+            "filterable": true,
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "@timestamp" },        "properties": [{ "id": "displayName", "value": "last_run" }, { "id": "custom.width", "value": 180 }] },
+          { "matcher": { "id": "byName", "options": "benchmark_version" }, "properties": [{ "id": "custom.width", "value": 140 }] },
+          { "matcher": { "id": "byName", "options": "section" },           "properties": [{ "id": "custom.width", "value": 200 }] },
+          {
+            "matcher": { "id": "byName", "options": "pass_count" },
+            "properties": [
+              { "id": "custom.width", "value": 80 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "fail_count" },
+            "properties": [
+              { "id": "custom.width", "value": 80 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "warn_count" },  "properties": [{ "id": "custom.width", "value": 80 }] },
+          { "matcher": { "id": "byName", "options": "top_failures" },"properties": [{ "id": "custom.width", "value": 300 }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 47 },
+      "id": 36,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "fail_count" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, benchmark_version, section, pass_count, fail_count, warn_count, top_failures | filter level = \"info\" and ispresent(benchmark_version) | sort @timestamp desc | limit 20",
+          "logGroupNames": ["/aws/lambda/cloudops-kube-bench-processor"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "kube-bench CIS Benchmark Results",
+      "type": "table"
+    },
+
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "description": "Falco runtime security alerts over the last 24 hours, grouped by rule name. Sourced from Loki via the OTel Collector log pipeline from the falco namespace.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "alerts/interval",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 47 },
+      "id": 37,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "expr": "sum by (rule) (count_over_time({namespace=\"falco\"} | json | rule != \"\" [$__interval]))",
+          "legendFormat": "{{rule}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Falco Runtime Alerts over Last 24 h (by Rule)",
+      "type": "timeseries"
+    }
+
+  ],
+
+  "refresh": "5m",
+  "schemaVersion": 38,
+  "tags": ["security", "cloudops", "compliance", "slo"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "CloudWatch Datasource",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "cloudwatch",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "ALL", "value": "ALL" },
+        "description": "Filter findings by severity",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Severity",
+        "multi": false,
+        "name": "severity",
+        "options": [
+          { "selected": true,  "text": "ALL",      "value": "ALL" },
+          { "selected": false, "text": "CRITICAL",  "value": "CRITICAL" },
+          { "selected": false, "text": "HIGH",      "value": "HIGH" },
+          { "selected": false, "text": "MEDIUM",    "value": "MEDIUM" },
+          { "selected": false, "text": "LOW",       "value": "LOW" }
+        ],
+        "query": "ALL,CRITICAL,HIGH,MEDIUM,LOW",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": false, "text": "OPEN", "value": "OPEN" },
+        "description": "Filter findings by remediation status",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Status",
+        "multi": false,
+        "name": "status",
+        "options": [
+          { "selected": true,  "text": "OPEN",        "value": "OPEN" },
+          { "selected": false, "text": "REMEDIATED",   "value": "REMEDIATED" },
+          { "selected": false, "text": "SUPPRESSED",   "value": "SUPPRESSED" }
+        ],
+        "query": "OPEN,REMEDIATED,SUPPRESSED",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": false, "text": "compliance-scanner", "value": "compliance-scanner" },
+        "description": "Filter findings by source system",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Source",
+        "multi": false,
+        "name": "source",
+        "options": [
+          { "selected": false, "text": "All",                "value": "$__all" },
+          { "selected": true,  "text": "compliance-scanner", "value": "compliance-scanner" },
+          { "selected": false, "text": "falco",              "value": "falco" },
+          { "selected": false, "text": "kube-bench",         "value": "kube-bench" }
+        ],
+        "query": "compliance-scanner,falco,kube-bench",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Security Posture",
+  "uid": "security-posture",
+  "version": 1
+}

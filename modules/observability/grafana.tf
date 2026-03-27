@@ -121,3 +121,154 @@ resource "helm_release" "grafana" {
     helm_release.tempo,
   ]
 }
+
+# ── Grafana Service Account for SLO Lambda ────────────────────────────────────
+# Creates a Viewer-role service account and API token in Grafana, then stores
+# the token in AWS Secrets Manager so the SLO Lambda can authenticate with the
+# Grafana Prometheus datasource proxy.
+#
+# Implementation note: The grafana/grafana Terraform provider requires the
+# Grafana admin password at provider-init time, which creates a bootstrapping
+# conflict because the password is generated within this same module.
+# The null_resource approach avoids this by calling the Grafana REST API
+# directly via curl after the Helm release is deployed and accessible.
+#
+# The null_resource re-runs if the Grafana URL or the secret ARN changes.
+# Each run creates a new token (old tokens accumulate in Grafana but do not
+# invalidate previous ones — clean up via the Grafana UI or API if needed).
+# ─────────────────────────────────────────────────────────────────────────────
+
+resource "aws_secretsmanager_secret" "grafana_api_key" {
+  name                    = "cloudops/grafana-api-key"
+  description             = "Grafana Viewer service account token — used by the SLO Lambda to query Prometheus via the Grafana datasource proxy"
+  recovery_window_in_days = 7
+
+  tags = merge(var.tags, {
+    Component = "observability"
+    ManagedBy = "terraform"
+  })
+}
+
+# Placeholder version written immediately so the secret ARN is usable as an
+# output before the null_resource has had a chance to run.
+# The lifecycle ignore_changes block prevents Terraform from overwriting the
+# real token with the placeholder on subsequent applies.
+resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
+  secret_id     = aws_secretsmanager_secret.grafana_api_key.id
+  secret_string = "placeholder-replaced-by-grafana-service-account-provisioner"
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# Provisions the Grafana service account and token via the REST API, then
+# writes the token to the Secrets Manager secret created above.
+#
+# Requires on the executor machine:
+#   - curl
+#   - python3 (stdlib only)
+#   - aws CLI authenticated with secretsmanager:PutSecretValue on the secret ARN
+#
+# The provisioner is idempotent: if a service account named
+# cloudops-lambda-reader already exists, it reuses it rather than creating a
+# duplicate. Each run creates a new token; this is intentional (rotation).
+resource "null_resource" "grafana_service_account" {
+  triggers = {
+    grafana_url = "https://grafana.${var.domain}"
+    secret_arn  = aws_secretsmanager_secret.grafana_api_key.arn
+  }
+
+  provisioner "local-exec" {
+    # Pass credentials via environment variables to avoid embedding them in
+    # the command string (where they could appear in shell history or logs).
+    environment = {
+      GRAFANA_URL    = "https://grafana.${var.domain}"
+      ADMIN_PASSWORD = random_password.grafana_admin.result
+      SECRET_ARN     = aws_secretsmanager_secret.grafana_api_key.arn
+      AWS_REGION     = var.region
+    }
+
+    command = <<-SCRIPT
+      set -euo pipefail
+
+      echo "Waiting for Grafana to become available at $GRAFANA_URL ..."
+      for i in $(seq 1 36); do
+        STATUS=$(curl -sk -o /dev/null -w "%%{http_code}" "$GRAFANA_URL/api/health" 2>/dev/null || echo "000")
+        if [ "$STATUS" = "200" ]; then
+          echo "Grafana is available (attempt $i)."
+          break
+        fi
+        if [ "$i" = "36" ]; then
+          echo "ERROR: Grafana did not become available after 6 minutes. Last HTTP status: $STATUS"
+          exit 1
+        fi
+        echo "  Attempt $i/36 — HTTP $STATUS, retrying in 10s..."
+        sleep 10
+      done
+
+      # ── Idempotent: reuse existing service account if it already exists ──────
+      echo "Checking for existing cloudops-lambda-reader service account..."
+      SEARCH_RESP=$(curl -sf \
+        -u "admin:$ADMIN_PASSWORD" \
+        -H "Accept: application/json" \
+        "$GRAFANA_URL/api/serviceaccounts/search?query=cloudops-lambda-reader&perpage=1" \
+        2>/dev/null || echo '{"serviceAccounts":[]}')
+
+      SA_ID=$(echo "$SEARCH_RESP" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    accounts = d.get('serviceAccounts', [])
+    # Match exact name to avoid partial matches
+    for sa in accounts:
+        if sa.get('name') == 'cloudops-lambda-reader':
+            print(sa['id'])
+            break
+except Exception:
+    pass
+" 2>/dev/null || echo "")
+
+      if [ -z "$SA_ID" ]; then
+        echo "Creating service account cloudops-lambda-reader (role: Viewer)..."
+        SA_RESP=$(curl -sf -X POST "$GRAFANA_URL/api/serviceaccounts" \
+          -u "admin:$ADMIN_PASSWORD" \
+          -H "Content-Type: application/json" \
+          -d '{"name":"cloudops-lambda-reader","role":"Viewer","isDisabled":false}')
+        SA_ID=$(echo "$SA_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+        echo "Service account created with ID $SA_ID."
+      else
+        echo "Service account cloudops-lambda-reader already exists (ID $SA_ID) — reusing."
+      fi
+
+      # ── Create a new token (rotates on each trigger change) ─────────────────
+      echo "Creating API token for service account $SA_ID..."
+      TOKEN_NAME="cloudops-lambda-slo-$(date -u +%Y%m%d%H%M%S 2>/dev/null || date -u +%s)"
+      TOKEN_RESP=$(curl -sf -X POST "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" \
+        -u "admin:$ADMIN_PASSWORD" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\":\"$TOKEN_NAME\"}")
+      TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to extract token from Grafana response: $TOKEN_RESP"
+        exit 1
+      fi
+
+      # ── Store token in Secrets Manager ─────────────────────────────────────
+      echo "Storing token in Secrets Manager ($SECRET_ARN)..."
+      aws secretsmanager put-secret-value \
+        --secret-id "$SECRET_ARN" \
+        --secret-string "$TOKEN" \
+        --region "$AWS_REGION"
+
+      echo "Grafana service account cloudops-lambda-reader provisioned successfully."
+      echo "Token name: $TOKEN_NAME"
+    SCRIPT
+  }
+
+  depends_on = [
+    helm_release.grafana,
+    aws_secretsmanager_secret_version.grafana_api_key_placeholder,
+  ]
+}

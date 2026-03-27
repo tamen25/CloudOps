@@ -18,6 +18,7 @@ enable_eks           = false  # Enable after networking is deployed
 enable_database      = false  # Enable after networking is deployed
 enable_ingress       = false  # Enable after eks is deployed
 enable_observability = false  # Enable after ingress is deployed
+enable_slo           = false  # Enable after observability is deployed
 
 # DANGER ZONE: set to true ONLY when running destroy.sh
 destroy_all = false
@@ -42,6 +43,18 @@ aws_account_id = ""
 # Then fill in the values below and re-apply to create Route 53 A records.
 alb_dns_name = ""
 alb_zone_id  = ""
+
+# ─────────────────────────────────────────────────────────────
+# SLO Module Configuration
+# ─────────────────────────────────────────────────────────────
+# Grafana API key secret ARN — required if using Grafana datasource proxy as
+# the Prometheus URL (i.e. Lambda cannot reach cluster-internal Prometheus directly).
+# Create via: aws secretsmanager create-secret --name cloudops/grafana-api-key --secret-string "<key>"
+slo_grafana_api_key_secret_arn = ""
+
+# Override Prometheus URL when enable_observability=false.
+# Leave empty when enable_observability=true (URL is taken from that module's output).
+slo_prometheus_url = ""
 
 # ─────────────────────────────────────────────────────────────
 # Networking

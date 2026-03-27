@@ -12,6 +12,12 @@ locals {
   # Use explicit var if provided, otherwise fall back to the current caller identity
   account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.current.account_id
 
+  # GitHub token secret ARN resolution:
+  #   1. If github_token (raw PAT) is provided, bootstrap creates the secret → use its ARN
+  #   2. Else fall back to the explicitly supplied security_github_token_secret_arn
+  #   3. If neither is provided, security module disables GitHub issue creation
+  github_token_secret_arn = var.github_token != "" ? module.bootstrap[0].github_token_secret_arn : var.security_github_token_secret_arn
+
   common_tags = {
     Project     = var.project_name
     Environment = var.environment
@@ -41,6 +47,10 @@ module "bootstrap" {
   external_id             = var.bootstrap_external_id
   max_session_duration    = var.bootstrap_max_session_duration
   additional_policy_arns  = var.bootstrap_additional_policy_arns
+
+  # Raw GitHub PAT — bootstrap stores it in Secrets Manager so the ARN can be
+  # passed to the security module without duplicating secret management.
+  github_token = var.github_token
 }
 
 # Networking Module
@@ -149,6 +159,79 @@ module "observability" {
 
   alb_dns_name = var.alb_dns_name
   alb_zone_id  = var.alb_zone_id
+
+  tags = local.common_tags
+}
+
+# SLO Module — Lambda error budget tracker + DynamoDB history
+# Requires: enable_observability=true (Prometheus URL comes from that module)
+# Deploy order: after observability
+
+module "slo" {
+  count  = var.enable_slo ? 1 : 0
+  source = "./modules/slo"
+
+  project_name     = var.project_name
+  environment      = var.environment
+  eks_cluster_name = local.eks_cluster_name
+
+  prometheus_url = var.enable_observability ? module.observability[0].prometheus_url : var.slo_prometheus_url
+  grafana_url    = var.enable_observability ? module.observability[0].grafana_url : ""
+
+  # When observability is enabled, use the auto-created service account token ARN.
+  # When observability is disabled (bring-your-own Prometheus), fall back to the
+  # manually supplied var (slo_grafana_api_key_secret_arn in terraform.tfvars).
+  grafana_api_key_secret_arn = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : var.slo_grafana_api_key_secret_arn
+
+  # Cross-module security alert integration: when error budget burns critically
+  # fast (possible sign of a security incident), the SLO Lambda can publish to
+  # this topic.  The security module must be deployed first.
+  security_alerts_topic_arn = var.enable_security ? module.security[0].security_alerts_topic_arn : ""
+
+  tags = local.common_tags
+}
+
+# Security Module (Falco runtime threat detection + compliance scanner + kube-bench)
+# Installs Falco as a DaemonSet with eBPF driver. Falcosidekick routes findings
+# into the OTel Collector log pipeline → Loki → Grafana.
+# Compliance scanner Lambda runs every 6 hours: S3, RDS, EKS, IAM, SG, Secrets.
+# kube-bench CronJob runs daily at 03:00 UTC with EKS 1.4 CIS benchmark.
+# Requires: enable_eks=true + enable_observability=true applied first.
+# Deploy order: after observability
+
+module "security" {
+  count  = var.enable_security ? 1 : 0
+  source = "./modules/security"
+
+  eks_cluster_name         = local.eks_cluster_name
+  otel_api_key_secret_name = "otel-auth"
+  environment              = var.environment
+  project_name             = var.project_name
+
+  aws_account_id  = local.account_id
+  region          = var.region
+  db_subnet_cidrs = var.db_subnet_cidrs != null ? var.db_subnet_cidrs : []
+  vpc_cidr        = var.vpc_cidr
+
+  # Compliance scanner inputs
+  vpc_id          = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
+  rds_instance_id = var.enable_database ? module.database[0].rds_instance_id : ""
+
+  # S3 buckets to audit — fall back to empty string (check skipped) when module not deployed
+  state_bucket_name = var.bootstrap_bucket_name
+  loki_bucket_name  = var.enable_observability ? module.observability[0].loki_bucket : ""
+  tempo_bucket_name = var.enable_observability ? module.observability[0].tempo_bucket : ""
+
+  security_alert_email    = var.security_alert_email
+  security_critical_email = var.security_critical_email
+
+  # GitHub token secret ARN: prefer the bootstrap-managed secret (created from
+  # var.github_token); fall back to an explicitly provided ARN.
+  github_token_secret_arn = local.github_token_secret_arn
+  github_repo             = var.security_github_repo
+
+  oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
+  oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
   tags = local.common_tags
 }

@@ -418,6 +418,9 @@ jobs:
       - name: Apply observability
         run: terraform apply -target=module.observability -auto-approve
 
+      - name: Apply security
+        run: terraform apply -target=module.security -auto-approve
+
       - name: Apply database
         run: terraform apply -target=module.database -auto-approve
 
@@ -435,6 +438,8 @@ jobs:
           OTEL_ENDPOINT=$(jq -r '.otel_endpoint.value    // "not deployed"' tf-outputs.json)
           EKS_CLUSTER=$(jq -r   '.eks_cluster_name.value // "not deployed"' tf-outputs.json)
           VPC_ID=$(jq -r        '.vpc_id.value           // "not deployed"' tf-outputs.json)
+          SCANNER_ARN=$(jq -r   '.compliance_scanner_function_arn.value // "not deployed"' tf-outputs.json)
+          SNS_ARN=$(jq -r       '.security_alerts_topic_arn.value       // "not deployed"' tf-outputs.json)
 
           # Sensitive outputs — never print values, only indicate whether they were set
           GRAFANA_PASS_SET=$(jq -r 'if .grafana_admin_password.value and .grafana_admin_password.value != "" then "✓ set" else "not deployed" end' tf-outputs.json)
@@ -454,8 +459,9 @@ jobs:
           2. \`module.eks\`
           3. \`module.ingress\`
           4. \`module.observability\`
-          5. \`module.database\`
-          6. Final full sync
+          5. \`module.security\`
+          6. \`module.database\`
+          7. Final full sync
 
           **Key Outputs:**
 
@@ -466,40 +472,188 @@ jobs:
           | OTel Endpoint | ${OTEL_ENDPOINT} |
           | EKS Cluster | ${EKS_CLUSTER} |
           | VPC ID | ${VPC_ID} |
+          | Compliance Scanner | ${SCANNER_ARN} |
+          | Security Alerts SNS | ${SNS_ARN} |
           | Grafana Admin Password | ${GRAFANA_PASS_SET} — \`terraform output -raw grafana_admin_password\` |
           | OTel API Key | ${OTEL_KEY_SET} — \`terraform output -raw otel_api_key\` |
           EOF
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 8: Notify — always runs after apply
+  # Job 8: Compliance scan — runs after apply on push to main.
+  # Invokes the compliance scanner Lambda, waits for results, then queries
+  # DynamoDB for CRITICAL findings detected in the last 30 minutes.
+  # Fails the pipeline if any new CRITICAL findings were introduced.
+  # Skipped gracefully when security module is not deployed (Lambda not found).
+  # ─────────────────────────────────────────────────────────────────────────────
+  compliance-scan:
+    runs-on: ubuntu-latest
+    needs: apply
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-compliance-scan
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Invoke compliance scanner Lambda
+        id: invoke
+        run: |
+          PROJECT_NAME=$(echo "${{ secrets.TF_VARS }}" \
+            | grep '^project_name' \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1 \
+            || echo "cloudops")
+          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+          LAMBDA_NAME="${PROJECT_NAME}-compliance-scanner"
+          echo "LAMBDA_NAME=${LAMBDA_NAME}" >> "$GITHUB_ENV"
+
+          echo "Invoking ${LAMBDA_NAME}..."
+          aws lambda invoke \
+            --function-name "$LAMBDA_NAME" \
+            --log-type None \
+            /tmp/compliance-scan.json \
+            > /tmp/invoke-meta.json 2>&1 || {
+            HTTP_CODE=$(cat /tmp/invoke-meta.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Error','not found'))" 2>/dev/null || echo "not found")
+            echo "::warning::Compliance scanner Lambda '${LAMBDA_NAME}' not found or invocation failed (${HTTP_CODE})."
+            echo "::warning::The security module may not be deployed. Scan skipped."
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ℹ️ Compliance Scan — Skipped
+
+          | | |
+          |---|---|
+          | **Lambda** | \`${LAMBDA_NAME}\` |
+          | **Reason** | Lambda not found — security module likely not deployed |
+          | **Action** | Set \`enable_security = true\` in \`terraform.tfvars\` to activate |
+          EOF
+            exit 0
+          }
+
+          echo "Scan invoked. Waiting 20 seconds for DynamoDB to be populated..."
+          sleep 20
+
+      - name: Check for new CRITICAL findings
+        run: |
+          # Findings detected in the last 30 minutes are considered potentially
+          # introduced by or coincident with this Terraform apply.
+          SCAN_START=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || date -u -v-30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || python3 -c "from datetime import datetime, timedelta; print((datetime.utcnow()-timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+
+          echo "Querying DynamoDB cloudops-security-findings for CRITICAL findings since ${SCAN_START}..."
+
+          RESULT=$(aws dynamodb query \
+            --table-name cloudops-security-findings \
+            --index-name severity-timestamp-index \
+            --key-condition-expression "severity = :sev AND #ts >= :start" \
+            --filter-expression "#st = :open" \
+            --expression-attribute-names '{"#ts":"timestamp","#st":"status"}' \
+            --expression-attribute-values "{\":sev\":{\"S\":\"CRITICAL\"},\":start\":{\"S\":\"${SCAN_START}\"},\":open\":{\"S\":\"OPEN\"}}" \
+            --output json 2>/dev/null || echo '{"Items":[],"Count":0}')
+
+          COUNT=$(echo "$RESULT" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          print(d.get('Count', len(d.get('Items', []))))
+          " 2>/dev/null || echo "0")
+
+          # Build findings list for summary (max 10 items)
+          FINDINGS_TABLE=$(echo "$RESULT" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          items = d.get('Items', [])
+          rows = []
+          for item in items[:10]:
+              check    = item.get('check_name', {}).get('S', item.get('check_type', {}).get('S', 'unknown'))
+              resource = item.get('resource_id', {}).get('S', 'unknown')
+              ts       = item.get('timestamp', {}).get('S', 'unknown')
+              rows.append(f'| CRITICAL | {check} | {resource} | {ts} |')
+          print('\n'.join(rows))
+          " 2>/dev/null || echo "")
+
+          echo "New CRITICAL findings detected: ${COUNT}"
+
+          if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ Compliance Scan — New CRITICAL Findings
+
+          | | |
+          |---|---|
+          | **New CRITICAL findings** | **${COUNT}** |
+          | **Detection window** | Last 30 minutes (since apply started) |
+          | **DynamoDB table** | \`cloudops-security-findings\` |
+
+          **Findings (up to 10):**
+
+          | Severity | Check | Resource | Detected At |
+          |----------|-------|----------|-------------|
+          ${FINDINGS_TABLE}
+
+          **Next steps:**
+          1. Review the [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture)
+          2. Follow: \`docs/runbooks/security/compliance-critical-finding.md\`
+          3. If this is a false positive, suppress it in DynamoDB with \`status=SUPPRESSED\` and a reason note
+          4. Auto-remediation Lambda may already be working — check CloudWatch Logs for \`cloudops-auto-remediation\`
+          EOF
+            echo "::error::${COUNT} new CRITICAL security finding(s) detected since apply. See step summary for details."
+            exit 1
+          else
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ Compliance Scan — No New CRITICAL Findings
+
+          | | |
+          |---|---|
+          | **New CRITICAL findings** | 0 |
+          | **Scan window** | ${SCAN_START} to now |
+          | **Lambda** | \`${{ env.LAMBDA_NAME }}\` |
+          | **Status** | Clean — no CRITICAL findings detected since this apply |
+          EOF
+            echo "Compliance scan passed — no new CRITICAL findings."
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 9: Notify — always runs after apply
   # ─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
-    needs: apply
+    needs: [apply, compliance-scan]
     if: always()
     steps:
       - name: Write pipeline summary
         run: |
-          if [[ "${{ needs.apply.result }}" == "success" ]]; then
+          APPLY_RESULT="${{ needs.apply.result }}"
+          SCAN_RESULT="${{ needs.compliance-scan.result }}"
+
+          if [[ "$APPLY_RESULT" == "success" && ("$SCAN_RESULT" == "success" || "$SCAN_RESULT" == "skipped") ]]; then
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## ✅ Infra Pipeline Succeeded
 
           | | |
           |---|---|
-          | **Result**  | Apply completed successfully |
-          | **Commit**  | \`${{ github.sha }}\` |
-          | **Modules** | bootstrap, networking, eks, ingress, observability, database |
-          | **Run**     | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          | **Result**           | Apply completed successfully |
+          | **Compliance scan**  | ${SCAN_RESULT} |
+          | **Commit**           | \`${{ github.sha }}\` |
+          | **Modules**          | bootstrap, networking, eks, ingress, observability, security, database |
+          | **Run**              | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
           EOF
           else
+            FAILED_JOB="apply"
+            [[ "$SCAN_RESULT" == "failure" ]] && FAILED_JOB="compliance-scan (new CRITICAL findings)"
+
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## ❌ Infra Pipeline Failed
 
           | | |
           |---|---|
-          | **Result** | \`${{ needs.apply.result }}\` |
-          | **Commit** | \`${{ github.sha }}\` |
-          | **Run**    | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          | **Result**          | \`${APPLY_RESULT}\` |
+          | **Failed job**      | \`${FAILED_JOB}\` |
+          | **Compliance scan** | ${SCAN_RESULT} |
+          | **Commit**          | \`${{ github.sha }}\` |
+          | **Run**             | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
           Check the failed job above for details. If apply was not reached,
           the failure may be in \`quality\`, \`security-scan\`, \`manifest-validation\`,

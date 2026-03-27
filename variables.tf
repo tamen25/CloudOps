@@ -33,6 +33,67 @@ variable "enable_observability" {
   default     = false
 }
 
+variable "enable_slo" {
+  description = "Enable/disable SLO module (Lambda error budget tracker + DynamoDB — requires enable_observability first)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_security" {
+  description = "Enable/disable security module (Falco runtime threat detection + compliance scanner — requires enable_eks and enable_observability first)"
+  type        = bool
+  default     = false
+}
+
+variable "security_alert_email" {
+  description = "Email address for SNS security alert subscriptions — receives all severity findings from the compliance scanner. Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
+variable "security_critical_email" {
+  description = "Email address for HIGH/CRITICAL-only SNS alerts (pager / on-call inbox). Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
+# github_token stores the actual PAT value (sensitive).
+# When provided, the bootstrap module creates an aws_secretsmanager_secret and the
+# ARN is automatically wired to the security module. This is the preferred approach.
+#
+# If you have an existing secret ARN, leave github_token empty and set
+# security_github_token_secret_arn to the ARN directly instead.
+variable "github_token" {
+  description = "GitHub personal access token with repo scope — bootstrap stores it in Secrets Manager so the auto-remediation Lambda can create GitHub issues. Leave empty to skip or use security_github_token_secret_arn for an existing secret."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "security_github_token_secret_arn" {
+  description = "Existing Secrets Manager ARN for a GitHub PAT — used when the secret is managed outside Terraform. Takes effect only when github_token is empty."
+  type        = string
+  default     = ""
+}
+
+variable "security_github_repo" {
+  description = "GitHub repository in owner/name format where the auto-remediation Lambda creates security issues"
+  type        = string
+  default     = "tamen25/CloudOps"
+}
+
+variable "slo_grafana_api_key_secret_arn" {
+  description = "Secrets Manager ARN for the Grafana API key used by the SLO Lambda. Required when prometheus_url is the Grafana datasource proxy."
+  type        = string
+  default     = ""
+}
+
+variable "slo_prometheus_url" {
+  description = "Override Prometheus URL for the SLO module when enable_observability=false. Defaults to the observability module output when enable_observability=true."
+  type        = string
+  default     = ""
+}
+
 variable "aws_account_id" {
   description = "AWS account ID — used for globally unique S3 bucket names in the observability module"
   type        = string
