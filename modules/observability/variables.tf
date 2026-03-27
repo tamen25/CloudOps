@@ -68,3 +68,27 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# ─── SLO Targets ─────────────────────────────────────────────────────────────
+
+variable "slo_availability_target" {
+  description = "Availability SLO target as a decimal (e.g. 0.999 = 99.9%). Used in PrometheusRule burn-rate expressions and error budget calculations."
+  type        = number
+  default     = 0.999
+
+  validation {
+    condition     = var.slo_availability_target > 0 && var.slo_availability_target < 1
+    error_message = "slo_availability_target must be a decimal between 0 and 1 (e.g. 0.999 for 99.9%)."
+  }
+}
+
+variable "slo_latency_target" {
+  description = "Latency SLO target as a decimal — proportion of requests that must complete in <300ms (e.g. 0.95 = 95%). Used in PrometheusRule burn-rate expressions and error budget calculations."
+  type        = number
+  default     = 0.95
+
+  validation {
+    condition     = var.slo_latency_target > 0 && var.slo_latency_target < 1
+    error_message = "slo_latency_target must be a decimal between 0 and 1 (e.g. 0.95 for 95%)."
+  }
+}

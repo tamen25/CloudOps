@@ -83,3 +83,8 @@ output "otel_api_key" {
   value       = var.enable_observability ? module.observability[0].otel_api_key : null
   sensitive   = true
 }
+
+output "grafana_api_key_secret_arn" {
+  description = "Secrets Manager ARN for the Grafana Viewer service account token (used by the SLO Lambda)"
+  value       = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : null
+}

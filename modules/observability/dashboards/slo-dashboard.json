@@ -1,31 +1,70 @@
 {
-  "annotations": { "list": [] },
-  "description": "SLO tracking — error rate, budget, burn rate (based on http_requests_total)",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "SLO tracking for order-api — availability, latency, error budget burn rate, and incident history. Powered by Prometheus recording rules + CloudWatch Lambda metrics.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "SLO Runbooks",
+      "tooltip": "Open SLO runbooks",
+      "type": "link",
+      "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/"
+    }
+  ],
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "SLO Status Summary",
+      "type": "row"
+    },
+    {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Current 5-minute availability SLI from Prometheus recording rule. Green = at or above SLO target. Click for availability runbook.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
+          "links": [
+            {
+              "targetBlank": true,
+              "title": "Availability Runbook",
+              "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-availability-fast-burn.md"
+            }
+          ],
+          "mappings": [],
+          "max": 100,
+          "min": 98,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red",   "value": 0.001 }
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 99 },
+              { "color": "green", "value": 99.9 }
             ]
           },
-          "unit": "percentunit",
-          "min": 0,
-          "max": 0.01
+          "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
       "id": 1,
       "options": {
         "colorMode": "background",
@@ -38,74 +77,45 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
-          "legendFormat": "Current Error Rate",
+          "expr": "job:slo_availability:ratio_rate5m{service=\"$service\"} * 100",
+          "instant": true,
+          "legendFormat": "Availability",
           "refId": "A"
         }
       ],
-      "title": "Current Error Rate",
+      "title": "Current Availability",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Fraction of the 30-day availability error budget still available. Derived from the 3d burn-rate recording rule. Green ≥50%, yellow ≥10%, red <10%.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red",    "value": null },
-              { "color": "yellow", "value": 0.1 },
-              { "color": "green",  "value": 0.25 }
-            ]
-          },
-          "unit": "percentunit",
+          "links": [
+            {
+              "targetBlank": true,
+              "title": "Error Budget Runbook",
+              "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-error-budget-low.md"
+            }
+          ],
+          "mappings": [],
+          "max": 100,
           "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "1 - (sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / (1 - $slo_target / 100)",
-          "legendFormat": "Budget Remaining",
-          "refId": "A"
-        }
-      ],
-      "title": "Error Budget Remaining (30d)",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red",    "value": 14.4 }
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 50 }
             ]
           },
-          "unit": "short",
-          "min": 0
+          "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
-      "id": 3,
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -117,33 +127,81 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h]))) / (1 - $slo_target / 100)",
-          "legendFormat": "Burn Rate 1h",
+          "expr": "job:slo_error_budget:availability_remaining{service=\"$service\"} * 100",
+          "instant": true,
+          "legendFormat": "Budget Remaining",
           "refId": "A"
         }
       ],
-      "title": "Burn Rate (1h)",
+      "title": "Error Budget Remaining",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Projected hours until the 30-day error budget is exhausted at the current 1h burn rate. Red <24h (page now), yellow <168h (7 days), green = healthy.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
+          "mappings": [],
+          "min": 0,
+          "noValue": "∞",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red",    "value": 6 }
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 24 },
+              { "color": "green", "value": 168 }
             ]
           },
-          "unit": "short",
-          "min": 0
+          "unit": "h"
         },
         "overrides": []
       },
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "clamp_min(\n  (\n    job:slo_error_budget:availability_remaining{service=\"$service\"} /\n    clamp_min(\n      (1 - job:slo_availability:ratio_rate1h{service=\"$service\"}) / (1 - $slo_target / 100),\n      0.001\n    )\n  ) * 720,\n  0\n)",
+          "instant": true,
+          "legendFormat": "Hours Until Exhaustion",
+          "refId": "A"
+        }
+      ],
+      "title": "Hours Until Exhaustion",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "How fast the availability error budget is being consumed. 1.0 = nominal rate. >6 = slow burn (open ticket). >14.4 = fast burn (page immediately). Reference: Google SRE Workbook.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 6 },
+              { "color": "red", "value": 14.4 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
       "id": 4,
       "options": {
         "colorMode": "background",
@@ -156,76 +214,299 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[6h])) / sum(rate(http_requests_total[6h]))) / (1 - $slo_target / 100)",
-          "legendFormat": "Burn Rate 6h",
+          "expr": "(1 - job:slo_availability:ratio_rate1h{service=\"$service\"}) / (1 - $slo_target / 100)",
+          "instant": true,
+          "legendFormat": "Burn Rate 1h",
           "refId": "A"
         }
       ],
-      "title": "Burn Rate (6h)",
+      "title": "Burn Rate (1h)",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "id": 101,
+      "title": "Error Budget Burn",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${cloudwatch_ds}" },
+      "description": "Error budget remaining % as published by the SLO Lambda every 5 minutes to CloudWatch namespace CloudOps/SLO. Sentinel value of -1 indicates a data-collection failure (Prometheus unreachable).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2 },
-          "unit": "percentunit"
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "mappings": [],
+          "max": 105,
+          "min": -5,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 7 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["last", "min"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "alias": "Error Budget Remaining",
+          "dimensions": {
+            "Environment": ["$environment"],
+            "Service": ["$service"]
+          },
+          "expression": "",
+          "id": "",
+          "matchExact": true,
+          "metricName": "ErrorBudgetRemaining",
+          "namespace": "CloudOps/SLO",
+          "period": "300",
+          "refId": "A",
+          "region": "default",
+          "statistics": ["Average"]
+        }
+      ],
+      "title": "Error Budget Remaining % (CloudWatch, 30d)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${cloudwatch_ds}" },
+      "description": "Burn rate for 1h and 6h windows from CloudWatch. Threshold lines: orange = 6x (slow burn — open ticket), red = 14.4x (fast burn — page now).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 6 },
+              { "color": "red", "value": 14.4 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 7 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "alias": "Burn Rate 1h",
+          "dimensions": {
+            "Environment": ["$environment"],
+            "Service": ["$service"]
+          },
+          "expression": "",
+          "id": "",
+          "matchExact": true,
+          "metricName": "BurnRate1h",
+          "namespace": "CloudOps/SLO",
+          "period": "300",
+          "refId": "A",
+          "region": "default",
+          "statistics": ["Average"]
+        },
+        {
+          "alias": "Burn Rate 6h",
+          "dimensions": {
+            "Environment": ["$environment"],
+            "Service": ["$service"]
+          },
+          "expression": "",
+          "id": "",
+          "matchExact": true,
+          "metricName": "BurnRate6h",
+          "namespace": "CloudOps/SLO",
+          "period": "3600",
+          "refId": "B",
+          "region": "default",
+          "statistics": ["Average"]
+        }
+      ],
+      "title": "Burn Rate 1h & 6h (CloudWatch)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Percentage of the 30-day error budget consumed for availability vs latency SLOs. Derived from Prometheus recording rules (3d burn rate as 30d proxy). Red >100% = SLO breached.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "max": 110,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "orange", "value": 90 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 16 },
+      "id": 7,
+      "options": {
+        "displayMode": "lcd",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(1 - job:slo_error_budget:availability_remaining{service=\"$service\"}) * 100",
+          "instant": true,
+          "legendFormat": "Availability Budget Consumed",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(1 - job:slo_error_budget:latency_remaining{service=\"$service\"}) * 100",
+          "instant": true,
+          "legendFormat": "Latency Budget Consumed",
+          "refId": "B"
+        }
+      ],
+      "title": "Error Budget Consumed — Availability vs Latency (30d)",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 102,
+      "title": "SLI Details",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Availability SLI (% non-5xx requests) over the $window range. The dashed red line is the SLO target at $slo_target%. Drops below the line represent SLO breaches.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "fillOpacity": 5,
+            "lineWidth": 2
+          },
+          "mappings": [],
+          "max": 100.5,
+          "min": 98,
+          "unit": "percent"
         },
         "overrides": [
           {
             "matcher": { "id": "byName", "options": "SLO Target" },
             "properties": [
               { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
-              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } }
+              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 1 },
+              { "id": "custom.fillOpacity", "value": 0 }
             ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 6 },
-      "id": 5,
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 24 },
+      "id": 8,
       "options": {
-        "legend": { "calcs": ["mean"], "displayMode": "table", "placement": "bottom" },
+        "legend": { "calcs": ["mean", "min"], "displayMode": "table", "placement": "bottom" },
         "tooltip": { "mode": "multi", "sort": "none" }
       },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
-          "legendFormat": "Error Rate",
+          "expr": "sum(rate(http_requests_total{job=\"$service\",status!~\"5..\"}[$window])) / sum(rate(http_requests_total{job=\"$service\"}[$window])) * 100",
+          "legendFormat": "Availability SLI",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "1 - $slo_target / 100",
-          "legendFormat": "SLO Target (allowed error rate)",
+          "expr": "vector($slo_target)",
+          "legendFormat": "SLO Target",
           "refId": "B"
         }
       ],
-      "title": "Error Rate vs SLO Target",
+      "title": "Availability SLI over Time",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Request latency percentiles from the http_request_duration_seconds Prometheus histogram. The dashed line at 300ms is the latency SLO threshold (95% of requests must be below this).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2 },
-          "unit": "short",
-          "min": 0
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "ms"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Fast Burn Threshold (14.4x)" },
+            "matcher": { "id": "byName", "options": "SLO Threshold (300ms)" },
             "properties": [
               { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
-              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } }
+              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 1 },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p50" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p95" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p99" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
             ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
-      "id": 6,
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 24 },
+      "id": 9,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
         "tooltip": { "mode": "multi", "sort": "none" }
@@ -233,41 +514,335 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h]))) / (1 - $slo_target / 100)",
-          "legendFormat": "Burn Rate 1h",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"$service\"}[$window])) by (le)) * 1000",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[6h])) / sum(rate(http_requests_total[6h]))) / (1 - $slo_target / 100)",
-          "legendFormat": "Burn Rate 6h",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"$service\"}[$window])) by (le)) * 1000",
+          "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "expr": "vector(14.4)",
-          "legendFormat": "Fast Burn Threshold (14.4x)",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"$service\"}[$window])) by (le)) * 1000",
+          "legendFormat": "p99",
           "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "vector(300)",
+          "legendFormat": "SLO Threshold (300ms)",
+          "refId": "D"
         }
       ],
-      "title": "Burn Rate (alert when 1h burn rate > 14.4)",
+      "title": "Latency Percentiles (p50 / p95 / p99)",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Request throughput split into successful (non-5xx) and failed (5xx) requests per second. Stacked view shows relative share of bad traffic.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed" },
+          "custom": {
+            "fillOpacity": 50,
+            "lineWidth": 1,
+            "stacking": { "group": "A", "mode": "normal" }
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Good Requests" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Bad Requests (5xx)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 33 },
+      "id": 10,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_requests_total{job=\"$service\",status!~\"5..\"}[$window]))",
+          "legendFormat": "Good Requests",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_requests_total{job=\"$service\",status=~\"5..\"}[$window]))",
+          "legendFormat": "Bad Requests (5xx)",
+          "refId": "B"
+        }
+      ],
+      "title": "Good vs Bad Requests (stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Heatmap of request latency distribution from the Prometheus histogram. Brighter cells indicate more requests in that latency bucket. Helps identify latency bimodality or tail spikes.",
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 33 },
+      "id": 11,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": { "color": "rgba(255,0,255,0.7)" },
+        "filterValues": { "le": 1e-9 },
+        "legend": { "show": true },
+        "rowsFrame": { "layout": "auto" },
+        "tooltip": { "show": true, "yHistogram": false },
+        "yAxis": { "axisPlacement": "left", "reverse": false, "unit": "s" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_request_duration_seconds_bucket{job=\"$service\"}[$window])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Latency Distribution Heatmap",
+      "type": "heatmap"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 103,
+      "title": "Alerts & Incidents",
+      "type": "row"
+    },
+    {
+      "datasource": { "uid": "-- Grafana --" },
+      "description": "All firing or pending SLO alerts for $service. Alerts are defined in modules/observability/slo.tf via PrometheusRule CRDs. Click an alert to open its Alertmanager entry.",
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 43 },
+      "id": 12,
+      "options": {
+        "alertInstanceLabelFilter": "service=$service",
+        "alertName": "SLO",
+        "dashboardAlerts": false,
+        "groupBy": ["service"],
+        "groupMode": "tags",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "stateFilter": {
+          "error": true,
+          "firing": true,
+          "noData": false,
+          "normal": false,
+          "pending": true
+        },
+        "tags": ["slo"],
+        "viewMode": "list"
+      },
+      "title": "Firing SLO Alerts",
+      "type": "alertlist"
+    },
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${cloudwatch_ds}" },
+      "description": "Last 10 SLO calculation events from the error-budget-tracker Lambda. Pulled from CloudWatch Logs Insights. Fields are parsed from the structured JSON logged by the Lambda handler.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "errorBudgetRemaining" },
+            "properties": [
+              { "id": "displayName", "value": "Budget Remaining %" },
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "custom.displayMode", "value": "color-background" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 10 },
+                    { "color": "green", "value": 50 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "burnRate1h" },
+            "properties": [
+              { "id": "displayName", "value": "Burn Rate 1h" },
+              { "id": "decimals", "value": 2 },
+              { "id": "custom.displayMode", "value": "color-background" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "orange", "value": 6 },
+                    { "color": "red", "value": 14.4 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "burnRate6h" },
+            "properties": [
+              { "id": "displayName", "value": "Burn Rate 6h" },
+              { "id": "decimals", "value": 2 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "projectedExhaustionHours" },
+            "properties": [
+              { "id": "displayName", "value": "Exhaustion (h)" },
+              { "id": "unit", "value": "h" },
+              { "id": "decimals", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "availabilitySLI" },
+            "properties": [
+              { "id": "displayName", "value": "Avail. SLI" },
+              { "id": "unit", "value": "percentunit" },
+              { "id": "decimals", "value": 4 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "@timestamp" },
+            "properties": [
+              { "id": "displayName", "value": "Timestamp" },
+              { "id": "custom.width", "value": 180 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 10, "x": 8, "y": 43 },
+      "id": 13,
+      "options": {
+        "footer": { "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "@timestamp" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${cloudwatch_ds}" },
+          "expression": "fields @timestamp, errorBudgetRemaining, burnRate1h, burnRate6h, projectedExhaustionHours, availabilitySLI | filter ispresent(errorBudgetRemaining) | sort @timestamp desc | limit 10",
+          "logGroupNames": ["/aws/lambda/cloudops-error-budget-tracker"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Last 10 SLO Events (Lambda Logs)",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Count of currently firing SLO alerts for $service. 0 (green) = all SLOs healthy. Any non-zero value (red) means active budget burn at a rate that triggered an alert.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "0": { "color": "green", "index": 0, "text": "0 — Healthy" }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 43 },
+      "id": 14,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "count(ALERTS{alertname=~\"SLO.*\",service=\"$service\",alertstate=\"firing\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "Firing Alerts",
+          "refId": "A"
+        }
+      ],
+      "title": "Active SLO Alerts",
+      "type": "stat"
     }
   ],
   "refresh": "60s",
   "schemaVersion": 38,
-  "tags": ["slo", "reliability"],
+  "tags": ["slo", "reliability", "order-api"],
   "templating": {
     "list": [
       {
         "current": {},
         "hide": 0,
         "includeAll": false,
-        "label": "Datasource",
+        "label": "Prometheus",
         "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "CloudWatch",
+        "multi": false,
+        "name": "cloudwatch_ds",
+        "options": [],
+        "query": "cloudwatch",
         "refresh": 1,
         "type": "datasource"
       },
@@ -279,13 +854,64 @@
         "multi": false,
         "name": "slo_target",
         "options": [
-          { "selected": false, "text": "99",   "value": "99" },
-          { "selected": false, "text": "99.5", "value": "99.5" },
-          { "selected": true,  "text": "99.9", "value": "99.9" },
-          { "selected": false, "text": "99.95","value": "99.95" },
-          { "selected": false, "text": "99.99","value": "99.99" }
+          { "selected": false, "text": "99",    "value": "99" },
+          { "selected": false, "text": "99.5",  "value": "99.5" },
+          { "selected": true,  "text": "99.9",  "value": "99.9" },
+          { "selected": false, "text": "99.95", "value": "99.95" },
+          { "selected": false, "text": "99.99", "value": "99.99" }
         ],
         "query": "99,99.5,99.9,99.95,99.99",
+        "type": "custom"
+      },
+      {
+        "current": { "text": "order-api", "value": "order-api" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(http_requests_total, job)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Service",
+        "multi": false,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(http_requests_total, job)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": { "text": "1h", "value": "1h" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Window",
+        "multi": false,
+        "name": "window",
+        "options": [
+          { "selected": true,  "text": "1h",  "value": "1h" },
+          { "selected": false, "text": "6h",  "value": "6h" },
+          { "selected": false, "text": "24h", "value": "24h" },
+          { "selected": false, "text": "7d",  "value": "7d" },
+          { "selected": false, "text": "30d", "value": "30d" }
+        ],
+        "query": "1h,6h,24h,7d,30d",
+        "type": "custom"
+      },
+      {
+        "current": { "text": "dev", "value": "dev" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "environment",
+        "options": [
+          { "selected": true,  "text": "dev",     "value": "dev" },
+          { "selected": false, "text": "staging",  "value": "staging" },
+          { "selected": false, "text": "prod",     "value": "prod" }
+        ],
+        "query": "dev,staging,prod",
         "type": "custom"
       }
     ]
@@ -293,7 +919,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "SLO Dashboard",
+  "title": "SLO Dashboard — order-api",
   "uid": "slo-dashboard",
-  "version": 1
+  "version": 2
 }

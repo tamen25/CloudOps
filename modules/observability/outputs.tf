@@ -44,3 +44,8 @@ output "tempo_bucket" {
   description = "Tempo S3 bucket name"
   value       = aws_s3_bucket.tempo.id
 }
+
+output "grafana_api_key_secret_arn" {
+  description = "Secrets Manager ARN containing the Grafana Viewer service account token — passed to the SLO Lambda so it can query Prometheus via the Grafana datasource proxy"
+  value       = aws_secretsmanager_secret.grafana_api_key.arn
+}

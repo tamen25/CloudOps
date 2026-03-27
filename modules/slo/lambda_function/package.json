@@ -1,0 +1,19 @@
+{
+  "name": "slo-error-budget-tracker",
+  "version": "1.0.0",
+  "description": "Lambda function that queries Prometheus SLO recording rules, calculates error budgets, and publishes to CloudWatch and DynamoDB",
+  "main": "index.js",
+  "scripts": {
+    "install:prod": "npm install --omit=dev"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.511.0",
+    "@aws-sdk/client-dynamodb": "^3.511.0",
+    "@aws-sdk/client-secrets-manager": "^3.511.0",
+    "@aws-sdk/lib-dynamodb": "^3.511.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}
