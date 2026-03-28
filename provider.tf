@@ -59,14 +59,14 @@ data "aws_eks_cluster_auth" "this" {
 
 provider "helm" {
   kubernetes {
-    host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
-    cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
-    token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
+    host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+    cluster_ca_certificate = var.enable_eks && (var.enable_ingress || var.enable_observability) ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+    token                  = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster_auth.this[0].token : ""
   }
 }
 
 provider "kubernetes" {
-  host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
-  cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
-  token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
+  host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+  cluster_ca_certificate = var.enable_eks && (var.enable_ingress || var.enable_observability) ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+  token                  = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster_auth.this[0].token : ""
 }

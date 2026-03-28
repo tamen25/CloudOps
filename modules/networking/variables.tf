@@ -62,8 +62,8 @@ variable "public_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.public_subnet_cidrs == null || alltrue([
-      for cidr in var.public_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.public_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All public subnet CIDRs must be valid IPv4 CIDR blocks."
   }
@@ -75,8 +75,8 @@ variable "private_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.private_subnet_cidrs == null || alltrue([
-      for cidr in var.private_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.private_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All private subnet CIDRs must be valid IPv4 CIDR blocks."
   }
@@ -88,8 +88,8 @@ variable "db_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.db_subnet_cidrs == null || alltrue([
-      for cidr in var.db_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.db_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All database subnet CIDRs must be valid IPv4 CIDR blocks."
   }
