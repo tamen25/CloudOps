@@ -184,12 +184,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Disable ingress/observability on the plan so the EKS data-source lookup
-          # and Route 53 zone lookups are skipped — those resources don't exist until
-          # the staged apply has run. The apply steps deploy them in the correct order.
+          # Disable modules that contact the Kubernetes API during plan:
+          #   ingress/observability  — EKS data-source + Route53 zone lookups
+          #   security               — data.kubernetes_secret + kubernetes_manifest
+          #                           both validate against the live API at plan time
+          # The staged apply deploys all three after the cluster exists.
           terraform plan -lock=false \
             -var 'enable_ingress=false' \
             -var 'enable_observability=false' \
+            -var 'enable_security=false' \
             -out=tfplan -no-color 2>&1 | tee plan-output.txt
 
       - name: Post plan to PR
