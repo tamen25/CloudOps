@@ -79,6 +79,7 @@ jobs:
       - name: Upload tfsec SARIF results
         uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('results.sarif') != ''
+        continue-on-error: true
         with:
           sarif_file: results.sarif
 
@@ -179,7 +180,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          terraform plan -out=tfplan -no-color 2>&1 | tee plan-output.txt
+          terraform plan -lock=false -out=tfplan -no-color 2>&1 | tee plan-output.txt
 
       - name: Post plan to PR
         if: github.event_name == 'pull_request'
@@ -268,6 +269,7 @@ jobs:
       - name: Upload Trivy SARIF results
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
           category: trivy
