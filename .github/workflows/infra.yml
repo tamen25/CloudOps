@@ -164,7 +164,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -n "$TF_VARS" ]; then
+            echo "$TF_VARS" > terraform.tfvars
+          fi
 
       - name: terraform init
         run: terraform init
@@ -389,7 +394,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -n "$TF_VARS" ]; then
+            echo "$TF_VARS" > terraform.tfvars
+          fi
 
       - name: terraform init
         run: terraform init
