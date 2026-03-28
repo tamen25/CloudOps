@@ -30,11 +30,6 @@ variable "kubernetes_version" {
 
 # Networking
 
-variable "vpc_id" {
-  description = "VPC ID where the cluster will be created"
-  type        = string
-}
-
 variable "private_subnet_ids" {
   description = "Private subnet IDs for EKS nodes (from networking module)"
   type        = list(string)

@@ -59,10 +59,9 @@ module "networking" {
   count  = var.enable_networking ? 1 : 0
   source = "./modules/networking"
 
-  environment    = var.environment
-  name_prefix    = local.name_prefix
-  primary_region = var.region
-  az_count       = var.az_count
+  environment = var.environment
+  name_prefix = local.name_prefix
+  az_count    = var.az_count
 
   vpc_cidr             = var.vpc_cidr
   public_subnet_cidrs  = var.public_subnet_cidrs
@@ -95,7 +94,6 @@ module "eks" {
   environment  = var.environment
   cluster_name = local.eks_cluster_name
 
-  vpc_id             = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
   private_subnet_ids = var.enable_networking ? module.networking[0].private_subnet_ids : var.existing_private_subnet_ids
   public_subnet_ids  = var.enable_networking ? module.networking[0].public_subnet_ids : var.existing_public_subnet_ids
   node_sg_id         = var.enable_networking ? module.networking[0].eks_nodes_sg_id : var.existing_node_sg_id
@@ -171,9 +169,8 @@ module "slo" {
   count  = var.enable_slo ? 1 : 0
   source = "./modules/slo"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  eks_cluster_name = local.eks_cluster_name
+  project_name = var.project_name
+  environment  = var.environment
 
   prometheus_url = var.enable_observability ? module.observability[0].prometheus_url : var.slo_prometheus_url
   grafana_url    = var.enable_observability ? module.observability[0].grafana_url : ""
@@ -182,11 +179,6 @@ module "slo" {
   # When observability is disabled (bring-your-own Prometheus), fall back to the
   # manually supplied var (slo_grafana_api_key_secret_arn in terraform.tfvars).
   grafana_api_key_secret_arn = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : var.slo_grafana_api_key_secret_arn
-
-  # Cross-module security alert integration: when error budget burns critically
-  # fast (possible sign of a security incident), the SLO Lambda can publish to
-  # this topic.  The security module must be deployed first.
-  security_alerts_topic_arn = var.enable_security ? module.security[0].security_alerts_topic_arn : ""
 
   tags = local.common_tags
 }
@@ -301,8 +293,6 @@ module "database" {
   environment = var.environment
   name_prefix = local.name_prefix
 
-  vpc_id                = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
-  db_subnet_ids         = var.enable_networking ? module.networking[0].database_subnet_ids : []
   db_subnet_group_name  = var.enable_networking ? module.networking[0].db_subnet_group_name : ""
   rds_security_group_id = var.enable_networking ? module.networking[0].rds_sg_id : ""
 

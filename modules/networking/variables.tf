@@ -23,17 +23,6 @@ variable "name_prefix" {
   }
 }
 
-variable "primary_region" {
-  description = "AWS region where networking resources will be created"
-  type        = string
-  default     = "us-east-1"
-
-  validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-\\d{1}$", var.primary_region))
-    error_message = "Primary region must be a valid AWS region (e.g., us-east-1)."
-  }
-}
-
 # EKS Configuration
 
 variable "eks_cluster_name" {

@@ -12,9 +12,6 @@ terraform {
   }
 }
 
-# Get the current AWS region for resource provisioning
-data "aws_region" "current" {}
-
 locals {
   common_tags = merge(
     var.tags,

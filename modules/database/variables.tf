@@ -10,16 +10,6 @@ variable "name_prefix" {
   type        = string
 }
 
-variable "vpc_id" {
-  description = "VPC ID where RDS will be deployed"
-  type        = string
-}
-
-variable "db_subnet_ids" {
-  description = "List of subnet IDs for RDS subnet group (must be private subnets)"
-  type        = list(string)
-}
-
 variable "db_subnet_group_name" {
   description = "Name of the DB subnet group (created by networking module)"
   type        = string
@@ -91,12 +81,6 @@ variable "create_read_replica" {
   description = "Create a read replica for DR/scaling"
   type        = bool
   default     = false
-}
-
-variable "replica_region" {
-  description = "AWS region for read replica (if different from primary)"
-  type        = string
-  default     = null
 }
 
 # Database Settings

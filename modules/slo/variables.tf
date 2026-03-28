@@ -15,11 +15,6 @@ variable "environment" {
   }
 }
 
-variable "eks_cluster_name" {
-  description = "EKS cluster name — informational; used for tagging and log context"
-  type        = string
-}
-
 variable "prometheus_url" {
   description = <<-EOT
     Base URL for Prometheus HTTP API queries (no trailing slash).
