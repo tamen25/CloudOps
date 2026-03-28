@@ -165,238 +165,34 @@ PERMISSIONS_POLICY=$(cat <<EOF
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ECRAuth",
-      "Effect": "Allow",
-      "Action": ["ecr:GetAuthorizationToken"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ECRPush",
+      "Sid": "FullInfrastructureDeployment",
       "Effect": "Allow",
       "Action": [
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:PutImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload",
-        "ecr:CreateRepository",
-        "ecr:DescribeRepositories"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EKS",
-      "Effect": "Allow",
-      "Action": [
-        "eks:DescribeCluster",
-        "eks:ListClusters",
-        "eks:ListNodegroups",
-        "eks:UpdateNodegroupConfig"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "S3",
-      "Effect": "Allow",
-      "Action": [
-        "s3:CreateBucket",
-        "s3:PutBucketVersioning",
-        "s3:PutBucketEncryption",
-        "s3:PutPublicAccessBlock",
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:HeadBucket"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "KMS",
-      "Effect": "Allow",
-      "Action": [
-        "kms:CreateKey",
-        "kms:DescribeKey",
-        "kms:CreateAlias",
-        "kms:Encrypt",
-        "kms:Decrypt",
-        "kms:GenerateDataKey"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "IAM",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:AttachRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:GetRole",
-        "iam:PassRole",
-        "iam:CreateOpenIDConnectProvider",
-        "iam:ListOpenIDConnectProviders",
-        "iam:TagRole"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EC2",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:Describe*",
-        "ec2:CreateVpc",
-        "ec2:CreateSubnet",
-        "ec2:CreateInternetGateway",
-        "ec2:CreateRouteTable",
-        "ec2:CreateSecurityGroup",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:CreateNatGateway",
-        "ec2:AllocateAddress",
-        "ec2:CreateVpcEndpoint",
-        "ec2:ModifyVpcAttribute"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ELB",
-      "Effect": "Allow",
-      "Action": ["elasticloadbalancing:*"],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatch",
-      "Effect": "Allow",
-      "Action": [
-        "cloudwatch:PutMetricData",
-        "cloudwatch:GetMetricStatistics",
-        "cloudwatch:ListMetrics",
-        "cloudwatch:PutMetricAlarm",
-        "cloudwatch:DescribeAlarms"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogDelivery",
-        "logs:PutRetentionPolicy",
-        "logs:DescribeLogGroups"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SecretsManager",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:CreateSecret",
-        "secretsmanager:PutSecretValue",
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:TagResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "Lambda",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:CreateFunction",
-        "lambda:UpdateFunctionCode",
-        "lambda:UpdateFunctionConfiguration",
-        "lambda:GetFunction",
-        "lambda:InvokeFunction",
-        "lambda:AddPermission",
-        "lambda:CreateEventSourceMapping"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "DynamoDB",
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:CreateTable",
-        "dynamodb:DescribeTable",
-        "dynamodb:PutItem",
-        "dynamodb:GetItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:UpdateItem"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SNS",
-      "Effect": "Allow",
-      "Action": [
-        "sns:CreateTopic",
-        "sns:Subscribe",
-        "sns:Publish",
-        "sns:GetTopicAttributes",
-        "sns:SetTopicAttributes"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EventBridge",
-      "Effect": "Allow",
-      "Action": [
-        "events:PutRule",
-        "events:PutTargets",
-        "events:DescribeRule"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "Budgets",
-      "Effect": "Allow",
-      "Action": [
-        "budgets:ModifyBudget",
-        "budgets:ViewBudget"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CostExplorer",
-      "Effect": "Allow",
-      "Action": [
-        "ce:GetCostAndUsage",
-        "ce:GetCostForecast",
-        "ce:GetDimensionValues",
-        "ce:GetAnomalies"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "AutoScaling",
-      "Effect": "Allow",
-      "Action": [
-        "autoscaling:DescribeAutoScalingGroups",
-        "autoscaling:UpdateAutoScalingGroup",
-        "autoscaling:SetDesiredCapacity"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "RDS",
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBInstance",
-        "rds:ModifyDBInstance",
-        "rds:DescribeDBInstances",
-        "rds:CreateDBSubnetGroup",
-        "rds:CreateDBParameterGroup",
-        "rds:ModifyDBParameterGroup"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "STS",
-      "Effect": "Allow",
-      "Action": [
+        "ec2:*",
+        "ecr:*",
+        "ecs:*",
+        "eks:*",
+        "elasticloadbalancing:*",
+        "autoscaling:*",
+        "cloudwatch:*",
+        "logs:*",
+        "iam:*",
+        "kms:*",
+        "rds:*",
+        "route53:*",
+        "acm:*",
+        "s3:*",
+        "secretsmanager:*",
+        "ssm:*",
+        "lambda:*",
+        "dynamodb:*",
+        "sns:*",
+        "sqs:*",
+        "events:*",
+        "scheduler:*",
+        "budgets:*",
+        "ce:*",
+        "pricing:*",
         "sts:AssumeRole",
         "sts:GetCallerIdentity"
       ],
