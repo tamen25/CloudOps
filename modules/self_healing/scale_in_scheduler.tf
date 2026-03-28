@@ -113,19 +113,19 @@ JS
 
 resource "local_file" "scale_in_package" {
   filename = "${local.scale_in_src_dir}/package.json"
-  content  = jsonencode({
+  content = jsonencode({
     name        = "scale-in-scheduler"
     version     = "1.0.0"
     description = "CloudOps self-healing scale-in scheduler — resets HPA minReplicas after a scale-out event"
     main        = "index.js"
     dependencies = {
-      "@aws-sdk/client-eks"            = "^3.600.0"
-      "@aws-sdk/client-cloudwatch"     = "^3.600.0"
-      "@aws-sdk/credential-providers"  = "^3.600.0"
-      "@smithy/signature-v4"           = "^3.0.0"
-      "@smithy/protocol-http"          = "^3.0.0"
-      "@aws-crypto/sha256-js"          = "^5.0.0"
-      "node-fetch"                     = "^2.7.0"
+      "@aws-sdk/client-eks"           = "^3.600.0"
+      "@aws-sdk/client-cloudwatch"    = "^3.600.0"
+      "@aws-sdk/credential-providers" = "^3.600.0"
+      "@smithy/signature-v4"          = "^3.0.0"
+      "@smithy/protocol-http"         = "^3.0.0"
+      "@aws-crypto/sha256-js"         = "^5.0.0"
+      "node-fetch"                    = "^2.7.0"
     }
   })
 }

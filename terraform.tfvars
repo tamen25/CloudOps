@@ -54,7 +54,7 @@ bootstrap_external_id             = ""
 # Networking
 # ─────────────────────────────────────────────────────────────
 az_count = 2
-vpc_cidr  = "10.0.0.0/16"
+vpc_cidr = "10.0.0.0/16"
 
 public_subnet_cidrs  = null
 private_subnet_cidrs = null
@@ -91,20 +91,20 @@ existing_node_sg_id         = ""
 # ─────────────────────────────────────────────────────────────
 # Database (RDS PostgreSQL)
 # ─────────────────────────────────────────────────────────────
-database_instance_class                = "db.t3.micro"
-database_allocated_storage             = 20
-database_max_allocated_storage         = 100
-database_engine                        = "postgres"
-database_engine_version                = "15.5"
-database_name                          = "cloudops"
-database_port                          = 5432
-database_multi_az                      = false
-database_create_read_replica           = false
-database_backup_retention_period       = 7
-database_skip_final_snapshot           = true
-database_deletion_protection           = false
-database_performance_insights_enabled  = true
-database_monitoring_interval           = 60
+database_instance_class               = "db.t3.micro"
+database_allocated_storage            = 20
+database_max_allocated_storage        = 100
+database_engine                       = "postgres"
+database_engine_version               = "15.5"
+database_name                         = "cloudops"
+database_port                         = 5432
+database_multi_az                     = false
+database_create_read_replica          = false
+database_backup_retention_period      = 7
+database_skip_final_snapshot          = true
+database_deletion_protection          = false
+database_performance_insights_enabled = true
+database_monitoring_interval          = 60
 
 # ─────────────────────────────────────────────────────────────
 # SLO

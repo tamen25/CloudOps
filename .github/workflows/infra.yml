@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload tfsec SARIF results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('results.sarif') != ''
         with:
           sarif_file: results.sarif
 

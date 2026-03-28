@@ -84,13 +84,13 @@ resource "helm_release" "grafana" {
     ingress = {
       enabled = true
       annotations = {
-        "kubernetes.io/ingress.class"                    = "alb"
-        "alb.ingress.kubernetes.io/scheme"               = "internet-facing"
-        "alb.ingress.kubernetes.io/target-type"          = "ip"
-        "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
-        "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
-        "alb.ingress.kubernetes.io/group.name"           = "cloudops"
-        "alb.ingress.kubernetes.io/ssl-redirect"         = "443"
+        "kubernetes.io/ingress.class"               = "alb"
+        "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"     = "ip"
+        "alb.ingress.kubernetes.io/certificate-arn" = var.acm_cert_arn
+        "alb.ingress.kubernetes.io/listen-ports"    = jsonencode([{ HTTPS = 443 }])
+        "alb.ingress.kubernetes.io/group.name"      = "cloudops"
+        "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
       }
       hosts    = ["grafana.${var.domain}"]
       path     = "/"

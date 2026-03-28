@@ -58,12 +58,12 @@ resource "aws_lambda_function" "auto_remediation" {
 
   environment {
     variables = {
-      FINDINGS_TABLE           = aws_dynamodb_table.security_findings.name
-      GITHUB_TOKEN_SECRET_ARN  = var.github_token_secret_arn
-      GITHUB_REPO              = var.github_repo
-      EKS_CLUSTER_NAME         = var.eks_cluster_name
-      ENVIRONMENT              = var.environment
-      DRY_RUN                  = "false"
+      FINDINGS_TABLE                      = aws_dynamodb_table.security_findings.name
+      GITHUB_TOKEN_SECRET_ARN             = var.github_token_secret_arn
+      GITHUB_REPO                         = var.github_repo
+      EKS_CLUSTER_NAME                    = var.eks_cluster_name
+      ENVIRONMENT                         = var.environment
+      DRY_RUN                             = "false"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

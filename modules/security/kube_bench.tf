@@ -361,8 +361,8 @@ resource "aws_lambda_function" "kube_bench_processor" {
 
   environment {
     variables = {
-      FINDINGS_TABLE = aws_dynamodb_table.security_findings.name
-      ENVIRONMENT    = var.environment
+      FINDINGS_TABLE                      = aws_dynamodb_table.security_findings.name
+      ENVIRONMENT                         = var.environment
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

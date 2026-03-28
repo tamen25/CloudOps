@@ -54,8 +54,8 @@ resource "helm_release" "loki" {
       }
 
       limits_config = {
-        retention_period      = "168h"
-        ingestion_rate_mb     = 16
+        retention_period        = "168h"
+        ingestion_rate_mb       = 16
         ingestion_burst_size_mb = 32
       }
 

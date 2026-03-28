@@ -77,8 +77,8 @@ resource "helm_release" "otel_collector" {
         # Inject cluster and environment as resource attributes on all telemetry
         resource = {
           attributes = [
-            { key = "cluster",     value = var.eks_cluster_name, action = "upsert" },
-            { key = "environment", value = var.environment,      action = "upsert" },
+            { key = "cluster", value = var.eks_cluster_name, action = "upsert" },
+            { key = "environment", value = var.environment, action = "upsert" },
           ]
         }
 
@@ -174,16 +174,16 @@ resource "kubernetes_ingress_v1" "otel_http" {
     name      = "otel-collector-http"
     namespace = "monitoring"
     annotations = {
-      "kubernetes.io/ingress.class"                         = "alb"
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"           = var.acm_cert_arn
-      "alb.ingress.kubernetes.io/listen-ports"              = jsonencode([{ HTTPS = 443 }])
-      "alb.ingress.kubernetes.io/group.name"                = "cloudops-otel"
-      "alb.ingress.kubernetes.io/group.order"               = "10"
-      "alb.ingress.kubernetes.io/backend-protocol"          = "HTTP"
-      "alb.ingress.kubernetes.io/healthcheck-path"          = "/"
-      "alb.ingress.kubernetes.io/healthcheck-protocol"      = "HTTP"
+      "kubernetes.io/ingress.class"                    = "alb"
+      "alb.ingress.kubernetes.io/scheme"               = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"          = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
+      "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
+      "alb.ingress.kubernetes.io/group.name"           = "cloudops-otel"
+      "alb.ingress.kubernetes.io/group.order"          = "10"
+      "alb.ingress.kubernetes.io/backend-protocol"     = "HTTP"
+      "alb.ingress.kubernetes.io/healthcheck-path"     = "/"
+      "alb.ingress.kubernetes.io/healthcheck-protocol" = "HTTP"
     }
   }
 
@@ -216,15 +216,15 @@ resource "kubernetes_ingress_v1" "otel_grpc" {
     name      = "otel-collector-grpc"
     namespace = "monitoring"
     annotations = {
-      "kubernetes.io/ingress.class"                         = "alb"
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"           = var.acm_cert_arn
-      "alb.ingress.kubernetes.io/listen-ports"              = jsonencode([{ HTTPS = 443 }])
-      "alb.ingress.kubernetes.io/group.name"                = "cloudops-otel"
-      "alb.ingress.kubernetes.io/group.order"               = "20"
-      "alb.ingress.kubernetes.io/backend-protocol"          = "GRPC"
-      "alb.ingress.kubernetes.io/conditions.otel-grpc"      = jsonencode([{ field = "http-request-method", httpRequestMethodConfig = { values = ["POST"] } }])
+      "kubernetes.io/ingress.class"                    = "alb"
+      "alb.ingress.kubernetes.io/scheme"               = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"          = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
+      "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
+      "alb.ingress.kubernetes.io/group.name"           = "cloudops-otel"
+      "alb.ingress.kubernetes.io/group.order"          = "20"
+      "alb.ingress.kubernetes.io/backend-protocol"     = "GRPC"
+      "alb.ingress.kubernetes.io/conditions.otel-grpc" = jsonencode([{ field = "http-request-method", httpRequestMethodConfig = { values = ["POST"] } }])
     }
   }
 

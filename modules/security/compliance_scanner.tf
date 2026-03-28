@@ -53,16 +53,16 @@ resource "aws_lambda_function" "compliance_scanner" {
 
   environment {
     variables = {
-      ENVIRONMENT      = var.environment
-      PROJECT_NAME     = var.project_name
-      VPC_ID           = var.vpc_id
-      RDS_INSTANCE_ID  = var.rds_instance_id
-      EKS_CLUSTER_NAME = var.eks_cluster_name
-      STATE_BUCKET_NAME = var.state_bucket_name
-      LOKI_BUCKET_NAME  = var.loki_bucket_name
-      TEMPO_BUCKET_NAME = var.tempo_bucket_name
-      FINDINGS_TABLE   = aws_dynamodb_table.security_findings.name
-      SNS_TOPIC_ARN    = aws_sns_topic.security_alerts.arn
+      ENVIRONMENT                         = var.environment
+      PROJECT_NAME                        = var.project_name
+      VPC_ID                              = var.vpc_id
+      RDS_INSTANCE_ID                     = var.rds_instance_id
+      EKS_CLUSTER_NAME                    = var.eks_cluster_name
+      STATE_BUCKET_NAME                   = var.state_bucket_name
+      LOKI_BUCKET_NAME                    = var.loki_bucket_name
+      TEMPO_BUCKET_NAME                   = var.tempo_bucket_name
+      FINDINGS_TABLE                      = aws_dynamodb_table.security_findings.name
+      SNS_TOPIC_ARN                       = aws_sns_topic.security_alerts.arn
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

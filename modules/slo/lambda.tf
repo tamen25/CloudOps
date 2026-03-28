@@ -57,13 +57,13 @@ resource "aws_lambda_function" "error_budget_tracker" {
 
   environment {
     variables = {
-      PROMETHEUS_URL               = var.prometheus_url
-      GRAFANA_URL                  = var.grafana_url
-      GRAFANA_API_KEY_SECRET_ARN   = var.grafana_api_key_secret_arn
-      SLO_AVAILABILITY_TARGET      = "0.999"
-      SLO_LATENCY_TARGET           = "0.95"
-      DYNAMODB_TABLE               = aws_dynamodb_table.error_budgets.name
-      ENVIRONMENT                  = var.environment
+      PROMETHEUS_URL                      = var.prometheus_url
+      GRAFANA_URL                         = var.grafana_url
+      GRAFANA_API_KEY_SECRET_ARN          = var.grafana_api_key_secret_arn
+      SLO_AVAILABILITY_TARGET             = "0.999"
+      SLO_LATENCY_TARGET                  = "0.95"
+      DYNAMODB_TABLE                      = aws_dynamodb_table.error_budgets.name
+      ENVIRONMENT                         = var.environment
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

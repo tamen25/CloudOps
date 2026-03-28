@@ -36,8 +36,8 @@ resource "helm_release" "prometheus" {
 
     prometheus = {
       prometheusSpec = {
-        retention        = "15d"
-        scrapeInterval   = "30s"
+        retention          = "15d"
+        scrapeInterval     = "30s"
         evaluationInterval = "30s"
 
         # Accept remote write from OTel Collector

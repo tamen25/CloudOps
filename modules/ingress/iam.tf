@@ -114,8 +114,8 @@ resource "aws_iam_policy" "lb_controller" {
         Resource = "arn:aws:ec2:*:*:security-group/*"
         Condition = {
           Null = {
-            "aws:RequestedRegion"                    = "false"
-            "ec2:ResourceTag/elbv2.k8s.aws/cluster"  = "false"
+            "aws:RequestedRegion"                   = "false"
+            "ec2:ResourceTag/elbv2.k8s.aws/cluster" = "false"
           }
         }
       },
@@ -155,8 +155,8 @@ resource "aws_iam_policy" "lb_controller" {
         ]
         Condition = {
           Null = {
-            "aws:RequestedRegion"                        = "false"
-            "aws:ResourceTag/elbv2.k8s.aws/cluster"      = "true"
+            "aws:RequestedRegion"                   = "false"
+            "aws:ResourceTag/elbv2.k8s.aws/cluster" = "true"
           }
         }
       },

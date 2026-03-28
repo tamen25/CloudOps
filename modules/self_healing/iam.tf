@@ -185,9 +185,9 @@ data "aws_iam_policy_document" "scale_in_scheduler" {
   }
 
   statement {
-    sid    = "CloudWatchMetrics"
-    effect = "Allow"
-    actions = ["cloudwatch:PutMetricData"]
+    sid       = "CloudWatchMetrics"
+    effect    = "Allow"
+    actions   = ["cloudwatch:PutMetricData"]
     resources = ["*"]
   }
 
