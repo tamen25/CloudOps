@@ -1,0 +1,948 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "CloudOps operations homepage — at-a-glance view of reliability, security, cost, and operations. Designed for wall monitors.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "SLO Dashboard",   "url": "/d/slo-dashboard",          "type": "link", "icon": "external link", "targetBlank": false },
+    { "title": "Security Posture", "url": "/d/security-posture",       "type": "link", "icon": "external link", "targetBlank": false },
+    { "title": "FinOps Dashboard", "url": "/d/finops-dashboard",       "type": "link", "icon": "external link", "targetBlank": false },
+    { "title": "Self-Healing",     "url": "/d/self-healing-dashboard", "type": "link", "icon": "external link", "targetBlank": false },
+    { "title": "order-api RED",    "url": "/d/order-api-red",          "type": "link", "icon": "external link", "targetBlank": false }
+  ],
+  "panels": [
+
+    {
+      "id": 1, "type": "text", "title": "",
+      "gridPos": { "x": 0,  "y": 0, "w": 6, "h": 2 },
+      "options": { "content": "## Reliability\n[→ SLO Dashboard](/d/slo-dashboard)", "mode": "markdown" },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 2, "type": "text", "title": "",
+      "gridPos": { "x": 6,  "y": 0, "w": 6, "h": 2 },
+      "options": { "content": "## Security\n[→ Security Posture](/d/security-posture)", "mode": "markdown" },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "text", "title": "",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 2 },
+      "options": { "content": "## Cost\n[→ FinOps Dashboard](/d/finops-dashboard)", "mode": "markdown" },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "text", "title": "",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 2 },
+      "options": { "content": "## Operations\n[→ Self-Healing](/d/self-healing-dashboard)", "mode": "markdown" },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+
+    {
+      "id": 5,
+      "title": "Availability SLI",
+      "description": "Current 5-minute availability ratio. Green ≥ 99.9% (SLO target), yellow ≥ 99%, red < 99%.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 2, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 3,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 99.0 },
+              { "color": "green",  "value": 99.9 }
+            ]
+          },
+          "links": [{ "title": "SLO Dashboard", "url": "/d/slo-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "job:slo_availability:ratio_rate5m{service=\"order-api\"} * 100",
+          "legendFormat": "Availability",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 6,
+      "title": "CRITICAL Findings",
+      "description": "Open CRITICAL security findings from compliance scanner. Any value > 0 turns panel red — page immediately.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 2, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Clean", "color": "green", "index": 0 } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 1    }
+            ]
+          },
+          "links": [{ "title": "Security Posture", "url": "/d/security-posture", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/Security",
+          "metricName": "FindingsOpen",
+          "statistic": "Sum",
+          "period": "300",
+          "dimensions": { "Severity": "CRITICAL" },
+          "region": "default",
+          "matchExact": true
+        }
+      ]
+    },
+
+    {
+      "id": 7,
+      "title": "Today's Cost",
+      "description": "Total AWS spend today via Cost Explorer (daily granularity). $50/month budget ≈ $1.65/day target.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 2, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1.5  },
+              { "color": "red",    "value": 2.0  }
+            ]
+          },
+          "links": [{ "title": "FinOps Dashboard", "url": "/d/finops-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/FinOps",
+          "metricName": "DailyCostUSD",
+          "statistic": "Maximum",
+          "period": "86400",
+          "dimensions": {},
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 8,
+      "title": "Self-Healing Actions Today",
+      "description": "Total automated healing actions fired today across all types (rollbacks, scale-outs, node replacements). Green < 3, yellow < 10, red ≥ 10.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 2, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 3    },
+              { "color": "red",    "value": 10   }
+            ]
+          },
+          "links": [{ "title": "Self-Healing Dashboard", "url": "/d/self-healing-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/SelfHealing",
+          "metricName": "SelfHealingActions",
+          "statistic": "Sum",
+          "period": "86400",
+          "dimensions": { "Environment": "dev" },
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 9,
+      "title": "Error Budget Remaining",
+      "description": "Availability error budget remaining for the current 30-day window (99.9% SLO = 43.8 min/month). Red < 10%, yellow < 50%, green ≥ 50%.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 5, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 10   },
+              { "color": "green",  "value": 50   }
+            ]
+          },
+          "links": [{ "title": "SLO Dashboard", "url": "/d/slo-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "job:slo_error_budget:availability_remaining{service=\"order-api\"} * 100",
+          "legendFormat": "Budget Remaining",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "title": "HIGH Findings",
+      "description": "Open HIGH severity findings. Green = 0, yellow ≥ 1, red ≥ 5. Auto-remediation handles safe fixes; unsafe ones create GitHub issues.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 5, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Clean", "color": "green", "index": 0 } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1    },
+              { "color": "red",    "value": 5    }
+            ]
+          },
+          "links": [{ "title": "Security Posture", "url": "/d/security-posture", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/Security",
+          "metricName": "FindingsOpen",
+          "statistic": "Sum",
+          "period": "300",
+          "dimensions": { "Severity": "HIGH" },
+          "region": "default",
+          "matchExact": true
+        }
+      ]
+    },
+
+    {
+      "id": 11,
+      "title": "Budget Utilization",
+      "description": "Month-to-date spend as a percentage of the $50/month AWS Budget. Yellow ≥ 80% (AWS Budget warning), red ≥ 100% (breached).",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 5, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 80   },
+              { "color": "red",    "value": 100  }
+            ]
+          },
+          "links": [{ "title": "FinOps Dashboard", "url": "/d/finops-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/FinOps",
+          "metricName": "BudgetUtilizationPct",
+          "statistic": "Maximum",
+          "period": "86400",
+          "dimensions": {},
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 12,
+      "title": "Last Deployment",
+      "description": "Time elapsed since the youngest order-api pod started — proxy for last successful app pipeline deploy. Click to open Kubernetes Overview.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 5, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "value", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["min"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "fixed", "fixedColor": "text" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "links": [{ "title": "Kubernetes Overview", "url": "/d/kubernetes-overview", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "time() - kube_pod_start_time{namespace=\"cloudops\", pod=~\"order-api-.*\"}",
+          "legendFormat": "Pod age",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 13,
+      "title": "Latency SLI (p95 < 300ms)",
+      "description": "Percentage of requests completing under 300 ms (5-minute window). Green ≥ 95% (SLO target), yellow ≥ 90%, red < 90%.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 90   },
+              { "color": "green",  "value": 95   }
+            ]
+          },
+          "links": [{ "title": "SLO Dashboard", "url": "/d/slo-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "job:slo_latency:ratio_rate5m{service=\"order-api\"} * 100",
+          "legendFormat": "Latency SLI",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 14,
+      "title": "Last Auto-Remediation",
+      "description": "Timestamp of the most recent successful remediation by the auto-remediation Lambda. Sourced from CloudWatch Logs Insights. Click to open Security Posture Dashboard.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 8, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "value", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsLocal",
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "links": [{ "title": "Security Posture", "url": "/d/security-posture", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Logs",
+          "logGroups": [{ "name": "/aws/lambda/cloudops-auto-remediation" }],
+          "expression": "filter ispresent(action) and level=\"info\" and outcome=\"success\" | stats max(@timestamp) as last_action_ts",
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 15,
+      "title": "Projected Monthly Cost",
+      "description": "Current-month spend extrapolated to end-of-month by cost-ingestion Lambda. Green < $40, yellow < $50 (budget), red ≥ $50.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 40   },
+              { "color": "red",    "value": 50   }
+            ]
+          },
+          "links": [{ "title": "FinOps Dashboard", "url": "/d/finops-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/FinOps",
+          "metricName": "ProjectedMonthlyCostUSD",
+          "statistic": "Maximum",
+          "period": "86400",
+          "dimensions": {},
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 16,
+      "title": "Pod Count (running / desired)",
+      "description": "Available vs desired replicas for order-api Deployment. Green ≥ 2 available. Red = running below minimum healthy threshold.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 1    },
+              { "color": "green",  "value": 2    }
+            ]
+          },
+          "links": [{ "title": "Kubernetes Overview", "url": "/d/kubernetes-overview", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "kube_deployment_status_replicas_available{namespace=\"cloudops\",deployment=\"order-api\"}",
+          "legendFormat": "Running",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "kube_deployment_spec_replicas{namespace=\"cloudops\",deployment=\"order-api\"}",
+          "legendFormat": "Desired",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 17,
+      "title": "Burn Rate (1h)",
+      "description": "1-hour error burn rate relative to 99.9% SLO. Values > 14.4× consume the monthly error budget in < 1 hour and trigger a critical page. Green < 1×, yellow < 6×, orange < 14.4×, red ≥ 14.4×.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 11, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null  },
+              { "color": "yellow", "value": 1.0   },
+              { "color": "orange", "value": 6.0   },
+              { "color": "red",    "value": 14.4  }
+            ]
+          },
+          "links": [{ "title": "SLO Dashboard", "url": "/d/slo-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(1 - job:slo_availability:ratio_rate1h{service=\"order-api\"}) / (1 - 0.9990)",
+          "legendFormat": "Burn Rate",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 18,
+      "title": "Falco Alerts (24h)",
+      "description": "Falco eBPF runtime security alerts (CRITICAL + WARNING priority) from the last 24 hours, sourced from Loki. Green = 0, yellow ≥ 1, red ≥ 5.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 11, "w": 6, "h": 3 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1    },
+              { "color": "red",    "value": 5    }
+            ]
+          },
+          "links": [{ "title": "Security Posture", "url": "/d/security-posture", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({namespace=\"falco\"} | json | priority=~\"CRITICAL|WARNING\" [24h]))",
+          "instant": true,
+          "legendFormat": "Falco alerts"
+        }
+      ]
+    },
+
+    {
+      "id": 19,
+      "title": "Idle Resources Detected",
+      "description": "Resources flagged as idle by the idle-detector Lambda: EKS nodes with CPU < 10% sustained or RDS with < 5 connections. Green = 0, yellow ≥ 1, red ≥ 3.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 11, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0, "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1    },
+              { "color": "red",    "value": 3    }
+            ]
+          },
+          "links": [{ "title": "FinOps Dashboard", "url": "/d/finops-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/FinOps",
+          "metricName": "IdleResourcesDetected",
+          "statistic": "Sum",
+          "period": "86400",
+          "dimensions": {},
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "title": "RDS Connections",
+      "description": "Active connections to cloudops-dev RDS PostgreSQL (db.t3.micro max_connections ≈ 85). Yellow ≥ 50, red ≥ 80.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 11, "w": 6, "h": 3 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 50   },
+              { "color": "red",    "value": 80   }
+            ]
+          },
+          "links": [{ "title": "order-api RED", "url": "/d/order-api-red", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "AWS/RDS",
+          "metricName": "DatabaseConnections",
+          "statistic": "Average",
+          "period": "60",
+          "dimensions": { "DBInstanceIdentifier": "cloudops-dev" },
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 21,
+      "title": "Request Rate — Last 1h",
+      "description": "order-api HTTP request rate (req/s) over the last hour. Area sparkline for at-a-glance trend. Click to open order-api RED Dashboard.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "legend": { "displayMode": "hidden", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "drawStyle": "line",
+            "spanNulls": false,
+            "showPoints": "never"
+          },
+          "links": [{ "title": "order-api RED", "url": "/d/order-api-red", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_requests_total{job=\"order-api\"}[5m]))",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+
+    {
+      "id": 22,
+      "title": "Image Signature Valid",
+      "description": "Percentage of running container images in the cloudops namespace that are Cosign-signed and pass Trivy policy. Published by the compliance scanner Lambda. 100% = all images valid (green); any unsigned image = red.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 14, "w": 6, "h": 5 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": { "100": { "text": "Valid", "color": "green", "index": 0 } }
+            },
+            {
+              "type": "range",
+              "options": { "from": 0, "to": 99.9, "result": { "text": "Invalid", "color": "red", "index": 1 } }
+            }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": null },
+              { "color": "green", "value": 100  }
+            ]
+          },
+          "links": [{ "title": "Security Posture", "url": "/d/security-posture", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/Security",
+          "metricName": "ImagePolicyCompliantPct",
+          "statistic": "Minimum",
+          "period": "300",
+          "dimensions": { "Namespace": "cloudops" },
+          "region": "default",
+          "matchExact": true
+        }
+      ]
+    },
+
+    {
+      "id": 23,
+      "title": "Daily Cost — Last 7 Days",
+      "description": "Daily AWS spend for the past 7 days (bar chart). Budget target: $50/month ≈ $1.65/day. Red threshold at $2.00/day. Click to open FinOps Dashboard.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 14, "w": 6, "h": 5 },
+      "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+      "options": {
+        "legend": { "displayMode": "hidden", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "drawStyle": "bars",
+            "barAlignment": -1,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 2.0  }
+            ]
+          },
+          "links": [{ "title": "FinOps Dashboard", "url": "/d/finops-dashboard", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "cloudwatch", "uid": "cloudwatch" },
+          "queryMode": "Metrics", "metricQueryType": 0, "metricEditorMode": 0,
+          "namespace": "CloudOps/FinOps",
+          "metricName": "DailyCostUSD",
+          "statistic": "Maximum",
+          "period": "86400",
+          "dimensions": {},
+          "region": "default"
+        }
+      ]
+    },
+
+    {
+      "id": 24,
+      "title": "CI/CD Pipeline Status",
+      "description": "Deployment sync status: observed generation == desired generation means the last app pipeline run applied cleanly (no rollback pending). In Sync = green, Drifted = red.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 14, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "In Sync", "color": "green", "index": 0 } } },
+            { "type": "value", "options": { "0": { "text": "Drifted", "color": "red",   "index": 1 } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": null },
+              { "color": "green", "value": 1    }
+            ]
+          },
+          "links": [{ "title": "Kubernetes Overview", "url": "/d/kubernetes-overview", "targetBlank": false }]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "kube_deployment_status_observed_generation{namespace=\"cloudops\",deployment=\"order-api\"} == kube_deployment_metadata_generation{namespace=\"cloudops\",deployment=\"order-api\"}",
+          "legendFormat": "Pipeline",
+          "instant": true
+        }
+      ]
+    },
+
+    {
+      "id": 25,
+      "title": "All Firing Alerts — SLO · Security · Cost · Self-Healing",
+      "description": "Unified alert list — all currently firing, pending, or erroring Grafana alerts across every alert group, sorted by severity. Expand any row to see labels, annotations, and runbook links.",
+      "type": "alertlist",
+      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 10 },
+      "options": {
+        "alertInstanceLabelFilter": "",
+        "alertName": "",
+        "dashboardAlerts": false,
+        "groupBy": ["grafana_folder", "alertname"],
+        "groupMode": "custom",
+        "maxItems": 50,
+        "sortOrder": 1,
+        "stateFilter": {
+          "error":   true,
+          "firing":  true,
+          "noData":  false,
+          "normal":  false,
+          "pending": true
+        },
+        "viewMode": "list"
+      },
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    }
+
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": ["operations", "overview", "cloudops", "wall-monitor", "homepage"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Operations Overview",
+  "uid": "operations-overview",
+  "version": 2
+}

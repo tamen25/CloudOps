@@ -68,3 +68,9 @@ variable "github_repo" {
   type        = string
   default     = "tamen25/CloudOps"
 }
+
+variable "tags" {
+  description = "Common tags applied to all resources"
+  type        = map(string)
+  default     = {}
+}

@@ -1,0 +1,150 @@
+# Self-Healing Controller — Lambda + EventBridge
+#
+# Two triggers:
+#   1. SNS (cloudops-healing-triggers) — CloudWatch Alarms notify this topic
+#      when a threshold is breached; the alarm name drives the routing logic.
+#   2. EventBridge rule watching EKS pod failure events from CloudTrail
+#      (FailedScheduling, BackOff, OOMKilled) so the controller can react
+#      before a CloudWatch Alarm fires.
+
+locals {
+  controller_src_dir = "${path.module}/lambda_function"
+  controller_zip     = "${path.module}/lambda_function/self_healing_controller.zip"
+}
+
+# ── Build — npm install + zip ─────────────────────────────────────────────────
+
+resource "null_resource" "self_healing_build" {
+  triggers = {
+    src_hash = sha256(join("", [
+      filesha256("${local.controller_src_dir}/index.js"),
+      filesha256("${local.controller_src_dir}/package.json"),
+    ]))
+  }
+
+  provisioner "local-exec" {
+    working_dir = local.controller_src_dir
+    command     = "npm install --omit=dev --quiet"
+  }
+}
+
+data "archive_file" "self_healing" {
+  type        = "zip"
+  source_dir  = local.controller_src_dir
+  output_path = local.controller_zip
+  excludes    = ["*.zip"]
+
+  depends_on = [null_resource.self_healing_build]
+}
+
+# ── Lambda ────────────────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "self_healing_controller" {
+  function_name    = "${var.project_name}-self-healing-controller"
+  role             = aws_iam_role.self_healing.arn
+  runtime          = "nodejs20.x"
+  handler          = "index.handler"
+  timeout          = 120
+  memory_size      = 256
+  filename         = data.archive_file.self_healing.output_path
+  source_code_hash = data.archive_file.self_healing.output_base64sha256
+
+  environment {
+    variables = {
+      ENVIRONMENT             = var.environment
+      EKS_CLUSTER_NAME        = var.eks_cluster_name
+      RDS_INSTANCE_ID         = var.rds_instance_id
+      MIN_HEALTHY_PODS        = tostring(var.min_healthy_pods)
+      MAX_SCALE_OUT_PODS      = tostring(var.max_scale_out_pods)
+      ROLLBACK_ON_ERROR_RATE  = tostring(var.rollback_on_error_rate)
+      SNS_TOPIC_ARN           = aws_sns_topic.healing_triggers.arn
+      GITHUB_REPO             = var.github_repo
+      GITHUB_TOKEN_SECRET_ARN = var.github_token_secret_arn
+      DRY_RUN                 = tostring(var.dry_run)
+    }
+  }
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "self_healing_controller" {
+  name              = "/aws/lambda/${var.project_name}-self-healing-controller"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+# ── SNS trigger topic ─────────────────────────────────────────────────────────
+
+resource "aws_sns_topic" "healing_triggers" {
+  name = "${var.project_name}-healing-triggers"
+  tags = var.tags
+}
+
+resource "aws_sns_topic_policy" "healing_triggers" {
+  arn = aws_sns_topic.healing_triggers.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowCloudWatchAlarms"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.healing_triggers.arn
+        Condition = {
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:cloudwatch:${var.region}:${var.aws_account_id}:alarm:*"
+          }
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_permission" "sns_invoke_self_healing" {
+  statement_id  = "AllowSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.self_healing_controller.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.healing_triggers.arn
+}
+
+resource "aws_sns_topic_subscription" "self_healing_lambda" {
+  topic_arn = aws_sns_topic.healing_triggers.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.self_healing_controller.arn
+}
+
+# ── EventBridge — EKS pod failure events ─────────────────────────────────────
+# Watches CloudTrail management events for EKS pod scheduling failures
+# and container back-off so the controller can react before a CW alarm fires.
+
+resource "aws_cloudwatch_event_rule" "eks_pod_failures" {
+  name        = "${var.project_name}-eks-pod-failures"
+  description = "Captures EKS pod failure events (FailedScheduling, BackOff, OOMKilled) for self-healing"
+
+  event_pattern = jsonencode({
+    source      = ["aws.eks"]
+    detail-type = ["EKS Pod State Change"]
+    detail = {
+      reason = ["FailedScheduling", "BackOff", "OOMKilled", "CrashLoopBackOff"]
+    }
+  })
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_event_target" "eks_pod_failures_to_lambda" {
+  rule      = aws_cloudwatch_event_rule.eks_pod_failures.name
+  target_id = "SelfHealingController"
+  arn       = aws_lambda_function.self_healing_controller.arn
+}
+
+resource "aws_lambda_permission" "eventbridge_invoke_self_healing" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.self_healing_controller.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.eks_pod_failures.arn
+}

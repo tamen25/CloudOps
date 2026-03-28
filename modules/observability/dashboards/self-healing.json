@@ -1,0 +1,1163 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "red",
+        "name": "Rollback Events",
+        "queryMode": "Logs",
+        "expression": "filter action = \"rollback\" and level = \"info\" | fields @timestamp, action, alarm, result | sort @timestamp desc",
+        "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+        "region": "default"
+      },
+      {
+        "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "orange",
+        "name": "Scale-Out Events",
+        "queryMode": "Logs",
+        "expression": "filter action = \"scale_out\" and level = \"info\" | fields @timestamp, action, from_replicas, to_replicas | sort @timestamp desc",
+        "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+        "region": "default"
+      }
+    ]
+  },
+  "description": "CloudOps self-healing controller — healing action history, system health signals (EKS pods, ALB, RDS), and currently firing alarms. Metrics from CloudWatch namespace CloudOps/SelfHealing; details from Lambda structured logs.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Self-Healing Runbooks",
+      "tooltip": "Open runbooks",
+      "type": "link",
+      "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/"
+    }
+  ],
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 200,
+      "title": "Healing Summary",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Total self-healing actions triggered across all action types in the selected time window",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "id": 21,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Action,Environment} MetricName=\"SelfHealingActions\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Total Healing Actions",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Automatic rollbacks triggered by high 5xx error rate on the order-api",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "id": 22,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Action,Environment} MetricName=\"SelfHealingActions\" Action=\"rollback\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Rollbacks Triggered",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "HPA scale-out events triggered by high latency or low pod count",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "orange", "value": 10 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "id": 23,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Action,Environment} MetricName=\"SelfHealingActions\" Action=\"scale_out\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Scale-Out Events",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "EKS node cordon + drain + ASG instance refresh cycles",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "id": 24,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Action,Environment} MetricName=\"SelfHealingActions\" Action=\"node_replacement\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Node Replacements",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Direct pod count patch or HPA recovery actions when running pods fell below minimum",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "orange", "value": 5 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "id": 25,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Action,Environment} MetricName=\"SelfHealingActions\" Action=\"ensure_minimum_pods\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Ensure Min Pods Events",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "HPA minReplicas scale-in resets after temporary scale-outs — fired 30 minutes after each scale-out",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "id": 26,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{CloudOps/SelfHealing,Environment} MetricName=\"ScaleInActions\"', 'Sum', 3600)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Scale-In Resets",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Healing action success rate: (successful info-level completions) / (total log entries with action) × 100. Computed from Lambda structured logs.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 99 }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 6 },
+      "id": 27,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "Success Rate", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields (level = \"error\") as is_error | filter ispresent(action) and action in [\"rollback\",\"scale_out\",\"ensure_minimum_pods\",\"node_replacement\",\"rds_connection_alert\",\"rds_cpu_recommendation\",\"rds_storage_alert\"] | stats sum(is_error) as errors, count(*) as total",
+          "id": "q1",
+          "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "successes",
+            "mode": "binary",
+            "binary": { "left": "total", "operator": "-", "right": "errors" }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Success Rate",
+            "mode": "binary",
+            "binary": { "left": "successes", "operator": "/", "right": "total" }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "names": ["Success Rate"] } }
+        }
+      ],
+      "title": "Healing Success Rate",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Timestamp of the most recent successful healing action from Lambda logs",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "No actions yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "dateTimeAsIso"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 6 },
+      "id": 28,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "last_action_ts", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "filter ispresent(action) and level = \"info\" | stats max(@timestamp) as last_action_ts",
+          "id": "q1",
+          "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Last Healing Action Time",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 },
+      "id": 201,
+      "title": "System Health",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "order-api running pod count from Container Insights. Red annotations = rollback events; orange = scale-out events.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Pods",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "min_healthy" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.lineWidth", "value": 1 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 12 },
+      "id": 29,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{ContainerInsights,ClusterName,Namespace,Service} MetricName=\"pod_number_of_running_pods\" Namespace=\"cloudops\" Service=\"order-api\"', 'Average', 60)",
+          "id": "m1",
+          "label": "running pods",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "FILL(SEARCH('{CloudOps/SelfHealing,Environment} MetricName=\"NodeNotReady\"', 'Maximum', 60), 0)",
+          "id": "m2",
+          "label": "nodes not ready",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        }
+      ],
+      "title": "order-api Pod Count",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "ALB 5xx error rate as % of total requests. Red dashed threshold at 5% (rollback trigger). Annotations show when rollbacks were triggered.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Error Rate %",
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "error_rate" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 12 },
+      "id": 30,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_5XX_Count\"', 'Sum', 60)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RequestCount\"', 'Sum', 60)",
+          "id": "m2",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "IF(m2 > 0, m1/m2*100, 0)",
+          "id": "m3",
+          "label": "error_rate",
+          "queryMode": "Metrics",
+          "refId": "C",
+          "region": "default",
+          "hide": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "pattern": "error_rate.*" } }
+        }
+      ],
+      "title": "ALB 5xx Error Rate",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "ALB target response time p99 in seconds. Orange dashed threshold at 2s (scale-out trigger). Annotations show when scale-outs were triggered.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Latency (s)",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 21 },
+      "id": 31,
+      "options": {
+        "legend": { "calcs": ["last", "max", "p99"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "id": "m1",
+          "matchExact": false,
+          "metricName": "TargetResponseTime",
+          "namespace": "AWS/ApplicationELB",
+          "period": "60",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "statistic": "p99"
+        }
+      ],
+      "title": "ALB p99 Latency",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "ISO timestamp of the most recent healing action (any level). Use with the time picker to assess healing frequency.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "No actions",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "dateTimeAsLocal"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 21 },
+      "id": 32,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "last_action_ts", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "filter ispresent(action) | stats max(@timestamp) as last_action_ts",
+          "id": "q1",
+          "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Time Since Last Healing Action",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "id": 202,
+      "title": "RDS Health",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "RDS CPU utilization. Red dashed threshold at 80% triggers read-replica recommendation. Sustained > 80% for 2 periods fires the alarm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "CPU %",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 31 },
+      "id": 33,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"CPUUtilization\"', 'Average', 60)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "RDS CPU Utilization",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Active RDS database connections. Orange dashed reference line at 80 (alarm threshold). Sustained > 80 for 2 periods fires connection pool alert.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Connections",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "threshold_80" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } },
+              { "id": "custom.lineWidth", "value": 1 },
+              { "id": "displayName", "value": "alarm threshold (80)" }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 31 },
+      "id": 34,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"DatabaseConnections\"', 'Average', 60)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "FILL(m1*0+80, 80)",
+          "id": "m2",
+          "label": "threshold_80",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        }
+      ],
+      "title": "RDS Connections",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "RDS free storage in bytes. Drops to < 2 GB trigger the rds-low-storage alarm and storage exhaustion forecast.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Free Storage",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "min": 0,
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5368709120 },
+              { "color": "red", "value": 2147483648 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 31 },
+      "id": 35,
+      "options": {
+        "legend": { "calcs": ["last", "min"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"FreeStorageSpace\"', 'Average', 300)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "RDS Free Storage",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "RDS connection pressure: DatabaseConnections / 80 (alarm threshold) × 100. Shows how close connections are to triggering the alert.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "orange", "value": 80 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 150
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 40 },
+      "id": 36,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"DatabaseConnections\"', 'Average', 60)",
+          "id": "m1",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "m1/80*100",
+          "id": "m2",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "pattern": "B.*" } }
+        },
+        {
+          "id": "renameByRegex",
+          "options": { "regex": "B (.*)", "renamePattern": "Connection Pressure — $1" }
+        }
+      ],
+      "title": "RDS Connection Pressure Score",
+      "type": "bargauge"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
+      "id": 203,
+      "title": "Healing History",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Last 20 healing actions from the controller Lambda. Columns: timestamp, action type, triggering alarm, result, duration. Sorted newest first.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "@timestamp" },
+            "properties": [
+              { "id": "displayName", "value": "Time" },
+              { "id": "unit", "value": "dateTimeAsIso" },
+              { "id": "custom.width", "value": 180 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "action" },
+            "properties": [
+              { "id": "displayName", "value": "Action" },
+              { "id": "custom.width", "value": 200 },
+              {
+                "id": "mappings",
+                "value": [
+                  { "options": { "rollback": { "color": "red", "index": 0, "text": "🔄 rollback" } }, "type": "value" },
+                  { "options": { "scale_out": { "color": "orange", "index": 1, "text": "⬆ scale_out" } }, "type": "value" },
+                  { "options": { "node_replacement": { "color": "purple", "index": 2, "text": "🔧 node_replacement" } }, "type": "value" },
+                  { "options": { "ensure_minimum_pods": { "color": "yellow", "index": 3, "text": "✅ ensure_minimum_pods" } }, "type": "value" },
+                  { "options": { "rds_connection_alert": { "color": "blue", "index": 4, "text": "⚠ rds_connection_alert" } }, "type": "value" },
+                  { "options": { "rds_cpu_recommendation": { "color": "cyan", "index": 5, "text": "📈 rds_cpu_recommendation" } }, "type": "value" },
+                  { "options": { "rds_storage_alert": { "color": "super-light-orange", "index": 6, "text": "💾 rds_storage_alert" } }, "type": "value" }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "result" },
+            "properties": [
+              { "id": "displayName", "value": "Result" },
+              { "id": "custom.width", "value": 160 },
+              {
+                "id": "mappings",
+                "value": [
+                  { "options": { "dry_run": { "color": "blue", "index": 0 } }, "type": "value" },
+                  { "options": { "rollback_triggered": { "color": "orange", "index": 1 } }, "type": "value" },
+                  { "options": { "hpa_patched": { "color": "green", "index": 2 } }, "type": "value" },
+                  { "options": { "patched": { "color": "green", "index": 3 } }, "type": "value" },
+                  { "options": { "alert_published": { "color": "yellow", "index": 4 } }, "type": "value" },
+                  { "options": { "recommendation_published": { "color": "cyan", "index": 5 } }, "type": "value" },
+                  { "options": { "cordon_drain_refresh": { "color": "purple", "index": 6 } }, "type": "value" }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "alarm" },
+            "properties": [
+              { "id": "displayName", "value": "Trigger Alarm" },
+              { "id": "custom.width", "value": 300 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "duration_ms" },
+            "properties": [
+              { "id": "displayName", "value": "Duration" },
+              { "id": "unit", "value": "ms" },
+              { "id": "custom.width", "value": 100 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "dryRun" },
+            "properties": [
+              { "id": "displayName", "value": "Dry Run" },
+              { "id": "custom.width", "value": 80 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 14, "w": 14, "x": 0, "y": 46 },
+      "id": 37,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "Time" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, action, alarm, result, duration_ms, dryRun | filter ispresent(action) and level = \"info\" | sort @timestamp desc | limit 20",
+          "id": "q1",
+          "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Last 20 Healing Actions",
+      "type": "table"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Healing actions per hour stacked by action type. Uses Lambda structured log counts grouped by action and 1-hour time bin.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Actions / hour",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" }
+          },
+          "min": 0,
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 14, "w": 10, "x": 14, "y": 46 },
+      "id": 38,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "filter ispresent(action) and level = \"info\" | stats count(*) as count by action, bin(1h)",
+          "id": "q1",
+          "logGroupNames": ["/aws/lambda/cloudops-self-healing-controller"],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": ["action"]
+        }
+      ],
+      "title": "Healing Actions Per Hour (by Type)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+      "description": "Currently FIRING CloudWatch alarms that may trigger or have recently triggered self-healing actions. Green = no active alarms.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 60 },
+      "id": 39,
+      "options": {
+        "alertInstanceLabelFilter": "",
+        "alertName": "",
+        "dashboardAlerts": false,
+        "groupBy": [],
+        "groupMode": "default",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "stateFilter": {
+          "error": true,
+          "firing": true,
+          "noData": false,
+          "normal": false,
+          "pending": true
+        },
+        "viewMode": "list"
+      },
+      "title": "Active Alarms (currently firing — may trigger self-healing)",
+      "type": "alertlist"
+    }
+
+  ],
+  "refresh": "1m",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["self-healing", "cloudops"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "default", "value": "default" },
+        "description": "CloudWatch datasource — must have uid=cloudwatch configured in grafana.tf datasources list",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "cloudwatch",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": true, "text": "1h", "value": "1h" },
+        "description": "Display window for healing action count stats and SEARCH aggregation period reference",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "window",
+        "options": [
+          { "selected": true,  "text": "1h",  "value": "1h" },
+          { "selected": false, "text": "6h",  "value": "6h" },
+          { "selected": false, "text": "24h", "value": "24h" },
+          { "selected": false, "text": "7d",  "value": "7d" }
+        ],
+        "query": "1h,6h,24h,7d",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Self-Healing Controller",
+  "uid": "self-healing-dashboard",
+  "version": 1
+}

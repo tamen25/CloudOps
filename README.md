@@ -1,205 +1,179 @@
 # CloudOps
 
-Enterprise-grade AWS infrastructure management using Terraform with secure remote state.
+**Production-grade AWS platform engineering on EKS — self-healing operations, multi-window SLO alerting, zero-trust security, and FinOps observability, all provisioned as code and delivered through a gated CI/CD pipeline with no long-lived credentials.**
 
-## Overview
+---
 
-CloudOps provisions and manages AWS resources across multiple environments (dev, staging, production) with:
-- VPC networking with public/private/database subnets
-- ECS Fargate compute with autoscaling
-- Application Load Balancer
-- RDS PostgreSQL with encryption, backups, and Multi-AZ support
-- Secure S3 remote state with native locking (Terraform 1.11+)
-- Full CI/CD pipeline via GitHub Actions with OIDC authentication (no long-lived AWS credentials)
+## Architecture
 
-## Prerequisites
+```
+architecture/
+├── complete-architecture.md    — full VPC/EKS/RDS/observability component map
+└── networking-architecture.md  — subnet layout, AZ topology, security group rules
+```
 
-- AWS Account with administrative access
-- AWS CLI >= 2.0
-- Terraform >= 1.5.0
-- Git Bash (for Windows users)
+The platform runs across two availability zones (`us-east-1a`, `us-east-1b`) behind a single Application Load Balancer. All application and infrastructure traffic flows through private subnets; the ALB is the only public-facing entry point. EKS worker nodes live in private subnets and reach the internet through NAT Gateways.
+
+---
+
+## What This Demonstrates
+
+- **Infrastructure as Code at scale** — 10+ Terraform modules with toggle-based progressive deployment, remote S3 state with native locking (Terraform 1.11+), and a `destroy_all` safety gate
+- **Kubernetes production patterns** — IRSA (fine-grained pod-level IAM), OPA Gatekeeper admission control, Falco eBPF runtime threat detection, kube-bench CIS benchmarking, NetworkPolicy enforcement
+- **SRE SLO engineering** — multi-window burn rate alerting (1h/6h) for 99.9% availability and p95 < 300ms latency; Lambda-backed error budget tracker writing 30-day history to DynamoDB
+- **Self-healing systems** — CloudWatch Alarm → SNS → Lambda controller that safely rolls back deployments, scales out pods, and replaces nodes with blast-radius constraints and dry-run mode
+- **Security automation** — compliance scanner Lambda scanning 5 AWS service categories every 6 hours, auto-remediating HIGH/CRITICAL findings and opening GitHub issues for out-of-scope actions
+- **FinOps observability** — Cost Explorer ingestion Lambda, AWS Budgets alerts at 80% and 100% of monthly target, idle resource detection, Infracost cost-diff on every PR
+- **Zero-credential CI/CD** — GitHub Actions OIDC (no long-lived secrets), 4 workflows: app pipeline with Trivy image scan + automatic rollback, infra pipeline with human approval gate, nightly drift detection that auto-opens/closes GitHub issues, double-gated destroy workflow
+- **Full-stack observability** — LGTM stack (Loki, Grafana, Tempo, Prometheus) on EKS, OTel Collector as telemetry gateway, 8 Grafana dashboards auto-provisioned via ConfigMaps, 25-panel operations homepage designed for wall monitors
+
+---
+
+## Stage-by-Stage Build Summary
+
+| # | Stage | What Was Built | Key Technologies |
+|---|-------|---------------|-----------------|
+| 1 | **Bootstrap** | S3 remote state, KMS encryption, GitHub Actions OIDC provider, IAM deployer role | Terraform S3 backend, AWS KMS, OIDC federation |
+| 2 | **Networking** | VPC (10.0.0.0/16), public/private/database subnets across 2 AZs, NAT Gateways, VPC Flow Logs, security groups | AWS VPC, EC2 Security Groups |
+| 3 | **EKS** | Kubernetes 1.32 cluster, 2× t3.large managed node group, IRSA service accounts, aws-node CNI | AWS EKS, IRSA, Kubernetes RBAC |
+| 4 | **Ingress** | AWS Load Balancer Controller, ACM TLS certificate, Route 53 alias records | AWS ALB, ACM, Route 53, Helm |
+| 5 | **Observability** | Grafana, Loki (S3 backend), Tempo (S3 backend), Prometheus, OTel Collector gateway | LGTM stack, kube-prometheus-stack, OpenTelemetry |
+| 6 | **App Deploy** | order-api (Node.js/Express/PostgreSQL) — Docker build, ECR push, EKS deploy, integration tests | GitHub Actions, ECR, kubectl rollout, Trivy |
+| 7 | **SLO** | Multi-window burn rate recording rules and alerts, Lambda error budget tracker, DynamoDB history, SLO dashboard | PrometheusRule, AWS Lambda, DynamoDB |
+| 8 | **Security** | Falco eBPF DaemonSet, OPA Gatekeeper + 5 constraint templates, kube-bench CronJob, compliance scanner Lambda, auto-remediation Lambda, security SLO alerts | Falco, Gatekeeper, kube-bench, SNS, DynamoDB |
+| 9 | **Self-Healing** | CloudWatch Alarms (ALB 5xx, pod count, CPU), SNS healing-triggers topic, self-healing controller Lambda (rollback/scale-out/node-replace), scale-in scheduler Lambda | CloudWatch Alarms, SNS, Lambda, Kubernetes API |
+| 10 | **FinOps** | Cost Explorer ingestion Lambda, AWS Budgets ($50/month, 80%/100% alerts), idle detector Lambda, cost anomaly detection, FinOps dashboard | Cost Explorer API, AWS Budgets, CloudWatch custom metrics |
+
+---
+
+## Live URLs
+
+| Service | URL |
+|---------|-----|
+| order-api | `https://api.tamendutta.com` |
+| Grafana | `https://grafana.tamendutta.com` |
+| OTel Collector | `https://otel.tamendutta.com` |
+
+Health checks:
+```bash
+curl https://api.tamendutta.com/health
+curl -s https://grafana.tamendutta.com/api/health
+```
+
+---
 
 ## Quick Start
 
-### 1. Configure AWS Credentials
+Deploy the full stack from scratch in under 10 commands:
 
 ```bash
-aws configure
-# Or use environment variables
-export AWS_ACCESS_KEY_ID="your-access-key"
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_DEFAULT_REGION="us-east-1"
+# 1. Clone and configure
+git clone https://github.com/tamen25/CloudOps.git && cd CloudOps
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set project_name, environment, owner, aws_account_id
 
-# Verify
-aws sts get-caller-identity
+# 2. Bootstrap remote state + OIDC (run locally once)
+terraform init && terraform apply -target=module.bootstrap
+
+# 3. Deploy networking + EKS
+terraform apply -target=module.networking -target=module.eks
+
+# 4. Deploy ingress (ALB controller + TLS + DNS)
+terraform apply -target=module.ingress
+# Then: set alb_dns_name and alb_zone_id in terraform.tfvars from outputs
+
+# 5. Deploy observability (LGTM stack + dashboards)
+terraform apply -target=module.observability
+
+# 6. Deploy remaining modules
+terraform apply  # enables SLO, security, self-healing, FinOps, database
+
+# 7. Configure GitHub secrets (see CI/CD Setup below), then push to trigger pipelines
+# App pipeline builds + deploys order-api automatically on push to main
 ```
 
-### 2. Configure Variables
-
-Edit `terraform.tfvars` with your settings:
-- Set `project_name`, `environment`, `owner`
-- Adjust `region` if not using us-east-1
-- Configure VPC CIDR and subnets (optional)
-- Set compute resources (optional)
-
-**Important:** Update the S3 bucket name in `provider.tf` to match your project:
-```hcl
-backend "s3" {
-  bucket = "cloudops-tfstate-bucket"  # Change to {project_name}-tfstate-bucket
-  region = "us-east-1"                 # Match your terraform.tfvars region
-}
-```
-
-### 3. Deploy
-
-```bash
-./deploy.sh
-```
-
-This script will:
-1. Create S3 bucket for Terraform state
-2. Initialize Terraform with S3 backend
-3. Deploy infrastructure in stages:
-   - **Stage 4a**: Bootstrap + Networking (~2 minutes)
-   - **Stage 4b**: Database/RDS (~5-10 minutes)
-   - **Stage 4c**: Compute/ECS (~3 minutes)
-   - **Stage 4d**: Final synchronization
-4. Store state in S3 with automatic locking
-
-**Note:** RDS creation takes 5-10 minutes. This is normal AWS behavior - do not interrupt!
-
-### 4. Enable Additional Modules
-
-Edit `terraform.tfvars` to enable modules progressively:
-
-```hcl
-enable_networking    = true  # Enable VPC and networking
-enable_eks           = true  # Enable EKS cluster and node groups
-enable_ingress       = true  # Enable ALB controller, ACM, Route 53
-enable_observability = true  # Enable Grafana, Loki, Tempo, Prometheus
-enable_database      = true  # Enable RDS PostgreSQL
-```
-
-Then deploy:
-```bash
-./deploy.sh  # Automatically handles staged deployment
-```
-
-**Deployment Time Estimates:**
-- Networking only: ~2 minutes
-- Networking + Compute: ~5 minutes
-- Full stack (Networking + Database + Compute): ~12-15 minutes
+> **RDS creation takes 5–10 minutes.** This is normal — do not interrupt.
 
 ---
 
 ## CI/CD Setup
 
-All four workflows authenticate to AWS via **GitHub Actions OIDC** — no long-lived AWS access keys are stored as secrets. The OIDC provider and GitHub Actions IAM role are provisioned by `module.bootstrap`.
+All four workflows authenticate to AWS via **GitHub Actions OIDC** — no long-lived credentials are stored as secrets.
 
-### Step 1 — Bootstrap OIDC
-
-Bootstrap must be applied locally before the pipelines can run. This creates the OIDC provider, the GitHub Actions IAM role, and the Terraform state bucket.
+### Step 1 — Bootstrap (run locally once)
 
 ```bash
-# Apply bootstrap only
 terraform apply -target=module.bootstrap
-
-# Retrieve the IAM role ARN to configure as a secret
-terraform output -raw bootstrap_github_actions_role_arn
+terraform output -raw bootstrap_github_actions_role_arn  # copy this value
 ```
 
-### Step 2 — Configure GitHub Secrets
+### Step 2 — GitHub Secrets
 
-Go to **Settings → Secrets and variables → Actions → New repository secret** and add each of the following:
+**Settings → Secrets and variables → Actions → New repository secret:**
 
-| Secret | Description | How to get the value |
-|--------|-------------|----------------------|
-| `AWS_GITHUB_ACTIONS_ROLE_ARN` | IAM role ARN that GitHub Actions assumes via OIDC | `terraform output -raw bootstrap_github_actions_role_arn` |
-| `AWS_REGION` | AWS region for all workflows | The `region` value from your `terraform.tfvars` (e.g. `us-east-1`) |
-| `TF_VARS` | Full contents of your `terraform.tfvars` file | Copy the file contents: `cat terraform.tfvars` |
-| `INFRACOST_API_KEY` | Infracost API key for cost estimation on PRs | [infracost.io/docs](https://www.infracost.io/docs/#2-get-api-key) |
-| `ECR_REPOSITORY_URL` | ECR repository URI without tag | `terraform output -raw ecr_repository_url` (after compute module applied) |
-| `EKS_CLUSTER_NAME` | EKS cluster name | `terraform output -raw eks_cluster_name` (after EKS module applied) |
-| `GRAFANA_API_KEY` | Grafana service account token for OTel trace verification | Grafana → Administration → Service accounts → New token |
+| Secret | Value |
+|--------|-------|
+| `AWS_GITHUB_ACTIONS_ROLE_ARN` | `terraform output -raw bootstrap_github_actions_role_arn` |
+| `AWS_REGION` | `us-east-1` (or your region) |
+| `TF_VARS` | Full contents of `terraform.tfvars` |
+| `INFRACOST_API_KEY` | From [infracost.io](https://www.infracost.io/docs/#2-get-api-key) |
+| `ECR_REPOSITORY_URL` | `terraform output -raw ecr_repository_url` |
+| `EKS_CLUSTER_NAME` | `terraform output -raw eks_cluster_name` |
+| `GRAFANA_API_KEY` | Grafana → Administration → Service accounts → New token |
 
-### Step 3 — Create the `production` GitHub Environment
+### Step 3 — `production` GitHub Environment
 
-The infra pipeline's apply job and the destroy workflow both require manual approval via a **GitHub Environment** named `production`. Without this, applies run unattended after any push to `main`.
+**Settings → Environments → New environment → `production`:**
+- Enable **Required reviewers** and add yourself
+- This gate protects `terraform apply` and the destroy workflow
 
-1. Go to **Settings → Environments → New environment**
-2. Name it exactly `production`
-3. Under **Deployment protection rules**, enable **Required reviewers**
-4. Add yourself and any other approvers (minimum one reviewer required)
-5. Optionally set a **Wait timer** (e.g. 5 minutes) as an additional safety buffer
+### Step 4 — Branch Protection on `main`
 
-### Step 4 — Configure Branch Protection
+Required status checks: `quality`, `plan` — blocks merges if Terraform fmt/validate/lint/tfsec/plan fails.
 
-Go to **Settings → Branches → Add branch protection rule** for `main`:
+### Workflows
 
-| Rule | Setting |
-|------|---------|
-| Require a pull request before merging | Enabled |
-| Require approvals | 1 (or more) |
-| Require status checks to pass before merging | Enabled |
-| Required status checks | `quality`, `plan` |
-| Require branches to be up to date before merging | Enabled |
-| Do not allow bypassing the above settings | Enabled |
-| Allow force pushes | **Disabled** |
-| Allow deletions | **Disabled** |
+| Workflow | Trigger | What It Does |
+|----------|---------|-------------|
+| **App Pipeline** (`app.yml`) | Push to `main` on `apps/order-api/**` | Unit tests → Docker build+push to ECR → Trivy image scan → EKS rollout → integration tests (health, orders, metrics, traces) → auto-rollback on failure |
+| **Infra Pipeline** (`infra.yml`) | Push/PR to `main` on `*.tf`, `modules/**` | fmt/validate/lint/tfsec → Infracost cost diff (PR) → `terraform plan` → manual approval → staged `terraform apply` |
+| **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → teardown in dependency order |
+| **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC | `terraform plan -detailed-exitcode` → opens GitHub issue on drift, closes it when resolved |
 
-The `quality` and `plan` jobs from the infra pipeline run on every PR targeting `main`. With these checks required, a PR cannot be merged if Terraform formatting, validation, linting, or planning fails.
+---
 
-### Workflow Summary
+## Key Architectural Decisions
 
-| Workflow | File | Trigger | What it does |
-|----------|------|---------|--------------|
-| **App Pipeline** | `app.yml` | Push to `main` on `apps/order-api/**`; `workflow_dispatch` | Unit tests → manifest validation → Docker build+push to ECR → Trivy image scan → deploy to EKS with automatic rollback → integration tests (health, orders, metrics, Tempo traces) |
-| **Infra Pipeline** | `infra.yml` | Push or PR to `main` on `*.tf` / `modules/**`; `workflow_dispatch` | fmt/validate/lint/tfsec → cost diff (PR only) → `terraform plan` → security scan + manifest validation → manual approval gate (`production` env) → staged `terraform apply` |
-| **Destroy Infrastructure** | `destroy.yml` | `workflow_dispatch` only | Double-gated full teardown: typed confirmation + `production` environment approval → empty S3 data buckets → disable modules in order → destroy bootstrap → delete state bucket |
-| **Drift Detection** | `drift-detection.yml` | Nightly at 02:00 UTC; `workflow_dispatch` | Runs `terraform plan -detailed-exitcode`; opens a GitHub issue labeled `drift` if changes detected; closes the issue automatically when drift is resolved |
+All decisions are documented as Architecture Decision Records:
 
-### Using the Destroy Workflow Safely
+| ADR | Decision |
+|-----|---------|
+| [ADR-001](docs/adr/001-eks-over-ecs.md) | EKS over ECS Fargate |
+| [ADR-002](docs/adr/002-single-alb-ingress.md) | Single ALB with host-based routing |
+| [ADR-003](docs/adr/003-otel-collector-gateway.md) | OTel Collector as centralized telemetry gateway |
+| [ADR-004](docs/adr/004-s3-backend-loki-tempo.md) | S3 as Loki and Tempo storage backend |
+| [ADR-005](docs/adr/005-irsa-over-node-role.md) | IRSA over node-level IAM roles |
+| [ADR-006](docs/adr/006-node-js-lambdas.md) | Node.js for all Lambda functions |
+| [ADR-007](docs/adr/007-multi-window-burn-rate-slos.md) | Multi-window burn rate SLO alerting |
+| [ADR-008](docs/adr/008-oss-security-over-aws-native.md) | OSS security tooling over AWS-native services |
+| [ADR-009](docs/adr/009-auto-remediation-blast-radius.md) | Blast-radius constraints for auto-remediation |
+| [ADR-010](docs/adr/010-finops-as-sre-concern.md) | FinOps as an SRE concern, not a finance concern |
 
-The destroy workflow is intentionally hard to trigger accidentally. It requires **both** gates to pass before any AWS resource is touched:
+---
 
-1. **GitHub Environment approval** — a configured reviewer must approve the `destroy` job in the `production` environment (same gate as infra apply)
-2. **Typed confirmation** — the `confirm` input must be the exact string `destroy-everything`
+## Technology Stack
 
-To trigger a destroy:
-
-1. Go to **Actions → Destroy Infrastructure → Run workflow**
-2. Set `confirm` to `destroy-everything` (copy-paste to avoid typos)
-3. Select the target environment (`dev`, `staging`, or `prod`)
-4. Click **Run workflow**
-5. When the job reaches the approval gate, a reviewer must click **Review deployments → Approve**
-
-The workflow destroys resources in dependency order:
-1. Empties Loki and Tempo S3 buckets (handles versioned and Glacier-transitioned objects)
-2. Disables observability → ingress → database → EKS → networking (each as a separate `terraform apply`)
-3. Destroys bootstrap resources (KMS key, OIDC provider, IAM roles) via `destroy_all = true`
-4. Empties and deletes the Terraform state bucket
-
-> **Note:** The state bucket is created outside Terraform by `create-s3-bucket.sh`, so it must be deleted explicitly. After the destroy workflow completes, nothing remains in AWS.
-
-### Drift Detection
-
-The drift detection workflow runs every night at 02:00 UTC and compares live AWS infrastructure against Terraform state using `terraform plan -detailed-exitcode`.
-
-| Exit code | Meaning | Action taken |
-|-----------|---------|--------------|
-| `0` | No changes — infrastructure matches state | Closes any open `drift` issue with a "resolved" comment |
-| `1` | Terraform error (plan failed) | Fails the workflow run; no issue action |
-| `2` | Drift detected — live state differs from Terraform | Opens a new `drift` issue (or comments on the existing one) with the full plan output |
-
-**When a drift issue is opened:**
-
-1. Open the issue and review the plan output in the details block
-2. Determine whether the change was intentional (someone applied a manual change) or unintentional (resource modified or deleted outside Terraform)
-3. **If intentional:** import the resource into state (`terraform import`) or update the Terraform config to match, then apply
-4. **If unintentional:** run `terraform apply` to restore the intended state
-5. The next nightly run will automatically close the issue once `terraform plan` returns exit code 0
-
-The `drift` label is created automatically on first run if it does not exist in the repository.
+| Category | Technologies |
+|----------|-------------|
+| **Infrastructure** | Terraform 1.11+, AWS (EKS, RDS PostgreSQL, ALB, Lambda, DynamoDB, SNS, S3, ECR, KMS, Secrets Manager, Route 53, ACM, Cost Explorer, AWS Budgets) |
+| **Container / Kubernetes** | Kubernetes 1.32, Docker, EKS managed node groups, IRSA, Helm, AWS Load Balancer Controller |
+| **Security** | Falco (eBPF runtime), OPA Gatekeeper (admission), kube-bench (CIS), Trivy (image scan), Cosign (image signing), NetworkPolicy, tfsec |
+| **Observability** | Grafana, Loki, Tempo, Prometheus, kube-prometheus-stack, OpenTelemetry Collector, CloudWatch |
+| **SLO / Alerting** | Prometheus recording rules (multi-window burn rate), PrometheusRule CRDs, Grafana alerting, SNS |
+| **Self-Healing** | CloudWatch Alarms, SNS, Node.js Lambda (controller + scale-in scheduler), Kubernetes API (kubectl via SDK) |
+| **FinOps** | AWS Cost Explorer API, AWS Budgets, Node.js Lambda, CloudWatch custom metrics, Infracost |
+| **CI/CD** | GitHub Actions, OIDC (no long-lived credentials), ECR, kubectl rollout, integration tests |
+| **Application** | Node.js, Express, PostgreSQL (RDS), OpenTelemetry SDK (traces + metrics + logs) |
 
 ---
 
@@ -207,233 +181,50 @@ The `drift` label is created automatically on first run if it does not exist in 
 
 ```
 CloudOps/
-├── main.tf                    # Root configuration
-├── provider.tf                # AWS provider + backend config
-├── variables.tf               # Variable definitions
-├── outputs.tf                 # Output definitions
-├── terraform.tfvars           # Your configuration values
-├── deploy.sh                  # Automated deployment script
-├── destroy.sh                 # Infrastructure teardown script
-├── .github/
-│   └── workflows/
-│       ├── app.yml            # App CI/CD pipeline
-│       ├── infra.yml          # Infrastructure CI/CD pipeline
-│       ├── destroy.yml        # Manual destroy workflow
-│       └── drift-detection.yml# Nightly drift detection
-└── modules/
-    ├── bootstrap/             # S3 state bucket + IAM deployer role + GitHub OIDC
-    │   ├── iam.tf
-    │   ├── github_oidc.tf
-    │   ├── kms.tf
-    │   ├── locals.tf
-    │   ├── variables.tf
-    │   └── outputs.tf
-    ├── networking/            # VPC, subnets, security groups, flow logs
-    │   ├── vpc.tf
-    │   ├── subnets.tf
-    │   ├── nat_gateway.tf
-    │   ├── route_tables.tf
-    │   ├── flow_logs.tf
-    │   ├── security_groups.tf
-    │   ├── locals.tf
-    │   ├── variables.tf
-    │   └── outputs.tf
-    ├── compute/               # ECS Fargate, ALB, autoscaling, ECR
-    │   ├── alb.tf
-    │   ├── autoscaling.tf
-    │   ├── ecr.tf
-    │   ├── ecs_cluster.tf
-    │   ├── ecs_service.tf
-    │   ├── iam.tf
-    │   ├── task_definition.tf
-    │   ├── locals.tf
-    │   ├── variables.tf
-    │   └── outputs.tf
-    └── database/              # RDS PostgreSQL, Secrets Manager
-        ├── main.tf
-        ├── variables.tf
-        └── outputs.tf
+├── main.tf                          # Root module wiring — all module instantiations
+├── provider.tf                      # AWS provider + S3 backend configuration
+├── variables.tf                     # All variable definitions with validation
+├── outputs.tf                       # Root outputs (cluster name, ALB DNS, ECR URL, etc.)
+├── terraform.tfvars.example         # Template — copy to terraform.tfvars
+├── deploy.sh                        # Staged deployment script
+│
+├── .github/workflows/
+│   ├── app.yml                      # App CI/CD: build → scan → deploy → test → rollback
+│   ├── infra.yml                    # Infra CI/CD: lint → plan → approve → staged apply
+│   ├── destroy.yml                  # Double-gated destroy workflow
+│   └── drift-detection.yml          # Nightly drift detection with GitHub issue management
+│
+├── apps/order-api/                  # Node.js/Express REST API (POST /order, GET /orders)
+│   ├── src/                         # Application source + OpenTelemetry instrumentation
+│   ├── k8s/                         # Kubernetes manifests (Deployment, Service, Ingress, HPA)
+│   └── Dockerfile
+│
+├── modules/
+│   ├── bootstrap/                   # S3 state bucket, KMS, IAM deployer role, GitHub OIDC
+│   ├── networking/                  # VPC, subnets, NAT Gateways, security groups, flow logs
+│   ├── eks/                         # EKS cluster, managed node group, IRSA, aws-auth ConfigMap
+│   ├── ingress/                     # AWS Load Balancer Controller, ACM cert, Route 53 records
+│   ├── database/                    # RDS PostgreSQL, Secrets Manager, parameter group
+│   ├── observability/               # Grafana, Loki, Tempo, Prometheus, OTel Collector, dashboards
+│   │   └── dashboards/              # 8 Grafana dashboard JSONs auto-provisioned via ConfigMaps
+│   ├── slo/                         # PrometheusRule CRD, error budget Lambda, DynamoDB
+│   ├── security/                    # Falco, OPA Gatekeeper + policies, kube-bench, compliance scanner, auto-remediation
+│   ├── self_healing/                # CloudWatch Alarms, SNS, healing controller Lambda, scale-in scheduler
+│   └── finops/                      # Cost ingestion Lambda, AWS Budgets, idle detector, FinOps dashboard
+│
+├── docs/
+│   ├── adr/                         # 10 Architecture Decision Records
+│   └── runbooks/                    # Master operations runbook + per-alert runbooks
+│
+└── architecture/                    # Architecture diagrams and cost analysis
 ```
 
-## Module Toggle System
+---
 
-Control which modules are deployed via `terraform.tfvars`:
+## Resume Talking Points
 
-```hcl
-enable_networking    = false  # VPC, subnets, security groups
-enable_eks           = false  # EKS cluster and node groups
-enable_ingress       = false  # ALB controller, ACM cert, Route 53
-enable_observability = false  # Grafana, Loki, Tempo, Prometheus
-enable_database      = false  # RDS PostgreSQL
-destroy_all          = false  # DANGER: destroys bootstrap (set others false first)
-```
-
-## What Gets Created
-
-### Bootstrap Module
-- S3 bucket for Terraform state (encrypted, versioned)
-- KMS key for encryption (optional)
-- IAM deployer role with infrastructure permissions
-- GitHub Actions OIDC provider and federated IAM role (no long-lived credentials needed)
-
-### Networking Module
-- VPC with configurable CIDR
-- Public, private, and database subnets across multiple AZs
-- Internet Gateway and NAT Gateway
-- Route tables and routing
-- Security groups for ALB, ECS tasks, and RDS
-- VPC Flow Logs (optional)
-
-### Compute Module
-- ECR repository for Docker images
-- ECS Fargate cluster
-- Task definitions with CloudWatch logging
-- Application Load Balancer with health checks
-- Auto-scaling policies (CPU and memory-based)
-- IAM roles for task execution
-
-### Database Module
-- RDS PostgreSQL instance with encryption at rest
-- AWS Secrets Manager for credential management
-- Multi-AZ deployment for automatic failover (optional)
-- Read replica for disaster recovery (optional)
-- Automated backups with point-in-time recovery
-- CloudWatch monitoring and alarms
-- Enhanced monitoring and Performance Insights
-- IAM integration with ECS tasks
-
-## Security Features
-
-- S3 state encryption with versioning
-- S3 native state locking (no DynamoDB needed)
-- Public access blocking on state bucket
-- IAM deployer role with least-privilege
-- GitHub Actions OIDC — no AWS access keys stored in GitHub
-- OIDC trust scoped to this repository's `main`, `feature/*` branches and pull requests only
-- Security groups with minimal required access
-- KMS encryption for additional security
-- VPC Flow Logs for network monitoring
-- Trivy scanning on both Terraform config (infra pipeline) and container images (app pipeline)
-- Checkov policy checks on every infra PR
-
-## Infrastructure Teardown
-
-**Preferred: use the destroy workflow** (see [CI/CD Setup — Using the Destroy Workflow Safely](#using-the-destroy-workflow-safely) above). It handles versioned S3 objects, Glacier-transitioned objects, and progressive module disabling automatically.
-
-**Manual teardown:**
-
-```bash
-./destroy.sh
-```
-
-Or step by step:
-
-```bash
-# 1. Disable modules progressively (edit terraform.tfvars before each apply)
-enable_observability = false
-terraform apply
-
-enable_ingress = false
-terraform apply
-
-enable_database = false
-terraform apply
-
-enable_eks = false
-terraform apply
-
-enable_networking = false
-terraform apply
-
-# 2. Destroy bootstrap (OIDC provider, IAM roles, KMS key, state bucket config)
-destroy_all = true
-terraform apply
-
-# 3. Delete S3 state bucket manually (created outside Terraform)
-aws s3 rb s3://your-bucket-name --force
-```
-
-## Configuration Examples
-
-### Development Environment
-
-```hcl
-environment        = "dev"
-enable_nat_gateway = false  # Save costs
-enable_flow_logs   = false
-desired_count      = 1
-cpu                = "256"
-memory             = "512"
-
-# Database (cost-optimized)
-database_instance_class        = "db.t3.micro"
-database_multi_az              = false
-database_create_read_replica   = false
-database_backup_retention_period = 7
-```
-
-### Production Environment
-
-```hcl
-environment        = "prod"
-enable_nat_gateway = true   # High availability
-enable_flow_logs   = true
-desired_count      = 3
-cpu                = "1024"
-memory             = "2048"
-
-# Database (resilience-optimized)
-database_instance_class        = "db.r6g.large"
-database_multi_az              = true
-database_create_read_replica   = true
-database_backup_retention_period = 30
-database_deletion_protection     = true
-```
-
-## Troubleshooting
-
-### S3 Bucket Already Exists
-
-S3 bucket names must be globally unique. Set a custom name in `terraform.tfvars`:
-
-```hcl
-bootstrap_bucket_name = "my-unique-company-tfstate-bucket"
-```
-
-### Access Denied
-
-Ensure your AWS credentials have administrative permissions for initial bootstrap.
-
-### Backend Initialization Issues
-
-1. Verify S3 bucket exists: `aws s3 ls s3://your-bucket-name`
-2. Check backend configuration matches bootstrap outputs
-3. Ensure you have S3 access permissions
-
-### GitHub Actions OIDC Failure
-
-If workflows fail with `Error assuming role` or `No OpenIDConnect provider found`:
-
-1. Confirm bootstrap has been applied: `terraform state list | grep bootstrap`
-2. Confirm the `AWS_GITHUB_ACTIONS_ROLE_ARN` secret matches the output: `terraform output -raw bootstrap_github_actions_role_arn`
-3. Confirm the branch or event type is in the OIDC trust policy (`main`, `feature/*`, or `pull_request`)
-4. Confirm `id-token: write` permission is set on the job (required for OIDC token generation)
-
-### Drift Issue Opened — What to Do
-
-See [Drift Detection](#drift-detection) above for a full remediation guide. Quick steps:
-
-1. Open the drift issue and read the plan output
-2. Run `terraform plan` locally to reproduce
-3. If unintentional: run `terraform apply` to restore intended state
-4. If intentional: update the Terraform config or run `terraform import` to record the change
-5. The issue closes automatically on the next nightly run once `terraform plan` returns no changes
-
-## Support
-
-- AWS Provider Documentation: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
-- Terraform Documentation: https://www.terraform.io/docs
-
-## License
-
-Internal use only - Proprietary
+- Architected a **self-healing Kubernetes platform on AWS EKS** using Terraform; implemented CloudWatch Alarm → SNS → Lambda controllers that automatically roll back failed deployments, scale out under-replicated pods, and replace unhealthy nodes — eliminating manual intervention for the three most common production failure modes
+- Engineered **multi-window SLO burn rate alerting** (1h fast-burn at 14.4×, 6h slow-burn at 6×) for 99.9% availability and 95th-percentile latency targets; built a Lambda-backed error budget tracker persisting 30-day snapshots to DynamoDB and surfacing budget burn in a Grafana dashboard with drill-down to incident history
+- Built a **zero-trust security stack on Kubernetes** — Falco eBPF runtime threat detection, OPA Gatekeeper admission control with 5 constraint templates (image registry enforcement, privilege escalation blocking, host path restrictions), daily kube-bench CIS benchmarking, and a compliance scanner Lambda scanning S3/RDS/EKS/IAM/security-groups every 6 hours; auto-remediates HIGH/CRITICAL findings and creates GitHub issues for out-of-scope actions
+- Delivered **zero-credential CI/CD** via 4 GitHub Actions workflows authenticated exclusively through OIDC: app pipeline with Trivy image scanning and automatic rollback on integration test failure, infra pipeline with tfsec + Infracost cost-diff + mandatory human approval gate, nightly drift detection that auto-opens and closes GitHub issues on Terraform delta, and a double-gated destroy workflow requiring both environment approval and a typed confirmation
+- Implemented **full-stack FinOps and observability**: AWS Cost Explorer ingestion Lambda publishing daily cost metrics to CloudWatch against a $50/month budget (alerts at 80%/100%), idle resource detection across EKS nodes and RDS, LGTM observability stack (Loki/Grafana/Tempo/Prometheus + OTel Collector) with 8 auto-provisioned Grafana dashboards including a 25-panel operations homepage designed for wall-monitor display

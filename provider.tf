@@ -25,7 +25,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "cloudops-tfstate-bucket-tamen"
+    bucket       = "cloudops-tfstate-tamen25"
     key          = "main/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true

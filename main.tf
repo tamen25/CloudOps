@@ -236,6 +236,62 @@ module "security" {
   tags = local.common_tags
 }
 
+# FinOps Module — Cost Explorer ingestion, anomaly detection, AWS Budgets
+# Requires no other modules — can be deployed standalone alongside bootstrap.
+# Deploy order: any time after bootstrap
+
+module "finops" {
+  count  = var.enable_finops ? 1 : 0
+  source = "./modules/finops"
+
+  project_name   = var.project_name
+  environment    = var.environment
+  aws_account_id = local.account_id
+
+  cost_budget_monthly_usd        = var.cost_budget_monthly_usd
+  cost_alert_email               = var.cost_alert_email
+  cost_anomaly_threshold_percent = var.cost_anomaly_threshold_percent
+
+  # Idle detector inputs — optional, checks are skipped when empty
+  eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
+  rds_instance_id  = var.enable_database ? module.database[0].rds_instance_id : ""
+
+  tags = local.common_tags
+}
+
+# Self-Healing Module — CloudWatch Alarm-driven automated remediation
+# Triggers: SNS (CloudWatch Alarms) + EventBridge (EKS pod failures)
+# Requires: enable_eks=true + enable_observability=true applied first.
+# Deploy order: after observability
+
+module "self_healing" {
+  count  = var.enable_self_healing ? 1 : 0
+  source = "./modules/self_healing"
+
+  project_name   = var.project_name
+  environment    = var.environment
+  region         = var.region
+  aws_account_id = local.account_id
+
+  eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
+  rds_instance_id  = var.enable_database ? module.database[0].rds_instance_id : ""
+
+  # ALB metric dimensions — populated after first ingress deploy
+  alb_arn_suffix          = var.self_healing_alb_arn_suffix
+  target_group_arn_suffix = var.self_healing_target_group_arn_suffix
+
+  min_healthy_pods       = var.self_healing_min_healthy_pods
+  max_scale_out_pods     = var.self_healing_max_scale_out_pods
+  rollback_on_error_rate = var.self_healing_rollback_on_error_rate
+
+  github_token_secret_arn = local.github_token_secret_arn
+  github_repo             = var.security_github_repo
+
+  dry_run = var.self_healing_dry_run
+
+  tags = local.common_tags
+}
+
 # Database Module (RDS PostgreSQL)
 
 module "database" {

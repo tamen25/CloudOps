@@ -70,3 +70,17 @@ resource "kubernetes_config_map" "slo_dashboard" {
 
   depends_on = [helm_release.grafana]
 }
+
+resource "kubernetes_config_map" "operations_overview_dashboard" {
+  metadata {
+    name      = "operations-overview-dashboard"
+    namespace = "monitoring"
+    labels    = { grafana_dashboard = "1" }
+  }
+
+  data = {
+    "operations-overview.json" = file("${path.module}/dashboards/operations-overview.json")
+  }
+
+  depends_on = [helm_release.grafana]
+}

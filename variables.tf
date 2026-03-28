@@ -45,6 +45,72 @@ variable "enable_security" {
   default     = false
 }
 
+variable "enable_finops" {
+  description = "Enable/disable FinOps module (Cost Explorer ingestion, anomaly detection, AWS Budgets — standalone, no other modules required)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_self_healing" {
+  description = "Enable/disable self-healing module (CloudWatch Alarm-driven automated remediation — requires enable_eks and enable_observability first)"
+  type        = bool
+  default     = false
+}
+
+variable "self_healing_alb_arn_suffix" {
+  description = "ALB ARN suffix for CloudWatch ALB metric dimensions (last two path segments). Set after first ingress deploy. Leave empty to skip ALB alarms."
+  type        = string
+  default     = ""
+}
+
+variable "self_healing_target_group_arn_suffix" {
+  description = "Target group ARN suffix for CloudWatch ALB target metrics. Set after first ingress deploy. Leave empty to skip ALB alarms."
+  type        = string
+  default     = ""
+}
+
+variable "self_healing_min_healthy_pods" {
+  description = "Minimum healthy order-api pods — triggers scale-out healing when count drops below this"
+  type        = number
+  default     = 2
+}
+
+variable "self_healing_max_scale_out_pods" {
+  description = "Maximum pods the self-healing controller may scale out to in a single healing action"
+  type        = number
+  default     = 10
+}
+
+variable "self_healing_rollback_on_error_rate" {
+  description = "5xx error rate percentage threshold (0-100) that triggers an automatic rollback of order-api"
+  type        = number
+  default     = 5
+}
+
+variable "self_healing_dry_run" {
+  description = "When true, the self-healing Lambda logs actions but does not execute them. Safe for initial testing."
+  type        = bool
+  default     = false
+}
+
+variable "cost_budget_monthly_usd" {
+  description = "Monthly cost budget in USD — triggers WARNING alert at 80% and CRITICAL alert at 100%"
+  type        = number
+  default     = 50
+}
+
+variable "cost_alert_email" {
+  description = "Email address for SNS cost alert subscriptions (budget threshold + anomaly alerts). Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
+variable "cost_anomaly_threshold_percent" {
+  description = "Percentage increase over 7-day average that triggers a cost anomaly alert per service"
+  type        = number
+  default     = 20
+}
+
 variable "security_alert_email" {
   description = "Email address for SNS security alert subscriptions — receives all severity findings from the compliance scanner. Leave empty to skip."
   type        = string

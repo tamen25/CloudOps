@@ -1,0 +1,19 @@
+{
+  "name": "self-healing-controller",
+  "version": "1.0.0",
+  "description": "CloudOps self-healing controller Lambda — routes CloudWatch Alarm and EventBridge pod-failure events to targeted remediation actions",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch":      "^3.600.0",
+    "@aws-sdk/client-eks":             "^3.600.0",
+    "@aws-sdk/client-auto-scaling":    "^3.600.0",
+    "@aws-sdk/client-rds":             "^3.600.0",
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "@aws-sdk/client-sns":             "^3.600.0",
+    "@aws-sdk/credential-providers":   "^3.600.0",
+    "@smithy/signature-v4":            "^3.0.0",
+    "@smithy/protocol-http":           "^3.0.0",
+    "@aws-crypto/sha256-js":           "^5.0.0",
+    "node-fetch":                      "^2.7.0"
+  }
+}

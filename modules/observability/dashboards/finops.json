@@ -1,0 +1,961 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "FinOps dashboard for CloudOps — daily cost, budget utilization, cost anomalies, idle resource waste, and rightsizing recommendations. Sourced from CloudWatch namespace CloudOps/FinOps and CloudWatch Logs Insights on Lambda structured logs.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "AWS Cost Explorer",
+      "tooltip": "Open AWS Cost Explorer console",
+      "type": "link",
+      "url": "https://us-east-1.console.aws.amazon.com/cost-management/home#/cost-explorer"
+    },
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "SLO Dashboard",
+      "tooltip": "Open order-api SLO dashboard",
+      "type": "link",
+      "url": "/d/slo-dashboard"
+    }
+  ],
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Cost Summary",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Total AWS cost for yesterday across all services. Updated daily at 06:00 UTC by the cost ingestion Lambda.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"DailyCost\"', 'Maximum', 86400))",
+          "id": "daily_cost",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Yesterday's Total Cost",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Cumulative spend from the 1st of the current month through today.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 5, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"MonthToDateCost\"', 'Maximum', 86400))",
+          "id": "mtd_cost",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Month-to-Date Cost",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "AWS Cost Explorer end-of-month forecast. Green = projected under budget, red = projected over budget. Thresholds assume $50/month default budget — update if cost_budget_monthly_usd differs.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 40 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 10, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"ProjectedMonthlyCost\"', 'Maximum', 86400))",
+          "id": "projected",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Projected Monthly Cost",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Percentage of monthly budget consumed so far. WARNING ≥ 80%, CRITICAL ≥ 100%.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 120,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 100 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 15, "y": 1 },
+      "id": 4,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"BudgetUtilizationPercent\"', 'Maximum', 86400))",
+          "id": "budget_util",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Budget Utilization",
+      "type": "gauge"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Number of cost anomalies detected in the last 24h (service spikes > threshold + AWS CE native anomalies). Red if any anomaly is active.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "None" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 19, "y": 1 },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"CostAnomaliesDetected\"', 'Maximum', 86400))",
+          "id": "anomalies",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Active Cost Anomalies",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "id": 200,
+      "title": "Cost Trends",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Daily total cost over the selected time range. The dashed threshold line represents the configured daily budget (monthly_budget / 30). Update the panel threshold if cost_budget_monthly_usd differs from $50.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "USD",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "rgba(255,0,0,0.1)", "value": 1.67 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 7 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": ["sum", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SEARCH('{CloudOps/FinOps,Environment} MetricName=\"DailyCost\"', 'Maximum', 86400)",
+          "id": "daily_trend",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Daily Cost Trend (with budget reference line at $1.67/day = $50/month)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Daily cost broken down by AWS service. Use $service variable to filter. Stacked area shows relative contribution of each service.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "USD",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 7 },
+      "id": 7,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SEARCH('{CloudOps/FinOps,Environment,Service} MetricName=\"ServiceDailyCost\"', 'Maximum', 86400)",
+          "id": "service_cost",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Per-Service Daily Cost (Stacked)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Week-over-week daily cost change percent from Lambda structured logs. Positive = cost increased vs same day last week.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "axisLabel": "% Change vs Last Week",
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 25 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 15 },
+      "id": 8,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, wowChangePercent, date\n| filter msg = \"Cost ingestion complete\" and ispresent(wowChangePercent)\n| sort @timestamp desc\n| limit 30",
+          "id": "wow_log",
+          "logGroups": [
+            { "arn": "", "name": "/aws/lambda/cloudops-cost-ingestion" }
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Week-over-Week Cost Change (%)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Most recent WoW and MoM cost change percentages from the latest Lambda run. Red if costs are rising >20%.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 25 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "momChangePercent" },
+            "properties": [{ "id": "displayName", "value": "MoM Change" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "wowChangePercent" },
+            "properties": [{ "id": "displayName", "value": "WoW Change" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 15 },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/wowChangePercent|momChangePercent/", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, wowChangePercent, momChangePercent, totalDailyCost\n| filter msg = \"Cost ingestion complete\"\n| sort @timestamp desc\n| limit 1",
+          "id": "cost_summary_log",
+          "logGroups": [
+            { "arn": "", "name": "/aws/lambda/cloudops-cost-ingestion" }
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Cost Change vs Last Week / Last Month",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 300,
+      "title": "Idle Resources",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Total estimated USD waste per day from idle/over-provisioned resources. Alert threshold: $5/day. Red if any waste detected.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "$0 (OK)" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 5, "x": 0, "y": 24 },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"EstimatedWastedCostDaily\"', 'Maximum', 21600))",
+          "id": "wasted_cost",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Estimated Daily Waste",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Latest idle resource detection results from the idle detector Lambda (runs every 6 hours). Shows which resource types are idle and the estimated waste.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": true,
+            "inspect": true
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "estimatedWastedUsdPerDay" },
+            "properties": [
+              { "id": "displayName", "value": "Daily Waste (USD)" },
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "eksNodeIdle" }, "properties": [{ "id": "displayName", "value": "EKS Idle" }] },
+          { "matcher": { "id": "byName", "options": "rdsIdle" }, "properties": [{ "id": "displayName", "value": "RDS Idle" }] },
+          { "matcher": { "id": "byName", "options": "overProvisionedPodCount" }, "properties": [{ "id": "displayName", "value": "Overprovisioned Pods" }] },
+          { "matcher": { "id": "byName", "options": "@timestamp" }, "properties": [{ "id": "displayName", "value": "Last Check" }] }
+        ]
+      },
+      "gridPos": { "h": 5, "w": 19, "x": 5, "y": 24 },
+      "id": 11,
+      "options": {
+        "footer": { "enablePagination": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "Last Check" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, idleResourcesDetected, estimatedWastedUsdPerDay, eksNodeIdle, rdsIdle, overProvisionedPodCount\n| filter msg = \"Idle resource detection complete\"\n| sort @timestamp desc\n| limit 10",
+          "id": "idle_log",
+          "logGroups": [
+            { "arn": "", "name": "/aws/lambda/cloudops-idle-detector" }
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Idle Resource Detection History",
+      "type": "table"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "EKS cluster node CPU utilization from Container Insights. Shaded red zone below 10% (IDLE_CPU_THRESHOLD). Consistently low utilization → consider scaling down the node group.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "CPU %",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "rgba(255,0,0,0.1)", "value": null },
+              { "color": "transparent", "value": 10 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "id": 12,
+      "options": {
+        "legend": { "calcs": ["mean", "min"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "AVG(SEARCH('{ContainerInsights,ClusterName,NodeName} MetricName=\"node_cpu_utilization\"', 'Average', 3600))",
+          "id": "node_cpu",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "AVG(SEARCH('{ContainerInsights,ClusterName,NodeName} MetricName=\"node_memory_utilization\"', 'Average', 3600))",
+          "id": "node_mem",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        }
+      ],
+      "title": "EKS Node CPU & Memory Utilization (avg across all nodes)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "RDS instance CPU utilization and connection count over the last 7 days. CPU < 5% with connections < 2 for 2+ hours triggers idle alert.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "",
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "decimals": 1,
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "DatabaseConnections" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "displayName", "value": "DB Connections" }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "id": 13,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"CPUUtilization\"', 'Average', 3600)",
+          "id": "rds_cpu",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        },
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SEARCH('{AWS/RDS,DBInstanceIdentifier} MetricName=\"DatabaseConnections\"', 'Average', 3600)",
+          "id": "rds_conns",
+          "queryMode": "Metrics",
+          "refId": "B",
+          "region": "default"
+        }
+      ],
+      "title": "RDS CPU Utilization & Connection Count",
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 },
+      "id": 400,
+      "title": "Cost Optimization",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Top 5 most expensive AWS services from the most recent cost ingestion Lambda run. Sourced from structured Lambda logs.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": true,
+            "inspect": true
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "dailyCost" },
+            "properties": [
+              { "id": "displayName", "value": "Daily Cost (USD)" },
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "custom.displayMode", "value": "lcd-gauge" },
+              { "id": "custom.width", "value": 200 }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "service" }, "properties": [{ "id": "displayName", "value": "AWS Service" }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
+      "id": 14,
+      "options": {
+        "footer": { "enablePagination": false, "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": true, "displayName": "Daily Cost (USD)" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, top5Services\n| filter msg = \"Cost ingestion complete\"\n| sort @timestamp desc\n| limit 1\n| mv-expand top5Services\n| fields top5Services.service as service, top5Services.dailyCost as dailyCost",
+          "id": "top5_log",
+          "logGroups": [
+            { "arn": "", "name": "/aws/lambda/cloudops-cost-ingestion" }
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Top 5 Most Expensive Services (Yesterday)",
+      "type": "table"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Pods in the cloudops namespace using less than 20% of their CPU limit — candidates for resource request reduction in apps/order-api/k8s/deployment.yaml.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": true,
+            "inspect": true
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "avgCpuUtilizationPercent" },
+            "properties": [
+              { "id": "displayName", "value": "Avg CPU %" },
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 20 }] } }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "podName" }, "properties": [{ "id": "displayName", "value": "Pod" }] },
+          { "matcher": { "id": "byName", "options": "recommendation" }, "properties": [{ "id": "displayName", "value": "Recommendation" }, { "id": "custom.width", "value": 350 }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 },
+      "id": 15,
+      "options": {
+        "footer": { "enablePagination": false, "show": false },
+        "showHeader": true,
+        "sortBy": [{ "desc": false, "displayName": "Avg CPU %" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "expression": "fields @timestamp, overProvisionedPodCount, idleResourcesDetected\n| filter msg = \"Idle resource detection complete\" and overProvisionedPodCount > 0\n| sort @timestamp desc\n| limit 10",
+          "id": "pod_rightsizing_log",
+          "logGroups": [
+            { "arn": "", "name": "/aws/lambda/cloudops-idle-detector" }
+          ],
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "statsGroups": []
+        }
+      ],
+      "title": "Pod Rightsizing Recommendations (CPU < 20% of limit)",
+      "type": "table"
+    },
+
+    {
+      "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+      "description": "Estimated total monthly savings if all idle resource recommendations are applied (EstimatedWastedCostDaily × 30). Reduces to $0 after optimizations are applied.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "Fully optimized" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 46 },
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+          "dimensions": {},
+          "expression": "SUM(SEARCH('{CloudOps/FinOps,Environment} MetricName=\"EstimatedWastedCostDaily\"', 'Maximum', 86400)) * 30",
+          "id": "potential_savings",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default"
+        }
+      ],
+      "title": "Total Potential Monthly Savings (if all recommendations applied)",
+      "type": "stat"
+    }
+
+  ],
+
+  "refresh": "1h",
+  "schemaVersion": 38,
+  "tags": ["finops", "cost", "cloudops"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "CloudWatch",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "cloudwatch",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "30d", "value": "86400" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Aggregation Period",
+        "multi": false,
+        "name": "period",
+        "options": [
+          { "selected": false, "text": "today (1h buckets)", "value": "3600" },
+          { "selected": false, "text": "7d (1d buckets)",    "value": "86400" },
+          { "selected": true,  "text": "30d (1d buckets)",   "value": "86400" },
+          { "selected": false, "text": "90d (1d buckets)",   "value": "86400" }
+        ],
+        "query": "today (1h buckets),7d (1d buckets),30d (1d buckets),90d (1d buckets)",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "cloudwatch", "uid": "${datasource}" },
+        "definition": "dimension_values(default,CloudOps/FinOps,ServiceDailyCost,Service)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "dimensionFilters": {},
+          "dimensionKey": "Service",
+          "ec2Filters": {},
+          "metricName": "ServiceDailyCost",
+          "namespace": "CloudOps/FinOps",
+          "queryType": "dimensionValues",
+          "refId": "CloudWatchVariableQueryEditor-VariableQuery",
+          "region": "default"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CloudOps FinOps",
+  "uid": "finops-dashboard",
+  "version": 1
+}

@@ -88,3 +88,14 @@ output "grafana_api_key_secret_arn" {
   description = "Secrets Manager ARN for the Grafana Viewer service account token (used by the SLO Lambda)"
   value       = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : null
 }
+
+# Self-Healing
+output "self_healing_sns_topic_arn" {
+  description = "Self-healing triggers SNS topic ARN"
+  value       = var.enable_self_healing ? module.self_healing[0].sns_topic_arn : null
+}
+
+output "self_healing_dashboard_url" {
+  description = "CloudWatch Logs Insights URL for self-healing controller logs"
+  value       = var.enable_self_healing ? module.self_healing[0].healing_dashboard_url : null
+}

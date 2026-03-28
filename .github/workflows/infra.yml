@@ -367,7 +367,7 @@ jobs:
   approve:
     runs-on: ubuntu-latest
     needs: [plan, security-scan, manifest-validation]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     environment: production
     steps:
       - name: Awaiting approval
@@ -381,7 +381,7 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     needs: approve
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -402,6 +402,27 @@ jobs:
 
       - name: terraform init
         run: terraform init
+
+      # Import OIDC provider and GitHub Actions IAM role if they were pre-created
+      # by oidc.sh (runs before the first Terraform apply to bootstrap CI/CD).
+      # Idempotent: || true suppresses errors when already in state or not found.
+      - name: Import pre-existing OIDC bootstrap resources
+        run: |
+          OIDC_ARN=$(aws iam list-open-id-connect-providers \
+            --query "OpenIDConnectProviderList[?ends_with(Arn,'token.actions.githubusercontent.com')].Arn" \
+            --output text 2>/dev/null || true)
+
+          if [ -n "$OIDC_ARN" ] && [ "$OIDC_ARN" != "None" ]; then
+            terraform import 'module.bootstrap[0].aws_iam_openid_connect_provider.github' "$OIDC_ARN" 2>/dev/null || true
+          fi
+
+          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
+          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+          ROLE_NAME="${PROJECT_NAME}-github-actions"
+
+          if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
+            terraform import "module.bootstrap[0].aws_iam_role.github_actions" "$ROLE_NAME" 2>/dev/null || true
+          fi
 
       # Staged applies match deploy.sh ordering.
       # Each stage runs a fresh plan+apply for the targeted modules.
@@ -488,7 +509,7 @@ jobs:
   compliance-scan:
     runs-on: ubuntu-latest
     needs: apply
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     permissions:
       id-token: write
       contents: read
