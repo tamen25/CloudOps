@@ -396,7 +396,8 @@ jobs:
             --output text 2>/dev/null || echo "")
 
           if [ -n "$OIDC_ARN" ] && [ "$OIDC_ARN" != "None" ]; then
-            if terraform state show 'module.bootstrap[0].aws_iam_openid_connect_provider.github' >/dev/null 2>&1; then
+            OIDC_ADDR="module.bootstrap[0].aws_iam_openid_connect_provider.github"
+            if terraform state list 2>/dev/null | grep -qF "$OIDC_ADDR"; then
               echo "OIDC provider already in Terraform state — skipping import"
             else
               echo "Importing OIDC provider: $OIDC_ARN"
@@ -404,17 +405,18 @@ jobs:
                 -var 'enable_ingress=false' \
                 -var 'enable_observability=false' \
                 -var 'enable_security=false' \
-                'module.bootstrap[0].aws_iam_openid_connect_provider.github' \
-                "$OIDC_ARN" || echo "Warning: OIDC import failed (may already be managed elsewhere)"
+                "$OIDC_ADDR" "$OIDC_ARN" \
+                || echo "Warning: OIDC import failed (may already be managed elsewhere)"
             fi
           fi
 
           PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
           PROJECT_NAME="${PROJECT_NAME:-cloudops}"
           ROLE_NAME="${PROJECT_NAME}-github-actions"
+          ROLE_ADDR="module.bootstrap[0].aws_iam_role.github_actions"
 
           if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
-            if terraform state show "module.bootstrap[0].aws_iam_role.github_actions" >/dev/null 2>&1; then
+            if terraform state list 2>/dev/null | grep -qF "$ROLE_ADDR"; then
               echo "GitHub Actions role already in Terraform state — skipping import"
             else
               echo "Importing GitHub Actions role: $ROLE_NAME"
@@ -422,8 +424,8 @@ jobs:
                 -var 'enable_ingress=false' \
                 -var 'enable_observability=false' \
                 -var 'enable_security=false' \
-                "module.bootstrap[0].aws_iam_role.github_actions" \
-                "$ROLE_NAME" || echo "Warning: role import failed (may already be managed elsewhere)"
+                "$ROLE_ADDR" "$ROLE_NAME" \
+                || echo "Warning: role import failed (may already be managed elsewhere)"
             fi
           fi
 
