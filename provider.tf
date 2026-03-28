@@ -48,12 +48,12 @@ provider "aws" {
 # Helm and Kubernetes providers require the EKS cluster to exist.
 # Deploy order: enable_eks=true first, then enable_ingress=true on a second apply.
 data "aws_eks_cluster" "this" {
-  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  count = var.enable_eks && (var.enable_ingress || var.enable_observability) ? 1 : 0
   name  = local.eks_cluster_name
 }
 
 data "aws_eks_cluster_auth" "this" {
-  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  count = var.enable_eks && (var.enable_ingress || var.enable_observability) ? 1 : 0
   name  = local.eks_cluster_name
 }
 
