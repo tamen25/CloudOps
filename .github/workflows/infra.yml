@@ -368,6 +368,21 @@ jobs:
       - name: terraform init
         run: terraform init
 
+      - name: Release stale state lock
+        # Terraform 1.11 S3 native locking stores the lock as <key>.tflock.
+        # A cancelled plan or apply leaves this file behind and blocks the next run.
+        # Safe to delete here because apply steps are sequential within this job.
+        run: |
+          if aws s3api head-object \
+               --bucket cloudops-tfstate-tamen25 \
+               --key main/terraform.tfstate.tflock 2>/dev/null; then
+            echo "Stale lock found — releasing..."
+            aws s3 rm s3://cloudops-tfstate-tamen25/main/terraform.tfstate.tflock
+            echo "Lock released"
+          else
+            echo "No stale lock present"
+          fi
+
       # Import OIDC provider and GitHub Actions IAM role if they were pre-created
       # by oidc.sh (runs before the first Terraform apply to bootstrap CI/CD).
       # Idempotent: || true suppresses errors when already in state or not found.
