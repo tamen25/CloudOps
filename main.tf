@@ -266,9 +266,8 @@ module "self_healing" {
   aws_account_id = local.account_id
 
   eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
-  # Use the deterministic instance identifier rather than the computed output so
-  # count expressions in the module (create_rds = rds_instance_id != "")
-  # resolve to a known value during plan before the database is created.
+  # Deterministic ID (not computed output) so count expressions inside the module
+  # resolve at plan time before the database resource exists.
   rds_instance_id = var.enable_database ? "${local.name_prefix}-db-primary" : ""
 
   # ALB metric dimensions — populated after first ingress deploy
