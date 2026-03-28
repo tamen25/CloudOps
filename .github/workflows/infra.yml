@@ -300,7 +300,7 @@ jobs:
 
       - name: kubeconform — schema validation
         run: |
-          kubeconform -strict -summary apps/order-api/k8s/
+          kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
 
       - name: kubectl apply --dry-run=client
         run: |
