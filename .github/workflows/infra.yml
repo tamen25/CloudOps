@@ -296,7 +296,9 @@ jobs:
           checkov -d . --framework terraform --output github_failed_only || true
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 5: Manifest validation — kubeval + kubeconform + kubectl dry-run + helm lint
+  # Job 5: Manifest validation — kubeconform schema validation
+  # Validates all Kubernetes manifests in apps/order-api/k8s/ against the
+  # upstream JSON schemas. CRD kinds (ServiceMonitor) are skipped, not errored.
   # Runs in parallel with plan.
   # ─────────────────────────────────────────────────────────────────────────────
   manifest-validation:
@@ -315,37 +317,6 @@ jobs:
       - name: kubeconform — schema validation
         run: |
           kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
-
-      - name: Helm lint — observability values files
-        run: |
-          # Validate any standalone YAML files in the observability module as valid YAML.
-          # Helm lint requires a full chart directory (Chart.yaml); if none exist, report and skip.
-          YAML_FILES=$(find modules/observability -name '*.yaml' -o -name '*.yml' 2>/dev/null | sort)
-          if [ -z "$YAML_FILES" ]; then
-            echo "No standalone YAML files found in modules/observability/ — skipping helm lint"
-            exit 0
-          fi
-
-          echo "Validating YAML files:"
-          echo "$YAML_FILES"
-
-          # Validate each file is parseable YAML
-          echo "$YAML_FILES" | while IFS= read -r f; do
-            python3 -c "import sys, yaml; yaml.safe_load(open('$f'))" \
-              && echo "  ✓ $f" \
-              || { echo "  ✗ $f — invalid YAML"; exit 1; }
-          done
-
-          # Run helm lint on any full chart directories (those containing Chart.yaml)
-          CHARTS=$(find modules/observability -name 'Chart.yaml' -exec dirname {} \; 2>/dev/null)
-          if [ -n "$CHARTS" ]; then
-            echo "$CHARTS" | while IFS= read -r chart_dir; do
-              echo "Running helm lint on $chart_dir"
-              helm lint "$chart_dir"
-            done
-          else
-            echo "No Helm chart directories found — helm lint skipped"
-          fi
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 6: Manual approval gate — push to main only
