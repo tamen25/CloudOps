@@ -384,24 +384,47 @@ jobs:
           fi
 
       # Import OIDC provider and GitHub Actions IAM role if they were pre-created
-      # by oidc.sh (runs before the first Terraform apply to bootstrap CI/CD).
-      # Idempotent: || true suppresses errors when already in state or not found.
+      # by oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
+      # a live EKS cluster) stays unconfigured during import of IAM resources.
+      # Checks state first — skips import if resource is already tracked.
       - name: Import pre-existing OIDC bootstrap resources
         run: |
+          TF_IMPORT_VARS="-var 'enable_ingress=false' -var 'enable_observability=false' -var 'enable_security=false'"
+
           OIDC_ARN=$(aws iam list-open-id-connect-providers \
             --query "OpenIDConnectProviderList[?ends_with(Arn,'token.actions.githubusercontent.com')].Arn" \
-            --output text 2>/dev/null || true)
+            --output text 2>/dev/null || echo "")
 
           if [ -n "$OIDC_ARN" ] && [ "$OIDC_ARN" != "None" ]; then
-            terraform import 'module.bootstrap[0].aws_iam_openid_connect_provider.github' "$OIDC_ARN" 2>/dev/null || true
+            if terraform state show 'module.bootstrap[0].aws_iam_openid_connect_provider.github' >/dev/null 2>&1; then
+              echo "OIDC provider already in Terraform state — skipping import"
+            else
+              echo "Importing OIDC provider: $OIDC_ARN"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                'module.bootstrap[0].aws_iam_openid_connect_provider.github' \
+                "$OIDC_ARN" || echo "Warning: OIDC import failed (may already be managed elsewhere)"
+            fi
           fi
 
-          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
+          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
           PROJECT_NAME="${PROJECT_NAME:-cloudops}"
           ROLE_NAME="${PROJECT_NAME}-github-actions"
 
           if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
-            terraform import "module.bootstrap[0].aws_iam_role.github_actions" "$ROLE_NAME" 2>/dev/null || true
+            if terraform state show "module.bootstrap[0].aws_iam_role.github_actions" >/dev/null 2>&1; then
+              echo "GitHub Actions role already in Terraform state — skipping import"
+            else
+              echo "Importing GitHub Actions role: $ROLE_NAME"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                "module.bootstrap[0].aws_iam_role.github_actions" \
+                "$ROLE_NAME" || echo "Warning: role import failed (may already be managed elsewhere)"
+            fi
           fi
 
       # Staged applies match deploy.sh ordering.
