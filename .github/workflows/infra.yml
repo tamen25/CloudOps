@@ -282,23 +282,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install kubeval
-        run: |
-          wget -q https://github.com/instrumenta/kubeval/releases/download/v0.16.1/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin/
-          kubeval --version
-
       - name: Install kubeconform
         run: |
           wget -q https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
           tar xf kubeconform-linux-amd64.tar.gz
           sudo mv kubeconform /usr/local/bin/
           kubeconform -v
-
-      - name: kubeval — strict schema validation
-        run: |
-          kubeval --strict apps/order-api/k8s/*.yaml
 
       - name: kubeconform — schema validation
         run: |
