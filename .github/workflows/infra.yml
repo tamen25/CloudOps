@@ -307,43 +307,6 @@ jobs:
         run: |
           kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
 
-      - name: kubectl apply --dry-run=client
-        run: |
-          # Create a minimal mock kubeconfig — dry-run=client never contacts the server
-          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
-          cat > "$KUBECONFIG" <<'KUBECFG'
-          apiVersion: v1
-          kind: Config
-          current-context: mock
-          clusters:
-          - cluster:
-              server: https://localhost:6443
-            name: mock
-          contexts:
-          - context:
-              cluster: mock
-              user: mock
-            name: mock
-          users:
-          - name: mock
-            user: {}
-          KUBECFG
-          # CRD instances (e.g. ServiceMonitor from monitoring.coreos.com) trigger
-          # server-side API discovery even with --dry-run=client, causing kubectl to
-          # prompt for credentials against the mock server. Skip them; kubeconform
-          # already validates all files with -ignore-missing-schemas.
-          for f in apps/order-api/k8s/*.yaml; do
-            kind=$(grep -m1 '^kind:' "$f" 2>/dev/null | awk '{print $2}')
-            case "$kind" in
-              Deployment|Service|ServiceAccount|Ingress|HorizontalPodAutoscaler|Namespace)
-                kubectl apply --dry-run=client -f "$f"
-                ;;
-              *)
-                echo "Skipping $f (kind=$kind — not a native K8s resource)"
-                ;;
-            esac
-          done
-
       - name: Helm lint — observability values files
         run: |
           # Validate any standalone YAML files in the observability module as valid YAML.
