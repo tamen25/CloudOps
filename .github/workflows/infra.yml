@@ -184,7 +184,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          terraform plan -lock=false -out=tfplan -no-color 2>&1 | tee plan-output.txt
+          # Disable ingress/observability on the plan so the EKS data-source lookup
+          # and Route 53 zone lookups are skipped — those resources don't exist until
+          # the staged apply has run. The apply steps deploy them in the correct order.
+          terraform plan -lock=false \
+            -var 'enable_ingress=false' \
+            -var 'enable_observability=false' \
+            -out=tfplan -no-color 2>&1 | tee plan-output.txt
 
       - name: Post plan to PR
         if: github.event_name == 'pull_request'
