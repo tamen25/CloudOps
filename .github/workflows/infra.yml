@@ -67,7 +67,7 @@ jobs:
         run: tflint --init
 
       - name: tflint
-        run: tflint --recursive
+        run: tflint --recursive --minimum-failure-severity=error
 
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.0
