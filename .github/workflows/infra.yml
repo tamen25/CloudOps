@@ -31,7 +31,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  TF_VERSION: 1.7.0
+  TF_VERSION: 1.11.0
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
