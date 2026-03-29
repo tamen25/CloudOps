@@ -403,6 +403,7 @@ jobs:
           mkdir -p architecture
           pluralith graph \
             --plan-file-json plan.json \
+            --var-file diagram-overrides.tfvars \
             --title "CloudOps Infrastructure" \
             --show-changes \
             --local-only \
