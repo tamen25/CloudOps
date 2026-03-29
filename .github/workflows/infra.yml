@@ -365,8 +365,12 @@ jobs:
 
       - name: Install Pluralith CLI
         run: |
-          curl -L https://github.com/pluralith/pluralith-cli/releases/latest/download/pluralith_cli_linux_amd64 \
-            -o /usr/local/bin/pluralith
+          PLURALITH_URL=$(curl -s https://api.github.com/repos/Pluralith/pluralith-cli/releases/latest \
+            | grep -o '"browser_download_url": "[^"]*linux_amd64[^"]*"' \
+            | grep -v tar.gz \
+            | grep -o 'https://[^"]*' \
+            | head -1)
+          curl -L "$PLURALITH_URL" -o /usr/local/bin/pluralith
           chmod +x /usr/local/bin/pluralith
           pluralith version
 
