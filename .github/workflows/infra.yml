@@ -336,6 +336,9 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
+    env:
+      PLURALITH_API_KEY: ${{ secrets.PLURALITH_API_KEY }}
+      PLURALITH_ORG_ID: ${{ secrets.PLURALITH_ORG_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
