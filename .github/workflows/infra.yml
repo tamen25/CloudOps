@@ -471,7 +471,7 @@ jobs:
             }
 
       - name: Generate full architecture diagram (push to main)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p architecture
           pluralith graph \
@@ -481,7 +481,7 @@ jobs:
             --out architecture/current-architecture.png
 
       - name: Commit architecture diagram
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
