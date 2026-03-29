@@ -386,6 +386,19 @@ jobs:
             -out=pluralith.tfplan -no-color
           terraform show -json pluralith.tfplan > plan.json
 
+      - name: Install Pluralith graphing engine
+        run: |
+          TAP_URL=$(curl -s https://api.github.com/repos/Pluralith/pluralith-cli/releases/latest \
+            | grep -o '"browser_download_url": "[^"]*tap_linux_amd64[^"]*\.tar\.gz[^"]*"' \
+            | grep -o 'https://[^"]*' \
+            | head -1)
+          mkdir -p /tmp/pluralith-tap
+          curl -L "$TAP_URL" | tar xz -C /tmp/pluralith-tap
+          mkdir -p /home/runner/Pluralith/bin
+          find /tmp/pluralith-tap -name "*graphing*" -exec cp {} /home/runner/Pluralith/bin/pluralith-cli-graphing \;
+          chmod +x /home/runner/Pluralith/bin/pluralith-cli-graphing
+          ls -la /home/runner/Pluralith/bin/
+
       - name: Pluralith Graph
         run: |
           mkdir -p architecture
