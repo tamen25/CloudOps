@@ -394,10 +394,8 @@ jobs:
             | head -1)
           mkdir -p /tmp/pluralith-tap
           curl -L "$TAP_URL" | tar xz -C /tmp/pluralith-tap
-          mkdir -p /home/runner/Pluralith/bin
-          find /tmp/pluralith-tap -name "*graphing*" -exec cp {} /home/runner/Pluralith/bin/pluralith-cli-graphing \;
-          chmod +x /home/runner/Pluralith/bin/pluralith-cli-graphing
-          ls -la /home/runner/Pluralith/bin/
+          echo "=== Extracted files ==="
+          find /tmp/pluralith-tap -type f | sort
 
       - name: Pluralith Graph
         run: |
