@@ -339,6 +339,8 @@ jobs:
     env:
       PLURALITH_API_KEY: ${{ secrets.PLURALITH_API_KEY }}
       PLURALITH_ORG_ID: ${{ secrets.PLURALITH_ORG_ID }}
+      PLURALITH_PROJECT_ID: ${{ secrets.PLURALITH_PROJECT_ID }}
+      PLURALITH_PROJECT_NAME: ${{ secrets.PLURALITH_PROJECT_NAME }}
     steps:
       - uses: actions/checkout@v4
         with:
