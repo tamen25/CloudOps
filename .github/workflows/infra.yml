@@ -370,11 +370,20 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Configure Pluralith project
+        run: |
+          printf '\norg_id: "%s"\nproject_id: "%s"\nproject_name: "%s"\n' \
+            "$PLURALITH_ORG_ID" "$PLURALITH_PROJECT_ID" "$PLURALITH_PROJECT_NAME" \
+            >> ${{ github.workspace }}/.pluralith.yml
+
       - name: Pluralith Init
         uses: Pluralith/actions/init@v1.4.0
         with:
           terraform-path: ${{ github.workspace }}
           api-key: ${{ secrets.PLURALITH_API_KEY }}
+          org-id: ${{ secrets.PLURALITH_ORG_ID }}
+          project-id: ${{ secrets.PLURALITH_PROJECT_ID }}
+          project-name: ${{ secrets.PLURALITH_PROJECT_NAME }}
 
       - name: Pluralith Run
         uses: Pluralith/actions/run@v1.4.0
