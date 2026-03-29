@@ -370,12 +370,6 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Configure Pluralith project
-        run: |
-          printf '\norg_id: "%s"\nproject_id: "%s"\nproject_name: "%s"\n' \
-            "$PLURALITH_ORG_ID" "$PLURALITH_PROJECT_ID" "$PLURALITH_PROJECT_NAME" \
-            >> ${{ github.workspace }}/.pluralith.yml
-
       - name: Pluralith Init
         uses: Pluralith/actions/init@v1.4.0
         with:
@@ -385,17 +379,37 @@ jobs:
           project-id: ${{ secrets.PLURALITH_PROJECT_ID }}
           project-name: ${{ secrets.PLURALITH_PROJECT_NAME }}
 
-      - name: Pluralith Run
-        uses: Pluralith/actions/run@v1.4.0
-        with:
-          terraform-command: plan
-          terraform-path: ${{ github.workspace }}
-          terraform-var-file: ${{ github.workspace }}/diagram-overrides.tfvars
-          show-changes: true
-          show-drift: false
-          show-costs: false
+      - name: Install Pluralith graphing engine
+        run: |
+          GRAPHING_URL=$(curl -s https://api.github.com/repos/Pluralith/pluralith-cli-graphing-release/releases/latest \
+            | grep -o '"browser_download_url": "[^"]*linux_amd64[^"]*"' \
+            | grep -o 'https://[^"]*' \
+            | head -1)
+          mkdir -p /home/runner/Pluralith/bin
+          curl -L "$GRAPHING_URL" -o /home/runner/Pluralith/bin/pluralith-cli-graphing
+          chmod +x /home/runner/Pluralith/bin/pluralith-cli-graphing
 
-      - name: Pluralith Comment
+      - name: Generate Terraform plan
+        run: |
+          terraform plan -lock=false \
+            -var 'enable_ingress=false' \
+            -var 'enable_observability=false' \
+            -var 'enable_security=false' \
+            -out=pluralith.tfplan -no-color
+          terraform show -json pluralith.tfplan > plan.json
+
+      - name: Generate Pluralith diagram
+        run: |
+          mkdir -p architecture
+          pluralith graph \
+            --plan-file-json plan.json \
+            --title "CloudOps Infrastructure" \
+            --show-changes \
+            --local-only \
+            --out-dir architecture \
+            --file-name current-architecture
+
+      - name: Pluralith Comment (PR only)
         if: github.event_name == 'pull_request'
         uses: Pluralith/actions/comment@v1.4.0
         with:
@@ -404,10 +418,8 @@ jobs:
       - name: Commit architecture diagram (push/dispatch)
         if: github.event_name != 'pull_request'
         run: |
-          PDF=$(find ${{ github.workspace }} -name "*.pdf" | grep -v node_modules | head -1)
+          PDF=$(find architecture -name "*.pdf" | head -1)
           if [ -n "$PDF" ]; then
-            mkdir -p architecture
-            cp "$PDF" architecture/current-architecture.pdf
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add architecture/current-architecture.pdf
