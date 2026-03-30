@@ -1,7 +1,18 @@
-# Existing hosted zone — must already exist in Route 53
-data "aws_route53_zone" "main" {
-  name         = "tamendutta.com"
-  private_zone = false
+# Public hosted zone — created by Terraform, no prior manual setup required.
+# After first apply, update your domain registrar's nameservers to the values in
+# the route53_name_servers output so DNS resolves correctly.
+resource "aws_route53_zone" "main" {
+  name = "tamendutta.com"
+
+  tags = merge(var.tags, {
+    Name        = "tamendutta.com"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  })
+}
+
+locals {
+  zone_id = aws_route53_zone.main.zone_id
 }
 
 # A records are created only after the LBC has provisioned the ALB and alb_dns_name is set.
@@ -10,7 +21,7 @@ data "aws_route53_zone" "main" {
 resource "aws_route53_record" "api" {
   count = var.alb_dns_name != "" ? 1 : 0
 
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.zone_id
   name    = "api.tamendutta.com"
   type    = "A"
 
@@ -24,7 +35,7 @@ resource "aws_route53_record" "api" {
 resource "aws_route53_record" "grafana" {
   count = var.alb_dns_name != "" ? 1 : 0
 
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.zone_id
   name    = "grafana.tamendutta.com"
   type    = "A"
 

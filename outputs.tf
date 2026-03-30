@@ -39,6 +39,11 @@ output "acm_certificate_arn" {
   value       = var.enable_ingress ? module.ingress[0].certificate_arn : null
 }
 
+output "route53_name_servers" {
+  description = "tamendutta.com name servers — update your registrar to these after first ingress apply"
+  value       = var.enable_ingress ? module.ingress[0].route53_name_servers : null
+}
+
 # Database
 output "database_endpoint" {
   description = "Primary RDS instance endpoint (host:port)"
