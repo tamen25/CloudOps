@@ -69,3 +69,28 @@ resource "aws_vpc_endpoint" "eks" {
 
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-eks-endpoint" })
 }
+
+# STS — required for node bootstrap: aws-eks-get-token calls sts:GetCallerIdentity
+# to generate the bearer token used to authenticate with the K8s API server
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.sts"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-sts-endpoint" })
+}
+
+# EC2 — required for VPC CNI (aws-node DaemonSet) to manage pod network interfaces
+resource "aws_vpc_endpoint" "ec2" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.ec2"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-ec2-endpoint" })
+}
