@@ -15,6 +15,8 @@ resource "random_password" "otel_api_key" {
 }
 
 resource "aws_secretsmanager_secret" "otel_api_key" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops-otel-api-key"
   description             = "Bearer token for OTel Collector authentication"
   recovery_window_in_days = 0
@@ -62,6 +64,8 @@ resource "random_password" "grafana_admin" {
 }
 
 resource "aws_secretsmanager_secret" "grafana_admin" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops-grafana-admin-password"
   description             = "Grafana admin password"
   recovery_window_in_days = 0

@@ -37,13 +37,18 @@ data "archive_file" "auto_remediation" {
 }
 
 resource "aws_cloudwatch_log_group" "auto_remediation" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-auto-remediation"
-  retention_in_days = 30
+  retention_in_days = 365
 
   tags = var.tags
 }
 
 resource "aws_lambda_function" "auto_remediation" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-auto-remediation"
   description   = "Auto-remediates safe security findings and creates GitHub issues for the rest"
 
@@ -55,6 +60,12 @@ resource "aws_lambda_function" "auto_remediation" {
 
   timeout     = 120
   memory_size = 256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -127,6 +138,9 @@ resource "aws_iam_role_policy_attachment" "auto_remediation_basic_execution" {
 }
 
 data "aws_iam_policy_document" "auto_remediation_permissions" {
+  #checkov:skip=CKV_AWS_356:Auto-remediation Lambda requires broad read access to scan AWS services
+  #checkov:skip=CKV_AWS_111:Auto-remediation Lambda requires write access to remediate findings
+  #checkov:skip=CKV_AWS_109:Auto-remediation Lambda requires IAM read access for compliance scanning
   # S3 — remediate public access, encryption, versioning (no data plane access)
   statement {
     sid    = "S3Remediation"

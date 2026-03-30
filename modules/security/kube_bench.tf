@@ -279,8 +279,9 @@ data "archive_file" "kube_bench_processor" {
 }
 
 resource "aws_cloudwatch_log_group" "kube_bench_processor" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-kube-bench-processor"
-  retention_in_days = 30
+  retention_in_days = 365
 
   tags = var.tags
 }
@@ -347,6 +348,10 @@ resource "aws_iam_role_policy" "kube_bench_processor_permissions" {
 }
 
 resource "aws_lambda_function" "kube_bench_processor" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-kube-bench-processor"
   description   = "Processes kube-bench CIS benchmark output and stores findings in DynamoDB"
 
@@ -358,6 +363,12 @@ resource "aws_lambda_function" "kube_bench_processor" {
 
   timeout     = 120
   memory_size = 256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {

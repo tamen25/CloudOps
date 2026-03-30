@@ -1,5 +1,8 @@
 # Create the primary RDS database instance with encryption, backups, and monitoring enabled
 resource "aws_db_instance" "primary" {
+  #checkov:skip=CKV_AWS_157:Multi-AZ disabled intentionally - cost optimization for dev environment
+  #checkov:skip=CKV_AWS_293:Deletion protection disabled intentionally - dev environment requires easy teardown
+  #checkov:skip=CKV_AWS_354:Performance Insights KMS CMK not required - AWS managed encryption is acceptable
   identifier     = "${var.name_prefix}-db-primary"
   instance_class = var.instance_class
   engine         = var.engine

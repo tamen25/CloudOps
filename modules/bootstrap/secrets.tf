@@ -17,6 +17,8 @@ variable "github_token" {
 }
 
 resource "aws_secretsmanager_secret" "github_token" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   count = var.github_token != "" ? 1 : 0
 
   name                    = "cloudops-github-token"

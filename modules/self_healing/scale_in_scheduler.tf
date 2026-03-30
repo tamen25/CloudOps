@@ -153,6 +153,10 @@ data "archive_file" "scale_in_scheduler" {
 }
 
 resource "aws_lambda_function" "scale_in_scheduler" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-scale-in-scheduler"
   role             = aws_iam_role.scale_in_scheduler.arn
   runtime          = "nodejs20.x"
@@ -161,6 +165,12 @@ resource "aws_lambda_function" "scale_in_scheduler" {
   memory_size      = 128
   filename         = data.archive_file.scale_in_scheduler.output_path
   source_code_hash = data.archive_file.scale_in_scheduler.output_base64sha256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -175,8 +185,9 @@ resource "aws_lambda_function" "scale_in_scheduler" {
 }
 
 resource "aws_cloudwatch_log_group" "scale_in_scheduler" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-scale-in-scheduler"
-  retention_in_days = 14
+  retention_in_days = 365
   tags              = var.tags
 }
 

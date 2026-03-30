@@ -48,6 +48,8 @@ resource "aws_iam_role" "github_actions" {
 
 # Inline policy: ECR push, EKS read, S3 state access, KMS state key
 data "aws_iam_policy_document" "github_actions_permissions" {
+  #checkov:skip=CKV_AWS_356:GitHub Actions deployment role requires broad ECR/EKS access
+  #checkov:skip=CKV_AWS_111:GitHub Actions deployment role requires write access for infrastructure deployment
   # GetAuthorizationToken is account-level and always requires resource *
   statement {
     sid       = "ECRAuth"

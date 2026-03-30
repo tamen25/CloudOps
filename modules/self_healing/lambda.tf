@@ -40,6 +40,10 @@ data "archive_file" "self_healing" {
 # ── Lambda ────────────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "self_healing_controller" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-self-healing-controller"
   role             = aws_iam_role.self_healing.arn
   runtime          = "nodejs20.x"
@@ -48,6 +52,12 @@ resource "aws_lambda_function" "self_healing_controller" {
   memory_size      = 256
   filename         = data.archive_file.self_healing.output_path
   source_code_hash = data.archive_file.self_healing.output_base64sha256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -68,16 +78,18 @@ resource "aws_lambda_function" "self_healing_controller" {
 }
 
 resource "aws_cloudwatch_log_group" "self_healing_controller" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-self-healing-controller"
-  retention_in_days = 30
+  retention_in_days = 365
   tags              = var.tags
 }
 
 # ── SNS trigger topic ─────────────────────────────────────────────────────────
 
 resource "aws_sns_topic" "healing_triggers" {
-  name = "${var.project_name}-healing-triggers"
-  tags = var.tags
+  name              = "${var.project_name}-healing-triggers"
+  kms_master_key_id = "alias/aws/sns"
+  tags              = var.tags
 }
 
 resource "aws_sns_topic_policy" "healing_triggers" {

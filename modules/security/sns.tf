@@ -10,8 +10,9 @@
 # If security_critical_email is empty the second subscription is skipped.
 
 resource "aws_sns_topic" "security_alerts" {
-  name         = "${var.project_name}-security-alerts"
-  display_name = "CloudOps Security Alerts"
+  name              = "${var.project_name}-security-alerts"
+  display_name      = "CloudOps Security Alerts"
+  kms_master_key_id = "alias/aws/sns"
 
   tags = merge(var.tags, {
     Name      = "${var.project_name}-security-alerts"

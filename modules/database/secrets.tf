@@ -1,5 +1,7 @@
 # Create a Secrets Manager secret to securely store database connection credentials
 resource "aws_secretsmanager_secret" "db_credentials" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name        = "${var.name_prefix}-db-credentials"
   description = "Database credentials for ${var.name_prefix} ${var.environment} environment"
 

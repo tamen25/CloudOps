@@ -33,6 +33,10 @@ data "archive_file" "idle_detector" {
 }
 
 resource "aws_lambda_function" "idle_detector" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-idle-detector"
   description   = "Detects idle/over-provisioned EKS nodes, RDS instances, and pods; alerts on estimated waste"
 
@@ -44,6 +48,12 @@ resource "aws_lambda_function" "idle_detector" {
   runtime     = "nodejs20.x"
   timeout     = 120
   memory_size = 256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -62,8 +72,9 @@ resource "aws_lambda_function" "idle_detector" {
 }
 
 resource "aws_cloudwatch_log_group" "idle_detector" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${aws_lambda_function.idle_detector.function_name}"
-  retention_in_days = 30
+  retention_in_days = 365
   tags              = var.tags
 }
 
@@ -110,6 +121,7 @@ resource "aws_iam_role" "idle_detector" {
 }
 
 data "aws_iam_policy_document" "idle_detector" {
+  #checkov:skip=CKV_AWS_356:Idle detector requires read access across EC2/EKS/RDS services
   # CloudWatch Logs
   statement {
     sid    = "CloudWatchLogs"

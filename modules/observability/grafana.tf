@@ -139,6 +139,8 @@ resource "helm_release" "grafana" {
 # ─────────────────────────────────────────────────────────────────────────────
 
 resource "aws_secretsmanager_secret" "grafana_api_key" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops/grafana-api-key"
   description             = "Grafana Viewer service account token — used by the SLO Lambda to query Prometheus via the Grafana datasource proxy"
   recovery_window_in_days = 7

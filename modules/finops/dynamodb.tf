@@ -6,6 +6,7 @@
 # GSI date-cost-index allows querying most expensive days across all services.
 
 resource "aws_dynamodb_table" "cost_data" {
+  #checkov:skip=CKV_AWS_119:AWS managed encryption is acceptable - CMK adds cost without meaningful security benefit for dev
   name         = "${var.project_name}-cost-data"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "service"

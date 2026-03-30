@@ -2,6 +2,9 @@
 
 # EKS control plane
 resource "aws_eks_cluster" "main" {
+  #checkov:skip=CKV_AWS_39:Public endpoint intentionally enabled for GitHub Actions OIDC access from CI/CD
+  #checkov:skip=CKV_AWS_38:Public endpoint CIDR restriction not applied - GitHub Actions IPs are dynamic
+  #checkov:skip=CKV_AWS_58:EKS secrets encryption requires dedicated KMS key - accepted risk for dev environment
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster.arn
   version  = var.kubernetes_version

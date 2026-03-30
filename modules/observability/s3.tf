@@ -39,6 +39,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "loki" {
       storage_class = "GLACIER"
     }
   }
+
+  rule {
+    id     = "abort-incomplete-multipart"
+    status = "Enabled"
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }
 
 # S3 bucket for Tempo trace storage
@@ -79,6 +87,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
     transition {
       days          = 30
       storage_class = "GLACIER"
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-multipart"
+    status = "Enabled"
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }

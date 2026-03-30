@@ -29,6 +29,10 @@ data "archive_file" "cost_ingestion" {
 }
 
 resource "aws_lambda_function" "cost_ingestion" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-cost-ingestion"
   description   = "Ingests AWS Cost Explorer data daily, detects anomalies, publishes metrics, and alerts on cost spikes"
 
@@ -40,6 +44,12 @@ resource "aws_lambda_function" "cost_ingestion" {
   runtime     = "nodejs20.x"
   timeout     = 300
   memory_size = 512
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -58,8 +68,9 @@ resource "aws_lambda_function" "cost_ingestion" {
 }
 
 resource "aws_cloudwatch_log_group" "cost_ingestion" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${aws_lambda_function.cost_ingestion.function_name}"
-  retention_in_days = 30
+  retention_in_days = 365
   tags              = var.tags
 }
 

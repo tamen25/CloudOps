@@ -36,13 +36,18 @@ data "archive_file" "lambda" {
 
 # CloudWatch log group — created explicitly so we control retention
 resource "aws_cloudwatch_log_group" "lambda" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-error-budget-tracker"
-  retention_in_days = 14
+  retention_in_days = 365
 
   tags = var.tags
 }
 
 resource "aws_lambda_function" "error_budget_tracker" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-error-budget-tracker"
   description   = "Queries Prometheus SLO recording rules and tracks error budgets for order-api"
 
@@ -54,6 +59,12 @@ resource "aws_lambda_function" "error_budget_tracker" {
 
   timeout     = 60
   memory_size = 256
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {

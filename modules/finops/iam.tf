@@ -18,6 +18,7 @@ resource "aws_iam_role" "cost_ingestion" {
 }
 
 data "aws_iam_policy_document" "cost_ingestion" {
+  #checkov:skip=CKV_AWS_356:FinOps Lambda requires Cost Explorer access - no resource-level restrictions available
   # CloudWatch Logs
   statement {
     sid    = "CloudWatchLogs"

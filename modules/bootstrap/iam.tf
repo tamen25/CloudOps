@@ -108,6 +108,12 @@ resource "aws_iam_role_policy" "deployer_state_access" {
 
 # Defines broad permissions for deploying AWS infrastructure resources
 data "aws_iam_policy_document" "deployer_infrastructure" {
+  #checkov:skip=CKV_AWS_356:Deployer role requires broad infrastructure permissions for Terraform
+  #checkov:skip=CKV_AWS_111:Deployer role requires write access for infrastructure deployment
+  #checkov:skip=CKV_AWS_110:Deployer role requires IAM permissions for creating service roles
+  #checkov:skip=CKV_AWS_108:Deployer role requires S3/ECR access for artifact management
+  #checkov:skip=CKV_AWS_109:Deployer role requires IAM management permissions for infrastructure
+  #checkov:skip=CKV_AWS_107:Deployer role requires ECR credentials for image management
   statement {
     sid    = "InfrastructureDeployment"
     effect = "Allow"

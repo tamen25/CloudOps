@@ -7,8 +7,9 @@
 #   100% of monthly limit → CRITICAL
 
 resource "aws_sns_topic" "cost_alerts" {
-  name = "${var.project_name}-cost-alerts"
-  tags = var.tags
+  name              = "${var.project_name}-cost-alerts"
+  kms_master_key_id = "alias/aws/sns"
+  tags              = var.tags
 }
 
 # Allow AWS Budgets to publish notifications to this topic

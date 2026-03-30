@@ -1,5 +1,6 @@
 # Public subnets — ALB and NAT gateways; tagged for external load balancer discovery
 resource "aws_subnet" "public" {
+  #checkov:skip=CKV_AWS_130:Public subnets intentionally assign public IPs - required for ALB nodes
   count = local.az_count
 
   vpc_id                  = aws_vpc.main.id

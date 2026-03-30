@@ -6,6 +6,7 @@
 #   ttl           (Number) — epoch seconds; items auto-expire after 90 days
 
 resource "aws_dynamodb_table" "error_budgets" {
+  #checkov:skip=CKV_AWS_119:AWS managed encryption is acceptable - CMK adds cost without meaningful security benefit for dev
   name         = "${var.project_name}-error-budgets"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "slo_name"

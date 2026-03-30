@@ -22,6 +22,8 @@ resource "aws_iam_role" "self_healing" {
 }
 
 data "aws_iam_policy_document" "self_healing" {
+  #checkov:skip=CKV_AWS_356:Self-healing controller requires broad EKS/EC2/Lambda access for remediation
+  #checkov:skip=CKV_AWS_111:Self-healing controller requires write access for scaling and rollback operations
   # ── CloudWatch Logs ──────────────────────────────────────────────────────────
   statement {
     sid    = "CloudWatchLogs"

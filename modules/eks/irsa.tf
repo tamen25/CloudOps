@@ -53,6 +53,8 @@ resource "aws_iam_role" "order_api" {
 
 # Grants order-api access to Secrets Manager (DB credentials) and CloudWatch metrics
 resource "aws_iam_role_policy" "order_api" {
+  #checkov:skip=CKV_AWS_288:Order API IRSA role requires SecretsManager access for DB credentials
+  #checkov:skip=CKV_AWS_355:Order API IRSA role requires Secrets Manager access by resource pattern
   name = "order-api-permissions"
   role = aws_iam_role.order_api.id
 

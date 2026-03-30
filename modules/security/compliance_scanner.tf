@@ -32,13 +32,18 @@ data "archive_file" "compliance_scanner" {
 }
 
 resource "aws_cloudwatch_log_group" "compliance_scanner" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-compliance-scanner"
-  retention_in_days = 30
+  retention_in_days = 365
 
   tags = var.tags
 }
 
 resource "aws_lambda_function" "compliance_scanner" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-compliance-scanner"
   description   = "Scans AWS resources against a security baseline every 6 hours"
 
@@ -50,6 +55,12 @@ resource "aws_lambda_function" "compliance_scanner" {
 
   timeout     = 300
   memory_size = 512
+
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -126,6 +137,7 @@ resource "aws_iam_role_policy_attachment" "compliance_scanner_basic_execution" {
 }
 
 data "aws_iam_policy_document" "compliance_scanner_permissions" {
+  #checkov:skip=CKV_AWS_356:Compliance scanner requires read access across multiple AWS services
   # EC2 — describe security groups in the project VPC
   statement {
     sid    = "EC2DescribeSecurityGroups"

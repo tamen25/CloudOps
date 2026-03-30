@@ -21,6 +21,7 @@ resource "aws_security_group_rule" "alb_ingress_https" {
 }
 
 resource "aws_security_group_rule" "alb_ingress_http" {
+  #checkov:skip=CKV_AWS_260:Port 80 intentionally open on ALB for HTTP-to-HTTPS redirect
   count             = var.enable_http ? 1 : 0
   type              = "ingress"
   from_port         = 80

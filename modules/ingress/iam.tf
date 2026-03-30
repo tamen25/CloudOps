@@ -22,6 +22,8 @@ resource "aws_iam_role" "lb_controller" {
 
 # Full official AWS Load Balancer Controller IAM policy (v2.8)
 resource "aws_iam_policy" "lb_controller" {
+  #checkov:skip=CKV_AWS_355:ALB controller requires broad EC2/ELB permissions by AWS design
+  #checkov:skip=CKV_AWS_290:ALB controller requires write access to manage load balancers
   name        = "${local.name}-lb-controller-policy"
   description = "AWS Load Balancer Controller IAM policy"
 
