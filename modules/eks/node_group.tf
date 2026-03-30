@@ -1,7 +1,8 @@
 resource "aws_launch_template" "nodes" {
   name_prefix = "${local.name}-nodes-lt-"
 
-  vpc_security_group_ids = [var.node_sg_id]
+  # Include the cluster SG so nodes can reach the private API endpoint (cluster SG guards the ENI)
+  vpc_security_group_ids = [var.node_sg_id, aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
 
   tag_specifications {
     resource_type = "instance"
