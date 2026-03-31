@@ -530,12 +530,14 @@ jobs:
       # Staged applies match deploy.sh ordering.
       # Each stage runs a fresh plan+apply for the targeted modules.
       # terraform apply -target cannot be combined with a saved plan file.
-      - name: Apply bootstrap + networking
+      - name: Apply bootstrap + networking + dns
         # Disable ingress/observability vars so the EKS data source (count guard)
         # stays at 0 — EKS cluster doesn't exist yet at this stage.
+        # module.dns is included here so the Route53 zone exists before module.ingress
+        # references module.dns[0].zone_id in the ingress apply step.
         run: |
           terraform apply \
-            -target=module.bootstrap -target=module.networking \
+            -target=module.bootstrap -target=module.networking -target=module.dns \
             -var 'enable_ingress=false' -var 'enable_observability=false' \
             -auto-approve
 
@@ -549,6 +551,21 @@ jobs:
 
       - name: Apply ingress
         run: terraform apply -target=module.ingress -auto-approve
+
+      - name: Debug LBC pods (on ingress failure)
+        if: failure()
+        run: |
+          CLUSTER=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "")
+          if [ -n "$CLUSTER" ]; then
+            aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+            echo "=== LBC pod describe ==="
+            kubectl -n kube-system describe pods \
+              -l app.kubernetes.io/name=aws-load-balancer-controller || true
+            echo "=== LBC pod logs ==="
+            kubectl -n kube-system logs \
+              -l app.kubernetes.io/name=aws-load-balancer-controller \
+              --tail=100 || true
+          fi
 
       - name: Apply observability
         run: terraform apply -target=module.observability -auto-approve
