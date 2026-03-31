@@ -5,12 +5,7 @@ output "certificate_arn" {
 
 output "hosted_zone_id" {
   description = "Route 53 hosted zone ID for tamendutta.com"
-  value       = aws_route53_zone.main.zone_id
-}
-
-output "route53_name_servers" {
-  description = "Name servers for tamendutta.com — update your registrar to these after first apply"
-  value       = aws_route53_zone.main.name_servers
+  value       = var.zone_id
 }
 
 output "lb_controller_role_arn" {

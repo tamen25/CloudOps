@@ -53,6 +53,19 @@ module "bootstrap" {
   github_token = var.github_token
 }
 
+# DNS Module — hosted zone for tamendutta.com
+# Kept alive independently of other modules; only destroyed when destroy_all = true.
+# After first apply, update registrar nameservers to the route53_name_servers output.
+
+module "dns" {
+  count  = var.destroy_all ? 0 : 1
+  source = "./modules/dns"
+
+  domain_name = "tamendutta.com"
+  environment = var.environment
+  tags        = local.common_tags
+}
+
 # Networking Module
 
 module "networking" {
@@ -127,6 +140,8 @@ module "ingress" {
 
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
+
+  zone_id = !var.destroy_all ? module.dns[0].zone_id : ""
 
   # Set these after the LBC has provisioned the ALB (leave empty on first deploy)
   alb_dns_name = var.alb_dns_name

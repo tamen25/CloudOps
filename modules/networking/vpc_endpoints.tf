@@ -83,6 +83,31 @@ resource "aws_vpc_endpoint" "sts" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-sts-endpoint" })
 }
 
+# Elastic Load Balancing — required for the AWS Load Balancer Controller to
+# create and manage ALBs/NLBs without a NAT gateway
+resource "aws_vpc_endpoint" "elasticloadbalancing" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.elasticloadbalancing"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-elb-endpoint" })
+}
+
+# ACM — required for the Load Balancer Controller to attach certificates to ALBs
+resource "aws_vpc_endpoint" "acm" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.acm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-acm-endpoint" })
+}
+
 # EC2 — required for VPC CNI (aws-node DaemonSet) to manage pod network interfaces
 resource "aws_vpc_endpoint" "ec2" {
   vpc_id              = aws_vpc.main.id

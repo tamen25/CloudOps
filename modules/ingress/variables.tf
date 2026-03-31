@@ -47,6 +47,11 @@ variable "alb_zone_id" {
   default     = ""
 }
 
+variable "zone_id" {
+  description = "Route53 hosted zone ID for the domain (from dns module)"
+  type        = string
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

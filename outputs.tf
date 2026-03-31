@@ -40,8 +40,8 @@ output "acm_certificate_arn" {
 }
 
 output "route53_name_servers" {
-  description = "tamendutta.com name servers — update your registrar to these after first ingress apply"
-  value       = var.enable_ingress ? module.ingress[0].route53_name_servers : null
+  description = "tamendutta.com name servers — update your registrar to these after first dns apply"
+  value       = !var.destroy_all ? module.dns[0].name_servers : null
 }
 
 # Database
