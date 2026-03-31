@@ -210,9 +210,9 @@ module "security" {
   count  = var.enable_security ? 1 : 0
   source = "./modules/security"
 
-  eks_cluster_name         = local.eks_cluster_name
-  otel_api_key_secret_name = "otel-auth"
-  environment              = var.environment
+  eks_cluster_name = local.eks_cluster_name
+  otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
+  environment      = var.environment
   project_name             = var.project_name
 
   aws_account_id  = local.account_id

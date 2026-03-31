@@ -3,10 +3,11 @@ variable "eks_cluster_name" {
   type        = string
 }
 
-variable "otel_api_key_secret_name" {
-  description = "Name of the Kubernetes secret in the monitoring namespace that holds the OTel Collector bearer token (key: api-key)"
+variable "otel_api_key" {
+  description = "OTel Collector bearer token — passed from the observability module to configure Falcosidekick"
   type        = string
-  default     = "otel-auth"
+  sensitive   = true
+  default     = ""
 }
 
 variable "environment" {

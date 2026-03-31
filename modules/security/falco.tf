@@ -15,17 +15,9 @@ resource "kubernetes_namespace" "falco" {
 }
 
 # ── OTel auth header secret (falco namespace copy) ────────────────────────────
-# The OTel Collector bearer token lives in monitoring/otel-auth.
-# Falcosidekick runs in the falco namespace, so we create a local copy that
-# pre-formats the full Authorization header value. The FALCOSIDEKICK_WEBHOOK_CUSTOMHEADERS
-# env var reads from this secret, avoiding embedding the token in Helm values.
-
-data "kubernetes_secret" "otel_auth" {
-  metadata {
-    name      = var.otel_api_key_secret_name
-    namespace = "monitoring"
-  }
-}
+# Falcosidekick runs in the falco namespace. This secret pre-formats the full
+# Authorization header value using the OTel API key passed from the observability
+# module, avoiding a cross-namespace Kubernetes data source read.
 
 resource "kubernetes_secret" "falco_otel_auth" {
   metadata {
@@ -35,7 +27,7 @@ resource "kubernetes_secret" "falco_otel_auth" {
 
   data = {
     # Falcosidekick customHeaders format: "HeaderName:HeaderValue"
-    "custom-headers" = "Authorization:Bearer ${data.kubernetes_secret.otel_auth.data["api-key"]}"
+    "custom-headers" = "Authorization:Bearer ${var.otel_api_key}"
   }
 }
 
