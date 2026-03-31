@@ -74,7 +74,7 @@ rds_port            = 5432
 # ─────────────────────────────────────────────────────────────
 # EKS
 # ─────────────────────────────────────────────────────────────
-eks_kubernetes_version    = "1.32"
+eks_kubernetes_version    = "1.33"
 eks_node_instance_types   = ["t3.large"]
 eks_node_min_size         = 2
 eks_node_max_size         = 6
