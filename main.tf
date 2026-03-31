@@ -213,7 +213,7 @@ module "security" {
   eks_cluster_name = local.eks_cluster_name
   otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
   environment      = var.environment
-  project_name             = var.project_name
+  project_name     = var.project_name
 
   aws_account_id  = local.account_id
   region          = var.region
