@@ -146,17 +146,11 @@ resource "helm_release" "otel_collector" {
   depends_on = [kubernetes_secret.otel_auth, helm_release.prometheus, helm_release.loki, helm_release.tempo]
 }
 
-# Route 53 hosted zone lookup for otel DNS record
-data "aws_route53_zone" "main" {
-  name         = var.domain
-  private_zone = false
-}
-
 # A record for otel.tamendutta.com — created after first deploy once ALB DNS is known
 resource "aws_route53_record" "otel" {
   count = var.alb_dns_name != "" ? 1 : 0
 
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = var.zone_id
   name    = "otel.${var.domain}"
   type    = "A"
 

@@ -169,6 +169,7 @@ module "observability" {
 
   acm_cert_arn = var.enable_ingress ? module.ingress[0].certificate_arn : ""
   domain       = "tamendutta.com"
+  zone_id      = !var.destroy_all ? module.dns[0].zone_id : ""
 
   alb_dns_name = var.alb_dns_name
   alb_zone_id  = var.alb_zone_id
