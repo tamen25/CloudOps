@@ -241,6 +241,10 @@ module "security" {
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
   tags = local.common_tags
+
+  # Observability must be applied first — security reads the otel-auth secret
+  # from the monitoring namespace which is created by the observability stack.
+  depends_on = [module.observability]
 }
 
 # FinOps Module — Cost Explorer ingestion, anomaly detection, AWS Budgets
