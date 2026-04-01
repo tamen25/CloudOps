@@ -187,15 +187,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Disable modules that contact the Kubernetes API during plan:
-          #   ingress/observability  — EKS data-source + Route53 zone lookups
-          #   security               — data.kubernetes_secret + kubernetes_manifest
-          #                           both validate against the live API at plan time
-          # The staged apply deploys all three after the cluster exists.
+          # Plan runs against the full configuration (no module overrides).
+          # On a fresh deploy the EKS cluster doesn't exist yet so the
+          # kubernetes/helm data sources fail — that is expected and handled
+          # by continue-on-error: true on this job.
+          # After a successful deploy this produces an accurate full plan.
           terraform plan -lock=false \
-            -var 'enable_ingress=false' \
-            -var 'enable_observability=false' \
-            -var 'enable_security=false' \
             -out=tfplan -no-color 2>&1 | tee plan-output.txt
 
       - name: Post plan to PR
