@@ -524,6 +524,31 @@ jobs:
             fi
           fi
 
+      - name: Import pre-existing networking resources
+        run: |
+          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
+          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+          SUBNET_GROUP_NAME="${PROJECT_NAME}-db-subnet-group"
+          SUBNET_GROUP_ADDR="module.networking[0].aws_db_subnet_group.main"
+
+          if aws rds describe-db-subnet-groups \
+               --db-subnet-group-name "$SUBNET_GROUP_NAME" \
+               --output text >/dev/null 2>&1; then
+            if terraform state list 2>/dev/null | grep -qF "$SUBNET_GROUP_ADDR"; then
+              echo "DB subnet group already in Terraform state — skipping import"
+            else
+              echo "Importing DB subnet group: $SUBNET_GROUP_NAME"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                "$SUBNET_GROUP_ADDR" "$SUBNET_GROUP_NAME" \
+                || echo "Warning: DB subnet group import failed"
+            fi
+          else
+            echo "DB subnet group does not exist in AWS — skipping import"
+          fi
+
       # Staged applies match deploy.sh ordering.
       # Each stage runs a fresh plan+apply for the targeted modules.
       # terraform apply -target cannot be combined with a saved plan file.
