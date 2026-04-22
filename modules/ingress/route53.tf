@@ -5,7 +5,7 @@ resource "aws_route53_record" "api" {
   count = var.alb_dns_name != "" ? 1 : 0
 
   zone_id = local.zone_id
-  name    = "api.tamendutta.com"
+  name    = "${var.api_subdomain}.${var.domain_name}"
   type    = "A"
 
   alias {
@@ -19,7 +19,7 @@ resource "aws_route53_record" "grafana" {
   count = var.alb_dns_name != "" ? 1 : 0
 
   zone_id = local.zone_id
-  name    = "grafana.tamendutta.com"
+  name    = "${var.grafana_subdomain}.${var.domain_name}"
   type    = "A"
 
   alias {

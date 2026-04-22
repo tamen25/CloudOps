@@ -16,6 +16,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --chown=nodejs:nodejs src ./src
+COPY --chown=nodejs:nodejs migrations ./migrations
 COPY --chown=nodejs:nodejs package.json ./
 
 USER nodejs

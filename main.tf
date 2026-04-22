@@ -51,9 +51,10 @@ module "bootstrap" {
   # Raw GitHub PAT — bootstrap stores it in Secrets Manager so the ARN can be
   # passed to the security module without duplicating secret management.
   github_token = var.github_token
+  github_repo  = var.security_github_repo
 }
 
-# DNS Module — hosted zone for tamendutta.com
+# DNS Module — hosted zone for var.domain_name
 # Kept alive independently of other modules; only destroyed when destroy_all = true.
 # After first apply, update registrar nameservers to the route53_name_servers output.
 
@@ -61,7 +62,7 @@ module "dns" {
   count  = var.destroy_all ? 0 : 1
   source = "./modules/dns"
 
-  domain_name = "tamendutta.com"
+  domain_name = var.domain_name
   environment = var.environment
   tags        = local.common_tags
 }
@@ -141,7 +142,8 @@ module "ingress" {
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
-  zone_id = !var.destroy_all ? module.dns[0].zone_id : ""
+  zone_id     = !var.destroy_all ? module.dns[0].zone_id : ""
+  domain_name = var.domain_name
 
   # Set these after the LBC has provisioned the ALB (leave empty on first deploy)
   alb_dns_name = var.alb_dns_name
@@ -168,8 +170,9 @@ module "observability" {
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
   acm_cert_arn = var.enable_ingress ? module.ingress[0].certificate_arn : ""
-  domain       = "tamendutta.com"
+  domain       = var.domain_name
   zone_id      = !var.destroy_all ? module.dns[0].zone_id : ""
+  application_namespace = var.order_api_namespace
 
   alb_dns_name = var.alb_dns_name
   alb_zone_id  = var.alb_zone_id
@@ -302,6 +305,9 @@ module "self_healing" {
   github_repo             = var.security_github_repo
 
   dry_run = var.self_healing_dry_run
+
+  application_namespace = var.order_api_namespace
+  application_name      = "order-api"
 
   tags = local.common_tags
 }

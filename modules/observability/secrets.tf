@@ -8,6 +8,15 @@ resource "kubernetes_namespace" "monitoring" {
   }
 }
 
+resource "kubernetes_namespace" "application" {
+  metadata {
+    name = var.application_namespace
+    labels = {
+      name = var.application_namespace
+    }
+  }
+}
+
 # OTel API key — 32-char alphanumeric token used by bearertokenauth extension
 resource "random_password" "otel_api_key" {
   length  = 32
@@ -44,17 +53,19 @@ resource "kubernetes_secret" "otel_auth" {
   depends_on = [kubernetes_namespace.monitoring]
 }
 
-# otel-auth in cloudops namespace — injected as OTEL_API_KEY env var into order-api pods
+# otel-auth in the application namespace — injected as OTEL_API_KEY env var into order-api pods
 # Kubernetes secretKeyRef cannot reference secrets across namespaces, so we maintain a copy here.
-resource "kubernetes_secret" "otel_auth_cloudops" {
+resource "kubernetes_secret" "otel_auth_application" {
   metadata {
     name      = "otel-auth"
-    namespace = "cloudops"
+    namespace = var.application_namespace
   }
 
   data = {
     api-key = random_password.otel_api_key.result
   }
+
+  depends_on = [kubernetes_namespace.application]
 }
 
 # Grafana admin password — stored in AWS Secrets Manager and as a k8s secret

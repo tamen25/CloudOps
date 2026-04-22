@@ -95,9 +95,9 @@ variable "github_token_secret_arn" {
 }
 
 variable "github_repo" {
-  description = "GitHub repository in owner/name format where security issues are created"
+  description = "GitHub repository in owner/name format where security issues are created. Empty = skip issue creation."
   type        = string
-  default     = "tamen25/CloudOps"
+  default     = ""
 }
 
 # ── kube-bench IRSA inputs ────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ permissions:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   TF_VERSION: 1.7.0
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   detect-drift:
@@ -28,7 +29,7 @@ jobs:
     steps:
 
       # ── 1. Checkout ─────────────────────────────────────────────────────────
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── 2. AWS credentials via OIDC ─────────────────────────────────────────
       - name: Configure AWS credentials

@@ -11,7 +11,11 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 
 // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES are read automatically by the SDK from env.
 // We build the exporters manually so we can attach the Authorization header to all three signals.
-const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'https://otel.tamendutta.com';
+const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '';
+if (!endpoint) {
+  // eslint-disable-next-line no-console
+  console.warn('OTEL_EXPORTER_OTLP_ENDPOINT not set — traces/metrics/logs will not be exported');
+}
 const headers  = { Authorization: `Bearer ${process.env.OTEL_API_KEY || ''}` };
 
 const sdk = new NodeSDK({

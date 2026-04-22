@@ -145,7 +145,7 @@ variable "security_github_token_secret_arn" {
 variable "security_github_repo" {
   description = "GitHub repository in owner/name format where the auto-remediation Lambda creates security issues"
   type        = string
-  default     = "tamen25/CloudOps"
+  default     = ""
 }
 
 variable "slo_grafana_api_key_secret_arn" {
@@ -221,6 +221,16 @@ variable "owner" {
   description = "Owner or team responsible for resources"
   type        = string
   default     = ""
+}
+
+variable "domain_name" {
+  description = "Root domain used for ACM wildcard cert, Route 53 hosted zone, ingress hostnames, and default URLs. Must be a domain you control."
+  type        = string
+
+  validation {
+    condition     = length(var.domain_name) > 0
+    error_message = "domain_name is required — set it to a domain you own (e.g. example.com)."
+  }
 }
 
 # Networking Module Variables

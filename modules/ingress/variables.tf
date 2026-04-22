@@ -52,6 +52,23 @@ variable "zone_id" {
   type        = string
 }
 
+variable "domain_name" {
+  description = "Root domain for ACM wildcard cert and Route 53 records (e.g. example.com)"
+  type        = string
+}
+
+variable "api_subdomain" {
+  description = "Subdomain for the application API"
+  type        = string
+  default     = "api"
+}
+
+variable "grafana_subdomain" {
+  description = "Subdomain for the Grafana UI"
+  type        = string
+  default     = "grafana"
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

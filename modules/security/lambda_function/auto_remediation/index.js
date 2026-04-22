@@ -28,7 +28,7 @@ const fetch                                     = require('node-fetch');
 const REGION                  = process.env.AWS_REGION               || 'us-east-1';
 const FINDINGS_TABLE          = process.env.FINDINGS_TABLE           || 'cloudops-security-findings';
 const GITHUB_TOKEN_SECRET_ARN = process.env.GITHUB_TOKEN_SECRET_ARN  || '';
-const GITHUB_REPO             = process.env.GITHUB_REPO              || 'tamen25/CloudOps';
+const GITHUB_REPO             = process.env.GITHUB_REPO              || '';
 const EKS_CLUSTER_NAME        = process.env.EKS_CLUSTER_NAME         || '';
 const ENVIRONMENT             = process.env.ENVIRONMENT              || 'dev';
 const DRY_RUN                 = process.env.DRY_RUN === 'true';

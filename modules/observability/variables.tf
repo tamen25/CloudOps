@@ -46,9 +46,8 @@ variable "acm_cert_arn" {
 }
 
 variable "domain" {
-  description = "Root domain for DNS records"
+  description = "Root domain for DNS records (e.g. example.com)"
   type        = string
-  default     = "tamendutta.com"
 }
 
 variable "alb_dns_name" {
@@ -67,6 +66,12 @@ variable "zone_id" {
   description = "Route53 hosted zone ID for the domain (from dns module)"
   type        = string
   default     = ""
+}
+
+variable "application_namespace" {
+  description = "Kubernetes namespace where application workloads run"
+  type        = string
+  default     = "cloudops"
 }
 
 variable "tags" {

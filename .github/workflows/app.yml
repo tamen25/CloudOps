@@ -4,6 +4,7 @@
 #   ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
 #   EKS_CLUSTER_NAME             — EKS cluster name from: terraform output -raw eks_cluster_name
 #   GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
+#   TF_VARS                      — Full contents of terraform.tfvars (used to keep app manifest rendering aligned with infra state)
 #
 # Image signing (Cosign keyless — no secrets required):
 #   Signatures are stored in ECR alongside the image using Sigstore's keyless flow.
@@ -29,6 +30,10 @@ env:
   ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
   EKS_CLUSTER_NAME:   ${{ secrets.EKS_CLUSTER_NAME }}
   IMAGE_TAG:          ${{ github.sha }}
+  # Opt JavaScript actions still on Node 20 into the Node 24 runtime (GitHub
+  # compatibility shim). Remove once every action listed below is on a release
+  # that targets Node 24 natively.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -37,10 +42,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: npm
@@ -57,7 +62,6 @@ jobs:
       - name: Run tests
         run: npm test
         working-directory: apps/order-api
-        continue-on-error: true  # placeholder test script — remove once real tests exist
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 2: Kubernetes manifest validation — runs in parallel with build-and-push
@@ -66,7 +70,29 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Render Kubernetes manifests
+        env:
+          ORDER_API_NAMESPACE: cloudops
+          ORDER_API_SERVICE_ACCOUNT: order-api
+          ORDER_API_IRSA_ROLE_ARN: arn:aws:iam::123456789012:role/cloudops-order-api-irsa
+          ORDER_API_IMAGE: example.com/order-api:latest
+          ORDER_API_ENVIRONMENT: dev
+          AWS_REGION: us-east-1
+          DB_NAME: cloudops
+          DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudops-db
+          OTEL_ENDPOINT: https://otel.example.com
+          OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,k8s.cluster.name=cloudops-dev-cluster
+          ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/example
+          ORDER_API_HOST: api.example.com
+          API_KEY_SECRET_ARN: ""
+        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
 
       - name: Install kubeval
         run: |
@@ -75,7 +101,7 @@ jobs:
           sudo mv kubeval /usr/local/bin/
 
       - name: kubeval — strict schema validation
-        run: kubeval --strict apps/order-api/k8s/*.yaml
+        run: kubeval --strict /tmp/order-api-k8s/*.yaml
 
       - name: kubectl apply --dry-run=client
         run: |
@@ -97,14 +123,13 @@ jobs:
           - name: mock
             user: {}
           KUBECFG
-          kubectl apply --dry-run=client -f apps/order-api/k8s/
+          kubectl apply --dry-run=client -f /tmp/order-api-k8s/
 
       - name: Verify deployment manifest container name
         run: |
-          # The container name must match what `kubectl set image` targets in the deploy job
           CONTAINER=$(python3 - <<'PY'
-          import yaml, sys
-          with open("apps/order-api/k8s/deployment.yaml") as f:
+          import yaml
+          with open("/tmp/order-api-k8s/deployment.yaml") as f:
               doc = yaml.safe_load(f)
           containers = doc["spec"]["template"]["spec"]["containers"]
           print(containers[0]["name"])
@@ -121,7 +146,7 @@ jobs:
         run: |
           NS=$(python3 - <<'PY'
           import yaml
-          with open("apps/order-api/k8s/deployment.yaml") as f:
+          with open("/tmp/order-api-k8s/deployment.yaml") as f:
               doc = yaml.safe_load(f)
           print(doc.get("metadata", {}).get("namespace", ""))
           PY
@@ -152,7 +177,7 @@ jobs:
       security-events: write  # Grype SARIF upload to GitHub code scanning
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -182,7 +207,7 @@ jobs:
       # Signs the image in-toto using GitHub Actions OIDC as the identity.
       # The signature and its certificate are stored in ECR alongside the image.
       # No private key or secret is required — the signing identity is:
-      #   https://github.com/tamen25/CloudOps/.github/workflows/app.yml@refs/heads/main
+      #   https://github.com/${{ github.repository }}/.github/workflows/app.yml@refs/heads/main
       # ─────────────────────────────────────────────────────────────────────────
 
       - name: Install Cosign
@@ -198,7 +223,7 @@ jobs:
       - name: Verify image signature
         run: |
           cosign verify \
-            --certificate-identity-regexp="https://github\.com/tamen25/CloudOps/\.github/workflows/app\.yml@refs/heads/.*" \
+            --certificate-identity-regexp="https://github\.com/${{ github.repository }}/\.github/workflows/app\.yml@refs/heads/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
             ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           echo "✓ Signature verified"
@@ -262,7 +287,7 @@ jobs:
           \`\`\`
           cosign verify-attestation \\
             --type spdxjson \\
-            --certificate-identity-regexp="https://github.com/tamen25/CloudOps/.*" \\
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.*" \\
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \\
             ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           \`\`\`
@@ -340,7 +365,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -532,7 +557,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -547,6 +572,62 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.0
+
+      - name: Write terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -n "$TF_VARS" ]; then
+            printf '%s' "$TF_VARS" > terraform.tfvars
+          fi
+
+      - name: Init Terraform for outputs
+        run: terraform init
+
+      - name: Load deployment configuration from Terraform state
+        run: |
+          ORDER_API_URL=$(terraform output -raw order_api_url)
+          ORDER_API_HOST=${ORDER_API_URL#https://}
+          ORDER_API_HOST=${ORDER_API_HOST#http://}
+
+          ACM_CERT_ARN=$(terraform output -raw acm_certificate_arn)
+          DB_SECRET_ARN=$(terraform output -raw database_secret_arn)
+          OTEL_ENDPOINT=$(terraform output -raw otel_endpoint)
+          ORDER_API_IRSA_ROLE_ARN=$(terraform output -raw order_api_irsa_role_arn)
+
+          ORDER_API_NAMESPACE=$(grep '^order_api_namespace' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+          ORDER_API_SERVICE_ACCOUNT=$(grep '^order_api_service_account' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+          ORDER_API_ENVIRONMENT=$(grep '^environment' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+          DB_NAME=$(grep '^database_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+
+          ORDER_API_NAMESPACE=${ORDER_API_NAMESPACE:-cloudops}
+          ORDER_API_SERVICE_ACCOUNT=${ORDER_API_SERVICE_ACCOUNT:-order-api}
+          ORDER_API_ENVIRONMENT=${ORDER_API_ENVIRONMENT:-dev}
+          DB_NAME=${DB_NAME:-cloudops}
+
+          OTEL_RESOURCE_ATTRIBUTES="deployment.environment=${ORDER_API_ENVIRONMENT},k8s.cluster.name=${EKS_CLUSTER_NAME}"
+
+          API_KEY_SECRET_ARN="${{ secrets.ORDER_API_KEY_SECRET_ARN }}"
+
+          {
+            echo "ORDER_API_URL=${ORDER_API_URL}"
+            echo "ORDER_API_HOST=${ORDER_API_HOST}"
+            echo "ACM_CERT_ARN=${ACM_CERT_ARN}"
+            echo "DB_SECRET_ARN=${DB_SECRET_ARN}"
+            echo "OTEL_ENDPOINT=${OTEL_ENDPOINT}"
+            echo "ORDER_API_IRSA_ROLE_ARN=${ORDER_API_IRSA_ROLE_ARN}"
+            echo "ORDER_API_NAMESPACE=${ORDER_API_NAMESPACE}"
+            echo "ORDER_API_SERVICE_ACCOUNT=${ORDER_API_SERVICE_ACCOUNT}"
+            echo "ORDER_API_ENVIRONMENT=${ORDER_API_ENVIRONMENT}"
+            echo "DB_NAME=${DB_NAME}"
+            echo "OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES}"
+            echo "API_KEY_SECRET_ARN=${API_KEY_SECRET_ARN}"
+          } >> "$GITHUB_ENV"
+
       # ── Signature gate ────────────────────────────────────────────────────────
       # Aborts the deployment if the image does not have a valid Cosign signature
       # from this repository's workflow. Prevents deploying manually-pushed or
@@ -560,36 +641,48 @@ jobs:
         run: |
           echo "Verifying Cosign signature for ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
           cosign verify \
-            --certificate-identity-regexp="https://github\.com/tamen25/CloudOps/\.github/workflows/app\.yml@refs/heads/.*" \
+            --certificate-identity-regexp="https://github\.com/${{ github.repository }}/\.github/workflows/app\.yml@refs/heads/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
             ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           echo "✓ Signature verified — proceeding with deployment"
 
-      - name: Capture current image for rollback
+      - name: Capture current deployment state
         run: |
-          PREVIOUS_IMAGE=$(kubectl get deployment order-api -n cloudops \
+          PREVIOUS_IMAGE=$(kubectl get deployment order-api -n "$ORDER_API_NAMESPACE" \
             -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          if kubectl get deployment order-api -n "$ORDER_API_NAMESPACE" >/dev/null 2>&1; then
+            echo "DEPLOYMENT_EXISTS=true" >> "$GITHUB_ENV"
+          else
+            echo "DEPLOYMENT_EXISTS=false" >> "$GITHUB_ENV"
+          fi
           echo "Previous image: $PREVIOUS_IMAGE"
           echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
 
-      - name: Deploy and verify rollout
+      - name: Render Kubernetes manifests
+        env:
+          ORDER_API_IMAGE: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+
+      - name: Apply manifests and verify rollout
         run: |
           set -e
 
-          echo "Deploying image: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
-          kubectl set image deployment/order-api \
-            order-api=${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }} \
-            -n cloudops
+          echo "Applying manifests for image: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
+          kubectl apply -f /tmp/order-api-k8s/
 
-          if ! kubectl rollout status deployment/order-api -n cloudops --timeout=300s; then
+          if ! kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s; then
             echo "::error::Rollout failed — initiating automatic rollback to $PREVIOUS_IMAGE"
 
-            kubectl rollout undo deployment/order-api -n cloudops
+            if [ "$DEPLOYMENT_EXISTS" = "true" ] && [ "$PREVIOUS_IMAGE" != "none" ]; then
+              kubectl rollout undo deployment/order-api -n "$ORDER_API_NAMESPACE"
             # Wait for rollback to settle (best-effort — don't fail if this also times out)
-            kubectl rollout status deployment/order-api -n cloudops --timeout=120s || true
+              kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=120s || true
 
-            ROLLED_BACK_TO=$(kubectl get deployment order-api -n cloudops \
-              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "unknown")
+              ROLLED_BACK_TO=$(kubectl get deployment order-api -n "$ORDER_API_NAMESPACE" \
+                -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "unknown")
+            else
+              ROLLED_BACK_TO="not-available-on-first-deploy"
+            fi
 
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## ❌ Deployment Failed — Automatically Rolled Back
@@ -601,8 +694,8 @@ jobs:
           | **Rolled back to**  | \`$ROLLED_BACK_TO\` |
           | **Action required** | Investigate the rollout failure before re-deploying |
 
-          Run \`kubectl describe deployment order-api -n cloudops\` and
-          \`kubectl logs -n cloudops -l app=order-api --previous\` for details.
+          Run \`kubectl describe deployment order-api -n ${ORDER_API_NAMESPACE}\` and
+          \`kubectl logs -n ${ORDER_API_NAMESPACE} -l app=order-api --previous\` for details.
           EOF
             exit 1
           fi
@@ -618,9 +711,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    env:
-      BASE_URL: https://api.tamendutta.com
-      GRAFANA_URL: https://grafana.tamendutta.com
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -628,6 +718,52 @@ jobs:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           role-session-name: github-actions-integration-test
           aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.0
+
+      - name: Write terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -n "$TF_VARS" ]; then
+            printf '%s' "$TF_VARS" > terraform.tfvars
+          fi
+
+      - name: Init Terraform for outputs
+        run: terraform init
+
+      - name: Load integration endpoints
+        run: |
+          echo "BASE_URL=$(terraform output -raw order_api_url)" >> "$GITHUB_ENV"
+          echo "GRAFANA_URL=$(terraform output -raw grafana_url)" >> "$GITHUB_ENV"
+
+      - name: Resolve API key for authenticated endpoints
+        env:
+          API_KEY_SECRET_ARN: ${{ secrets.ORDER_API_KEY_SECRET_ARN }}
+        run: |
+          if [ -z "$API_KEY_SECRET_ARN" ]; then
+            echo "ORDER_API_KEY_SECRET_ARN secret is not set — tests will run unauthenticated"
+            echo "API_KEY=" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          RAW=$(aws secretsmanager get-secret-value --secret-id "$API_KEY_SECRET_ARN" --query SecretString --output text)
+          API_KEY=$(printf '%s' "$RAW" | python3 <<'PY'
+          import json, sys
+          raw = sys.stdin.read()
+          try:
+              d = json.loads(raw)
+              print(d.get('api_key') or d.get('apiKey') or d.get('value') or '')
+          except Exception:
+              print(raw)
+          PY
+          )
+          echo "::add-mask::$API_KEY"
+          echo "API_KEY=$API_KEY" >> "$GITHUB_ENV"
 
       - name: "Test 1 — GET /health → 200 with status:ok"
         id: t1
@@ -659,6 +795,7 @@ jobs:
             echo "Attempt $i/5"
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/order" \
               -H "Content-Type: application/json" \
+              ${API_KEY:+-H "X-Api-Key: $API_KEY"} \
               -d '{"items":[{"name":"test","price":9.99}]}')
             STATUS=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
@@ -682,27 +819,27 @@ jobs:
           echo "✗ FAIL: POST /order did not return 201 after 5 attempts"
           exit 1
 
-      - name: "Test 3 — GET /orders → 200, array, count >= 1"
+      - name: "Test 3 — GET /orders → 200, object with orders array, count >= 1"
         id: t3
         run: |
           for i in $(seq 1 5); do
             echo "Attempt $i/5"
-            BODY=$(curl -sf "$BASE_URL/orders" 2>/dev/null || echo "")
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/orders")
+            BODY=$(curl -sf ${API_KEY:+-H "X-Api-Key: $API_KEY"} "$BASE_URL/orders" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null ${API_KEY:+-H "X-Api-Key: $API_KEY"} -w "%{http_code}" "$BASE_URL/orders")
             echo "  HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "  Body (first 200 chars): ${BODY:0:200}"
               COUNT=$(echo "$BODY" | python3 -c \
-                "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else -1)" 2>/dev/null || echo "-1")
+                "import sys,json; d=json.load(sys.stdin); orders=d.get('orders'); print(len(orders) if isinstance(orders,list) else -1)" 2>/dev/null || echo "-1")
               if [ "$COUNT" = "-1" ]; then
-                echo "✗ FAIL: GET /orders response is not a JSON array"
+                echo "✗ FAIL: GET /orders response is not an object with an orders array"
                 exit 1
               fi
               if [ "$COUNT" -ge 1 ]; then
-                echo "✓ PASS: GET /orders returned 200, array with $COUNT item(s)"
+                echo "✓ PASS: GET /orders returned 200 with orders array containing $COUNT item(s)"
                 exit 0
               fi
-              echo "✗ FAIL: GET /orders returned empty array (expected >= 1 after POST)"
+              echo "✗ FAIL: GET /orders returned an empty orders array (expected >= 1 after POST)"
               exit 1
             fi
             [ "$i" -lt 5 ] && sleep 15
@@ -710,27 +847,16 @@ jobs:
           echo "✗ FAIL: GET /orders did not return 200 after 5 attempts"
           exit 1
 
-      - name: "Test 4 — GET /metrics → 200 with http_requests_total"
+      - name: "Test 4 — GET /metrics is NOT publicly exposed (security)"
         id: t4
         run: |
-          for i in $(seq 1 5); do
-            echo "Attempt $i/5"
-            BODY=$(curl -sf "$BASE_URL/metrics" 2>/dev/null || echo "")
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/metrics")
-            echo "  HTTP $STATUS"
-            if [ "$STATUS" = "200" ]; then
-              if echo "$BODY" | grep -q "http_requests_total"; then
-                echo "✓ PASS: /metrics returned 200 and contains http_requests_total"
-                exit 0
-              fi
-              echo "✗ FAIL: /metrics returned 200 but missing http_requests_total"
-              echo "  Body (first 300 chars): ${BODY:0:300}"
-              exit 1
-            fi
-            [ "$i" -lt 5 ] && sleep 15
-          done
-          echo "✗ FAIL: /metrics did not return 200 after 5 attempts"
-          exit 1
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/metrics")
+          echo "  HTTP $STATUS on $BASE_URL/metrics"
+          if [ "$STATUS" = "200" ]; then
+            echo "✗ FAIL: /metrics is publicly reachable — must be on the internal metrics port only"
+            exit 1
+          fi
+          echo "✓ PASS: /metrics is not publicly reachable (HTTP $STATUS)"
 
       - name: "Test 5 — Verify OTel traces flowing in Tempo (last 5 min)"
         id: t5
@@ -780,8 +906,8 @@ jobs:
           |------|----------|-----------|--------|
           | 1 | \`GET /health\` | HTTP 200, body contains \`status\` field | $(pass_icon "$T1") |
           | 2 | \`POST /order\` | HTTP 201, body contains order identifier | $(pass_icon "$T2") |
-          | 3 | \`GET /orders\` | HTTP 200, JSON array with ≥1 item | $(pass_icon "$T3") |
-          | 4 | \`GET /metrics\` | HTTP 200, contains \`http_requests_total\` | $(pass_icon "$T4") |
+          | 3 | \`GET /orders\` | HTTP 200, object with \`orders\` array and ≥1 item | $(pass_icon "$T3") |
+          | 4 | \`GET /metrics\` (public) | HTTP != 200 — must not be publicly reachable | $(pass_icon "$T4") |
           | 5 | Tempo traces | ≥1 trace for \`order-api\` in last 5 min | $(pass_icon "$T5") |
 
           | | |

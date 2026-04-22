@@ -40,7 +40,7 @@ output "acm_certificate_arn" {
 }
 
 output "route53_name_servers" {
-  description = "tamendutta.com name servers — update your registrar to these after first dns apply"
+  description = "${var.domain_name} name servers — update your registrar to these after first dns apply"
   value       = !var.destroy_all ? module.dns[0].name_servers : null
 }
 
@@ -63,7 +63,7 @@ output "database_connection_info" {
 # Application
 output "order_api_url" {
   description = "Order API public URL"
-  value       = "https://api.tamendutta.com"
+  value       = "https://api.${var.domain_name}"
 }
 
 # Observability (only populated when enable_observability = true)

@@ -71,6 +71,8 @@ resource "aws_lambda_function" "self_healing_controller" {
       GITHUB_REPO             = var.github_repo
       GITHUB_TOKEN_SECRET_ARN = var.github_token_secret_arn
       DRY_RUN                 = tostring(var.dry_run)
+      APPLICATION_NAMESPACE   = var.application_namespace
+      APPLICATION_NAME        = var.application_name
     }
   }
 

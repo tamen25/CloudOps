@@ -70,7 +70,11 @@ REGION=$(get_tfvar "region")
 
 ROLE_NAME="${PROJECT_NAME}-github-actions"
 POLICY_NAME="cloudops-github-actions-policy"
-GITHUB_REPO="tamen25/CloudOps"
+GITHUB_REPO="${GITHUB_REPO:-$(git config --get remote.origin.url 2>/dev/null | sed -E 's#.*[/:]([^/]+/[^/]+)\.git#\1#' | sed -E 's#\.git$##')}"
+if [ -z "$GITHUB_REPO" ] || [ "$GITHUB_REPO" = "$(git config --get remote.origin.url 2>/dev/null)" ]; then
+    echo "Error: set GITHUB_REPO=owner/repo (auto-detect from git remote failed)" >&2
+    exit 1
+fi
 OIDC_URL="https://token.actions.githubusercontent.com"
 OIDC_THUMBPRINT="6938fd4d98bab03faadb97b34396831e3780aea1"
 
@@ -245,7 +249,7 @@ echo -e "TF_VAR_BOOTSTRAP_BUCKET_NAME    ${BUCKET_NAME}"
 echo -e "TF_VAR_PROJECT_NAME             ${PROJECT_NAME}"
 echo -e "TF_VAR_ENVIRONMENT              ${ENVIRONMENT}"
 echo -e "TF_VAR_OWNER                    Tamen"
-echo -e "TF_VAR_DOMAIN                   tamendutta.com"
+echo -e "TF_VAR_DOMAIN                   <your-domain>"
 echo -e "TF_VAR_SECURITY_ALERT_EMAIL     (your email)"
 echo -e "TF_VAR_COST_ALERT_EMAIL         (your email)"
 echo -e "TF_VAR_GITHUB_TOKEN             (GitHub PAT with repo scope)"

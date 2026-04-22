@@ -603,7 +603,7 @@ resource "kubernetes_manifest" "c_require_image_signature" {
       parameters = {
         # Matches the identity used by the build-and-push job in app.yml.
         # Scoped to this repository's workflow file so forks cannot sign with the same identity.
-        certificateIdentityRegexp = "https://github\\.com/tamen25/CloudOps/\\.github/workflows/app\\.yml@refs/heads/.*"
+        certificateIdentityRegexp = "https://github\\.com/${var.github_repo}/\\.github/workflows/app\\.yml@refs/heads/.*"
         certificateOidcIssuer     = "https://token.actions.githubusercontent.com"
       }
     }

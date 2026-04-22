@@ -31,9 +31,11 @@ const MIN_HEALTHY_PODS       = parseInt(process.env.MIN_HEALTHY_PODS       || '2
 const MAX_SCALE_OUT_PODS     = parseInt(process.env.MAX_SCALE_OUT_PODS     || '10', 10);
 const ROLLBACK_ON_ERROR_RATE = parseFloat(process.env.ROLLBACK_ON_ERROR_RATE || '5');
 const SNS_TOPIC_ARN          = process.env.SNS_TOPIC_ARN          || '';
-const GITHUB_REPO            = process.env.GITHUB_REPO            || 'tamen25/CloudOps';
+const GITHUB_REPO            = process.env.GITHUB_REPO            || '';
 const GITHUB_TOKEN_SECRET_ARN = process.env.GITHUB_TOKEN_SECRET_ARN || '';
 const DRY_RUN                = process.env.DRY_RUN === 'true';
+const APP_NAMESPACE          = process.env.APPLICATION_NAMESPACE  || 'cloudops';
+const APP_NAME               = process.env.APPLICATION_NAME       || 'order-api';
 
 // ── AWS clients — initialised once, reused across warm invocations ────────────
 
@@ -196,6 +198,60 @@ async function getMetricLast5Min(namespace, metricName, statistic, dimensions) {
   return vals.length > 0 ? vals[0] : 0;
 }
 
+// ── Deployment rollback helpers ───────────────────────────────────────────────
+
+// Real "kubectl rollout undo" equivalent: find the ReplicaSet for the previous
+// revision and patch the Deployment's pod template to match. Patching
+// `restartedAt` only restarts the same (bad) image — it is NOT a rollback.
+async function findPreviousReplicaSet(deployment) {
+  const currentRevision = parseInt(
+    deployment.metadata?.annotations?.['deployment.kubernetes.io/revision'] || '0',
+    10
+  );
+  if (!currentRevision || currentRevision < 2) return null;
+
+  const matchLabels = deployment.spec?.selector?.matchLabels || {};
+  const labelSelector = Object.entries(matchLabels)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(',');
+
+  const rsList = await k8sGet(
+    `/apis/apps/v1/namespaces/${APP_NAMESPACE}/replicasets` +
+    (labelSelector ? `?labelSelector=${encodeURIComponent(labelSelector)}` : '')
+  );
+
+  const byRevision = (rsList.items || [])
+    .map(rs => ({
+      rs,
+      revision: parseInt(rs.metadata?.annotations?.['deployment.kubernetes.io/revision'] || '0', 10),
+    }))
+    .filter(x => x.revision > 0 && x.revision < currentRevision)
+    .sort((a, b) => b.revision - a.revision);
+
+  return byRevision[0]?.rs || null;
+}
+
+async function rolloutUndo(deployment) {
+  const prevRs = await findPreviousReplicaSet(deployment);
+  if (!prevRs) {
+    throw new Error('No previous ReplicaSet found — deployment has no rollback history');
+  }
+
+  const prevTemplate = prevRs.spec?.template;
+  if (!prevTemplate) {
+    throw new Error(`Previous ReplicaSet ${prevRs.metadata?.name} has no pod template`);
+  }
+
+  // Strategic merge patch: replace the current pod template with the previous one.
+  await k8sPatch(
+    `/apis/apps/v1/namespaces/${APP_NAMESPACE}/deployments/${APP_NAME}`,
+    { spec: { template: prevTemplate } }
+  );
+
+  const prevImage = prevTemplate.spec?.containers?.[0]?.image || 'unknown';
+  return { previousRevision: prevRs.metadata?.annotations?.['deployment.kubernetes.io/revision'], previousImage: prevImage };
+}
+
 // ── Healing actions ───────────────────────────────────────────────────────────
 
 // 1. order-api-high-error-rate → auto rollback
@@ -208,11 +264,12 @@ async function handleHighErrorRate(alarmName) {
     return;
   }
 
-  // Get current deployment image
+  // Get current deployment (we need the full object for rollback — not just the image)
+  let deployment = null;
   let currentImage = 'unknown';
   try {
-    const dep = await k8sGet('/apis/apps/v1/namespaces/cloudops/deployments/order-api');
-    const containers = dep.spec?.template?.spec?.containers || [];
+    deployment = await k8sGet(`/apis/apps/v1/namespaces/${APP_NAMESPACE}/deployments/${APP_NAME}`);
+    const containers = deployment.spec?.template?.spec?.containers || [];
     currentImage = containers[0]?.image || 'unknown';
   } catch (err) {
     log('warn', { action: 'rollback_get_deployment_failed', error: err.message });
@@ -237,16 +294,19 @@ async function handleHighErrorRate(alarmName) {
     return;
   }
 
-  // Trigger rollout undo via Kubernetes API
+  // Real rollback: patch deployment pod template to previous ReplicaSet's template.
+  let rolledBackTo = null;
   if (!DRY_RUN) {
-    try {
-      await k8sPatch(
-        '/apis/apps/v1/namespaces/cloudops/deployments/order-api',
-        { spec: { template: { metadata: { annotations: { 'kubectl.kubernetes.io/restartedAt': new Date().toISOString() } } } } }
-      );
-      log('info', { action: 'rollback_triggered', currentImage });
-    } catch (err) {
-      log('error', { action: 'rollback_failed', error: err.message });
+    if (!deployment) {
+      log('error', { action: 'rollback_failed', error: 'deployment not available — cannot roll back' });
+    } else {
+      try {
+        const result = await rolloutUndo(deployment);
+        rolledBackTo = result;
+        log('info', { action: 'rollback_triggered', currentImage, ...result });
+      } catch (err) {
+        log('error', { action: 'rollback_failed', error: err.message, currentImage });
+      }
     }
   }
 
@@ -262,10 +322,10 @@ async function handleHighErrorRate(alarmName) {
       log('warn', { action: 'rollback_not_recovering', postErrorCount, applying_scale_out: true });
       // Secondary action: scale out 2 more pods
       try {
-        const hpa = await k8sGet('/apis/autoscaling/v2/namespaces/cloudops/horizontalpodautoscalers/order-api');
+        const hpa = await k8sGet(`/apis/autoscaling/v2/namespaces/${APP_NAMESPACE}/horizontalpodautoscalers/${APP_NAME}`);
         const currentMin = hpa.spec?.minReplicas || MIN_HEALTHY_PODS;
         const newMin = Math.min(currentMin + 2, MAX_SCALE_OUT_PODS);
-        await k8sPatch('/apis/autoscaling/v2/namespaces/cloudops/horizontalpodautoscalers/order-api', { spec: { minReplicas: newMin } });
+        await k8sPatch(`/apis/autoscaling/v2/namespaces/${APP_NAMESPACE}/horizontalpodautoscalers/${APP_NAME}`, { spec: { minReplicas: newMin } });
         log('info', { action: 'secondary_scale_out', from: currentMin, to: newMin });
       } catch (err) {
         log('error', { action: 'secondary_scale_out_failed', error: err.message });
@@ -287,10 +347,10 @@ async function handleHighErrorRate(alarmName) {
   await publishHealingMetric('rollback');
   await publishSummary(payload);
 
-  // Create GitHub incident issue
-  if (GITHUB_TOKEN_SECRET_ARN) {
+  // Create GitHub incident issue (skip when token or repo is unconfigured)
+  if (GITHUB_TOKEN_SECRET_ARN && GITHUB_REPO) {
     await createGitHubIssue({
-      title:  `[INCIDENT] Auto-rollback triggered for order-api — ${ENVIRONMENT}`,
+      title:  `[INCIDENT] Auto-rollback triggered for ${APP_NAME} — ${ENVIRONMENT}`,
       body: [
         `## Auto-Rollback Triggered`,
         ``,
@@ -308,15 +368,15 @@ async function handleHighErrorRate(alarmName) {
         ``,
         `## Investigation Steps`,
         ``,
-        `1. Check deployment rollout status: \`kubectl rollout status deployment/order-api -n cloudops\``,
-        `2. View rollout history: \`kubectl rollout history deployment/order-api -n cloudops\``,
-        `3. Check pod logs: \`kubectl logs -n cloudops -l app=order-api --tail=100\``,
+        `1. Check deployment rollout status: \`kubectl rollout status deployment/${APP_NAME} -n ${APP_NAMESPACE}\``,
+        `2. View rollout history: \`kubectl rollout history deployment/${APP_NAME} -n ${APP_NAMESPACE}\``,
+        `3. Check pod logs: \`kubectl logs -n ${APP_NAMESPACE} -l app=${APP_NAME} --tail=100\``,
         `4. Review ALB access logs for 5xx patterns`,
         `5. Verify the rollback resolved the issue before re-deploying`,
         ``,
         `*This issue was created automatically by the CloudOps self-healing controller.*`,
       ].join('\n'),
-      labels: ['incident', 'auto-remediation', 'order-api'],
+      labels: ['incident', 'auto-remediation', APP_NAME],
     }).catch(err => log('warn', { action: 'github_issue_failed', error: err.message }));
   }
 }
@@ -336,10 +396,10 @@ async function handleHighLatency(alarmName) {
 
   if (!DRY_RUN) {
     try {
-      const hpa = await k8sGet('/apis/autoscaling/v2/namespaces/cloudops/horizontalpodautoscalers/order-api');
+      const hpa = await k8sGet(`/apis/autoscaling/v2/namespaces/${APP_NAMESPACE}/horizontalpodautoscalers/${APP_NAME}`);
       fromReplicas = hpa.spec?.minReplicas || MIN_HEALTHY_PODS;
       toReplicas   = Math.min(fromReplicas + 2, MAX_SCALE_OUT_PODS);
-      await k8sPatch('/apis/autoscaling/v2/namespaces/cloudops/horizontalpodautoscalers/order-api', { spec: { minReplicas: toReplicas } });
+      await k8sPatch(`/apis/autoscaling/v2/namespaces/${APP_NAMESPACE}/horizontalpodautoscalers/${APP_NAME}`, { spec: { minReplicas: toReplicas } });
       log('info', { action: 'scale_out_complete', from: fromReplicas, to: toReplicas });
     } catch (err) {
       log('error', { action: 'scale_out_failed', error: err.message });
@@ -378,7 +438,7 @@ async function handlePodCountLow(alarmName) {
 
   if (!DRY_RUN) {
     try {
-      const hpa = await k8sGet('/apis/autoscaling/v2/namespaces/cloudops/horizontalpodautoscalers/order-api');
+      const hpa = await k8sGet(`/apis/autoscaling/v2/namespaces/${APP_NAMESPACE}/horizontalpodautoscalers/${APP_NAME}`);
       const desiredReplicas  = hpa.status?.desiredReplicas  || 0;
       const currentReplicas  = hpa.status?.currentReplicas  || 0;
       currentPods = currentReplicas;
@@ -386,7 +446,7 @@ async function handlePodCountLow(alarmName) {
 
       if (!hpaFunctioning) {
         // Directly patch deployment replicas
-        await k8sPatch('/apis/apps/v1/namespaces/cloudops/deployments/order-api', {
+        await k8sPatch(`/apis/apps/v1/namespaces/${APP_NAMESPACE}/deployments/${APP_NAME}`, {
           spec: { replicas: MIN_HEALTHY_PODS },
         });
         log('info', { action: 'direct_replica_patch', target: MIN_HEALTHY_PODS });
@@ -503,7 +563,7 @@ async function handleRDSHighCPU(alarmName) {
   const hasReplica = replicaIds.length > 0;
 
   let issueUrl = null;
-  if (!hasReplica && GITHUB_TOKEN_SECRET_ARN) {
+  if (!hasReplica && GITHUB_TOKEN_SECRET_ARN && GITHUB_REPO) {
     try {
       const issue = await createGitHubIssue({
         title:  `[ACTION REQUIRED] RDS CPU high — consider enabling read replica (${ENVIRONMENT})`,
@@ -643,11 +703,11 @@ async function handleNodeNotReady(alarmName) {
           log('info', { action: 'node_cordoned', nodeName });
 
           // Evict pods from node (drain)
-          const pods = await k8sGet(`/api/v1/namespaces/cloudops/pods?fieldSelector=spec.nodeName=${nodeName}`);
+          const pods = await k8sGet(`/api/v1/namespaces/${APP_NAMESPACE}/pods?fieldSelector=spec.nodeName=${nodeName}`);
           for (const pod of (pods.items || [])) {
             const podName = pod.metadata?.name;
             const res = await fetch(
-              `${(await getClusterInfo()).endpoint}/api/v1/namespaces/cloudops/pods/${podName}/eviction`,
+              `${(await getClusterInfo()).endpoint}/api/v1/namespaces/${APP_NAMESPACE}/pods/${podName}/eviction`,
               {
                 method:  'POST',
                 headers: {
@@ -655,7 +715,7 @@ async function handleNodeNotReady(alarmName) {
                   'Content-Type': 'application/json',
                   Accept:         'application/json',
                 },
-                body: JSON.stringify({ apiVersion: 'policy/v1', kind: 'Eviction', metadata: { name: podName, namespace: 'cloudops' } }),
+                body: JSON.stringify({ apiVersion: 'policy/v1', kind: 'Eviction', metadata: { name: podName, namespace: APP_NAMESPACE } }),
               }
             );
             if (!res.ok && res.status !== 429) {
@@ -711,7 +771,7 @@ async function handleNodeNotReady(alarmName) {
 
 async function handlePodFailureEvent(detail) {
   const reason    = detail.reason || '';
-  const namespace = detail.namespace || 'cloudops';
+  const namespace = detail.namespace || APP_NAMESPACE;
   const podName   = detail.podName || '';
 
   log('warn', { action: 'pod_failure_event', reason, namespace, podName });

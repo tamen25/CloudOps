@@ -2,7 +2,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: order-api
-  namespace: cloudops
+  namespace: "${ORDER_API_NAMESPACE}"
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

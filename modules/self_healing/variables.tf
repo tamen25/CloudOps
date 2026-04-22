@@ -68,15 +68,27 @@ variable "github_token_secret_arn" {
 }
 
 variable "github_repo" {
-  description = "GitHub repository in owner/name format for incident issue creation"
+  description = "GitHub repository in owner/name format for incident issue creation. Empty = skip GitHub issue creation."
   type        = string
-  default     = "tamen25/CloudOps"
+  default     = ""
 }
 
 variable "dry_run" {
   description = "When true, the Lambda logs what it would do but executes no healing actions. Safe for testing."
   type        = bool
   default     = false
+}
+
+variable "application_namespace" {
+  description = "Kubernetes namespace of the managed application"
+  type        = string
+  default     = "cloudops"
+}
+
+variable "application_name" {
+  description = "Kubernetes Deployment/HPA name of the managed application"
+  type        = string
+  default     = "order-api"
 }
 
 variable "tags" {

@@ -24,6 +24,10 @@ terraform {
     }
   }
 
+  # S3 backend — bucket name is hardcoded here because Terraform does not allow
+  # variables in backend blocks. When forking this repo:
+  #   1. Change the bucket name below to match your bootstrap_bucket_name tfvar.
+  #   2. Or run `terraform init -backend-config="bucket=your-bucket"` to override.
   backend "s3" {
     bucket       = "cloudops-tfstate-tamen25"
     key          = "main/terraform.tfstate"

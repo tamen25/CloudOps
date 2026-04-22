@@ -146,7 +146,7 @@ resource "helm_release" "otel_collector" {
   depends_on = [kubernetes_secret.otel_auth, helm_release.prometheus, helm_release.loki, helm_release.tempo]
 }
 
-# A record for otel.tamendutta.com — created after first deploy once ALB DNS is known
+# A record for otel.${var.domain} — created after first deploy once ALB DNS is known
 resource "aws_route53_record" "otel" {
   count = var.alb_dns_name != "" ? 1 : 0
 
