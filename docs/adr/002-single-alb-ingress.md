@@ -25,7 +25,7 @@ The AWS Load Balancer Controller (installed as a Helm chart in the ingress modul
 - OTel HTTP Ingress: `group.name=cloudops-otel`, `group.order=10`
 - OTel gRPC Ingress: `group.name=cloudops-otel`, `group.order=20`
 
-The Load Balancer Controller reconciles all Ingresses in the group into a single ALB with listener rules. Host-based routing (`api.tamendutta.com` vs `grafana.tamendutta.com` vs `otel.tamendutta.com`) handles traffic distribution to the correct backend service.
+The Load Balancer Controller reconciles all Ingresses in the group into a single ALB with listener rules. Host-based routing (`api.example.com` vs `grafana.example.com` vs `otel.example.com`) handles traffic distribution to the correct backend service.
 
 Route 53 simplification is significant. With a single ALB, the `alb_dns_name` and `alb_zone_id` values are determined once (after the first ingress deploy), stored in `terraform.tfvars`, and reused as alias targets for all Route 53 A records. Adding a new subdomain is a one-line `aws_route53_record` resource — no new load balancer provisioned.
 
@@ -37,7 +37,7 @@ One real trade-off: IngressGroups create an implicit coupling between services a
 
 **Positive:**
 - ~$32-48/month saved vs three separate ALBs
-- Single ACM wildcard certificate (`*.tamendutta.com`) covers all subdomains
+- Single ACM wildcard certificate (`*.example.com`) covers all subdomains
 - One `alb_dns_name` variable drives all Route 53 records — adding a new service is a one-liner
 - ALB access logs go to a single S3 prefix, simplifying SIEM ingestion
 - gRPC-native backend protocol support available without a separate NLB

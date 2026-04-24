@@ -302,7 +302,7 @@ resource "kubernetes_manifest" "c_required_probes" {
       enforcementAction = "warn"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
     }
   }
@@ -379,7 +379,7 @@ resource "kubernetes_manifest" "c_no_latest_tag" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
     }
   }
@@ -462,7 +462,7 @@ resource "kubernetes_manifest" "c_allowed_repos" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
       parameters = {
         repos = [
@@ -598,7 +598,7 @@ resource "kubernetes_manifest" "c_require_image_signature" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
       parameters = {
         # Matches the identity used by the build-and-push job in app.yml.

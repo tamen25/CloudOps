@@ -71,6 +71,17 @@ variable "node_desired_size" {
   default     = 2
 }
 
+variable "node_capacity_type" {
+  description = "EKS managed node group capacity type — ON_DEMAND or SPOT. SPOT can cut node cost 40-70% for stateless dev workloads but nodes can be interrupted with a 2-minute warning."
+  type        = string
+  default     = "ON_DEMAND"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
+  }
+}
+
 # IRSA — order-api
 
 variable "order_api_namespace" {

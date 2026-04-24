@@ -181,6 +181,6 @@ If you are in a planned maintenance window and want to suppress the alert for 2 
 
 ## References
 
-- [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture) → SLOs row → Auto-Remediation Success Rate
+- [Security Posture dashboard](https://grafana.example.com/d/security-posture) → SLOs row → Auto-Remediation Success Rate
 - [Lambda console](https://console.aws.amazon.com/lambda/home#/functions/cloudops-compliance-scanner)
 - [CloudWatch log group](https://console.aws.amazon.com/cloudwatch/home#logsV2:log-groups/log-group/$252Faws$252Flambda$252Fcloudops-compliance-scanner)

@@ -47,7 +47,7 @@
       "title": "Self-Healing Runbooks",
       "tooltip": "Open runbooks",
       "type": "link",
-      "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/"
+      "url": "https://github.com/your-org/your-repo/blob/main/docs/runbooks/"
     }
   ],
   "panels": [

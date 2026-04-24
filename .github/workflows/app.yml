@@ -59,6 +59,14 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: apps/order-api
 
+      - name: Lint source
+        run: npm run lint
+        working-directory: apps/order-api
+
+      - name: Contract check (manifest env vars ⇄ app)
+        run: npm run contract-check
+        working-directory: apps/order-api
+
       - name: Run tests
         run: npm test
         working-directory: apps/order-api
@@ -506,7 +514,7 @@ jobs:
           | **Override** | Trigger this workflow manually with \`override_budget_check: true\` — use only for hotfixes or security patches |
 
           **Next steps:**
-          1. Check the [SLO dashboard](https://grafana.tamendutta.com/d/slo-dashboard) for active burn rate
+          1. Check the [SLO dashboard](https://grafana.${DOMAIN}/d/slo-dashboard) for active burn rate
           2. Follow the [error-budget-exhausted runbook](../docs/runbooks/error-budget-exhausted.md)
           3. If this is a hotfix that will *improve* reliability, re-trigger with override enabled and document the justification
           EOF
@@ -523,8 +531,8 @@ jobs:
           | **Threshold** | 10–49% — deployment allowed with warning |
           | **Recommendation** | Watch the SLO dashboard after deploy; be ready to roll back if the burn rate increases |
 
-          Deployment is proceeding. Monitor the [SLO dashboard](https://grafana.tamendutta.com/d/slo-dashboard)
-          and the [Burn Rate panel](https://grafana.tamendutta.com/d/slo-dashboard) after this deploy.
+          Deployment is proceeding. Monitor the [SLO dashboard](https://grafana.${DOMAIN}/d/slo-dashboard)
+          and the [Burn Rate panel](https://grafana.${DOMAIN}/d/slo-dashboard) after this deploy.
           EOF
             echo "::warning::Error budget at ${BUDGET_INT}% — below 50% threshold. Deployment continues; monitor burn rate after deploy."
 
@@ -975,10 +983,10 @@ jobs:
           |---|---|
           | **CRITICAL findings open** | **${CRITICAL_COUNT}** |
           | **Window** | Last 10 minutes |
-          | **Dashboard** | [Security Posture](https://grafana.tamendutta.com/d/security-posture) |
+          | **Dashboard** | [Security Posture](https://grafana.${DOMAIN}/d/security-posture) |
           | **Action** | Review findings — this deploy did not block but findings require investigation |
 
-          Check the [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture) and
+          Check the [Security Posture dashboard](https://grafana.${DOMAIN}/d/security-posture) and
           the [compliance-critical-finding runbook](docs/runbooks/security/compliance-critical-finding.md)
           for remediation steps.
           EOF

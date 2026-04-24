@@ -74,6 +74,26 @@ variable "application_namespace" {
   default     = "cloudops"
 }
 
+# ── Grafana unified alerting ──────────────────────────────────────────────────
+
+variable "alert_email" {
+  description = "Email address for Grafana alert notifications. Empty = no email contact point provisioned."
+  type        = string
+  default     = ""
+}
+
+variable "alert_sns_topic_arn" {
+  description = "SNS topic ARN for alert delivery (informational — wired to alert_webhook_url via API Gateway when set). Empty = no SNS integration."
+  type        = string
+  default     = ""
+}
+
+variable "alert_webhook_url" {
+  description = "HTTPS webhook URL that fronts the SNS topic (e.g. API Gateway → SNS Publish) or any other receiver (Slack incoming webhook, PagerDuty Events v2). Empty = no webhook contact point provisioned."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

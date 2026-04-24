@@ -111,6 +111,12 @@ variable "cost_anomaly_threshold_percent" {
   default     = 20
 }
 
+variable "grafana_alert_webhook_url" {
+  description = "HTTPS webhook for Grafana unified-alerting notifications (Slack, PagerDuty Events v2, or API Gateway → SNS). Empty = no webhook contact point."
+  type        = string
+  default     = ""
+}
+
 variable "security_alert_email" {
   description = "Email address for SNS security alert subscriptions — receives all severity findings from the compliance scanner. Leave empty to skip."
   type        = string
@@ -402,6 +408,12 @@ variable "eks_node_desired_size" {
   description = "Desired number of nodes in the EKS node group"
   type        = number
   default     = 2
+}
+
+variable "eks_node_capacity_type" {
+  description = "EKS node group capacity type — ON_DEMAND (default) or SPOT. SPOT can cut node cost 40-70% for stateless dev workloads at the cost of 2-minute interruption notices."
+  type        = string
+  default     = "ON_DEMAND"
 }
 
 variable "order_api_namespace" {

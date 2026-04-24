@@ -25,7 +25,7 @@
       "title": "Security Runbooks",
       "tooltip": "Open CloudOps security runbooks",
       "type": "link",
-      "url": "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/"
+      "url": "https://github.com/your-org/your-repo/blob/main/docs/runbooks/"
     },
     {
       "icon": "external link",

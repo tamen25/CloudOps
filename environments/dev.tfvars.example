@@ -1,0 +1,31 @@
+# Dev environment override file.
+#
+# Usage (once committed as dev.tfvars — still gitignored via *.tfvars):
+#   terraform plan  -var-file=environments/dev.tfvars
+#   terraform apply -var-file=environments/dev.tfvars
+#
+# Overrides are applied on top of terraform.tfvars (Terraform merges all tfvars
+# files passed via -var-file in order). Put ONLY the dev-specific flips here.
+
+environment = "dev"
+
+# Safe-to-test defaults for an overnight-teardown dev account.
+destroy_all          = false
+self_healing_dry_run = true
+
+# Smallest nodes + no NAT — cheapest floor.
+eks_node_instance_types = ["t3.large"]
+eks_node_min_size       = 2
+eks_node_max_size       = 4
+eks_node_desired_size   = 2
+enable_nat_gateway      = false
+
+# RDS: smallest burstable, no deletion guardrails, no final snapshot.
+database_instance_class      = "db.t3.micro"
+database_multi_az            = false
+database_deletion_protection = false
+database_skip_final_snapshot = true
+database_backup_retention_period = 7
+
+# Lower monthly budget in dev so alerts fire early.
+cost_budget_monthly_usd = 50

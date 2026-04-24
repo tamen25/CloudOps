@@ -138,6 +138,26 @@ test('GET /orders returns an object with orders and count', async () => {
   }
 });
 
+test('POST /order is rate-limited — burst returns 429 after the configured max', async () => {
+  const pool = { query: async () => ({ rows: [{ order_id: 'x' }], rowCount: 1 }) };
+  const { server, baseUrl } = await startServer(pool, { rateLimitMax: 2, rateLimitWindowMs: 60_000 });
+
+  try {
+    const body = JSON.stringify({ items: [], total: 0 });
+    const headers = { 'Content-Type': 'application/json' };
+
+    const r1 = await fetch(`${baseUrl}/order`, { method: 'POST', headers, body });
+    const r2 = await fetch(`${baseUrl}/order`, { method: 'POST', headers, body });
+    const r3 = await fetch(`${baseUrl}/order`, { method: 'POST', headers, body });
+
+    assert.equal(r1.status, 201);
+    assert.equal(r2.status, 201);
+    assert.equal(r3.status, 429);
+  } finally {
+    await stopServer(server);
+  }
+});
+
 test('POST /order requires X-Api-Key when apiKey is configured', async () => {
   const pool = { query: async () => ({ rows: [{}], rowCount: 1 }) };
   const { server, baseUrl } = await startServer(pool, { apiKey: 'secret-123' });

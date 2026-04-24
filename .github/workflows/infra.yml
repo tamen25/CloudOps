@@ -475,11 +475,16 @@ jobs:
         # A cancelled plan or apply leaves this file behind and blocks the next run.
         # Safe to delete here because apply steps are sequential within this job.
         run: |
+          BOOTSTRAP_BUCKET=$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
+          if [ -z "$BOOTSTRAP_BUCKET" ]; then
+            echo "bootstrap_bucket_name missing from terraform.tfvars — skipping stale lock check"
+            exit 0
+          fi
           if aws s3api head-object \
-               --bucket cloudops-tfstate-tamen25 \
+               --bucket "$BOOTSTRAP_BUCKET" \
                --key main/terraform.tfstate.tflock 2>/dev/null; then
             echo "Stale lock found — releasing..."
-            aws s3 rm s3://cloudops-tfstate-tamen25/main/terraform.tfstate.tflock
+            aws s3 rm "s3://$BOOTSTRAP_BUCKET/main/terraform.tfstate.tflock"
             echo "Lock released"
           else
             echo "No stale lock present"
@@ -821,7 +826,7 @@ jobs:
           ${FINDINGS_TABLE}
 
           **Next steps:**
-          1. Review the [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture)
+          1. Review the [Security Posture dashboard](https://grafana.${DOMAIN}/d/security-posture)
           2. Follow: \`docs/runbooks/security/compliance-critical-finding.md\`
           3. If this is a false positive, suppress it in DynamoDB with \`status=SUPPRESSED\` and a reason note
           4. Auto-remediation Lambda may already be working — check CloudWatch Logs for \`cloudops-auto-remediation\`

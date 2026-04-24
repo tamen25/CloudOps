@@ -55,14 +55,14 @@ The platform runs across two availability zones (`us-east-1a`, `us-east-1b`) beh
 
 | Service | URL |
 |---------|-----|
-| order-api | `https://api.tamendutta.com` |
-| Grafana | `https://grafana.tamendutta.com` |
-| OTel Collector | `https://otel.tamendutta.com` |
+| order-api | `https://api.example.com` |
+| Grafana | `https://grafana.example.com` |
+| OTel Collector | `https://otel.example.com` |
 
 Health checks:
 ```bash
-curl https://api.tamendutta.com/health
-curl -s https://grafana.tamendutta.com/api/health
+curl https://api.example.com/health
+curl -s https://grafana.example.com/api/health
 ```
 
 ---
@@ -73,7 +73,7 @@ Deploy the full stack from scratch in under 10 commands:
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/tamen25/CloudOps.git && cd CloudOps
+git clone https://github.com/your-org/your-repo.git && cd CloudOps
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars: set project_name, environment, owner, aws_account_id
 

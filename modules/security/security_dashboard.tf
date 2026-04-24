@@ -106,7 +106,7 @@ resource "kubernetes_manifest" "security_slo_rules" {
               annotations = {
                 summary     = "CRITICAL finding MTTD exceeds 5-minute SLO"
                 description = "Mean time to detect CRITICAL security findings is {{ $value | humanizeDuration }}, above the 300-second (5 min) SLO threshold. Check the compliance scanner Lambda and CloudWatch Logs."
-                runbook     = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/security-mttd-breach.md"
+                runbook     = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/security-mttd-breach.md"
               }
             },
 
@@ -124,7 +124,7 @@ resource "kubernetes_manifest" "security_slo_rules" {
               annotations = {
                 summary     = "Auto-remediation MTTR exceeds 15-minute SLO"
                 description = "Mean time to auto-remediate is {{ $value | humanizeDuration }}, above the 900-second (15 min) SLO threshold. Check the auto-remediation Lambda logs."
-                runbook     = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/security-mttr-breach.md"
+                runbook     = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/security-mttr-breach.md"
               }
             },
 
@@ -142,7 +142,7 @@ resource "kubernetes_manifest" "security_slo_rules" {
               annotations = {
                 summary     = "More than 5 CRITICAL security findings open simultaneously"
                 description = "{{ $value }} CRITICAL findings are currently open. Immediate triage required. Review the Security Posture dashboard and DynamoDB findings table."
-                runbook     = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/security-critical-findings.md"
+                runbook     = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/security-critical-findings.md"
               }
             },
 
@@ -160,7 +160,7 @@ resource "kubernetes_manifest" "security_slo_rules" {
               annotations = {
                 summary     = "Auto-remediation failure rate exceeds 20%"
                 description = "Auto-remediation success rate has dropped below 80%. Current failure rate: {{ printf \"%.0f\" (mul $value 100) }}%. Check Lambda errors and IAM permissions."
-                runbook     = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/security-auto-remediation-failures.md"
+                runbook     = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/security-auto-remediation-failures.md"
               }
             },
           ]

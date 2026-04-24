@@ -1,0 +1,63 @@
+# Default-deny ingress for the app namespace, then explicit allow rules.
+# - port 3000 (http):   reachable from anywhere in the cluster that carries the
+#                       ALB's traffic (kube-system — LBC runs target-type=ip,
+#                       so pods receive connections directly from the ALB ENIs;
+#                       we allow all pods in kube-system + the app ns itself).
+# - port 9090 (metrics): reachable only from the monitoring namespace (Prom).
+# Egress is intentionally unrestricted so RDS / Secrets Manager / OTel exports
+# keep working without an explicit allow list.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-api-default-deny-ingress
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: order-api
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-api-allow-http
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: order-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${ORDER_API_NAMESPACE}"
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-api-allow-metrics
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: order-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090

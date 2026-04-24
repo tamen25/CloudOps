@@ -1,0 +1,43 @@
+# Prod environment override file.
+#
+# Usage (once committed as prod.tfvars — still gitignored via *.tfvars):
+#   terraform plan  -var-file=environments/prod.tfvars
+#   terraform apply -var-file=environments/prod.tfvars
+#
+# Overrides are applied on top of terraform.tfvars. Put ONLY the prod-specific
+# hardening here — things that, if wrong in dev, would cost data, budget, or
+# uptime in prod.
+
+environment = "prod"
+
+# NEVER destroy prod from a var-file flip.
+destroy_all = false
+
+# Trust the rollback path — live remediation on real incidents.
+self_healing_dry_run = false
+
+# More headroom, multi-AZ node pool.
+eks_node_instance_types = ["m7i.large", "m6i.large", "m5.large"]
+eks_node_min_size       = 3
+eks_node_max_size       = 12
+eks_node_desired_size   = 3
+
+# NAT on — private nodes need outbound reach for 3rd-party APIs etc.
+enable_nat_gateway       = true
+enable_flow_logs         = true
+flow_logs_retention_days = 30
+
+# Lock the ALB down. Replace with your egress CIDR or a CDN-only list.
+allowed_cidr_blocks = ["REPLACE_WITH_YOUR_ALLOWED_CIDRS"]
+
+# RDS: multi-AZ, read replica, deletion guardrails on, keep final snapshot.
+database_instance_class          = "db.r6g.large"
+database_multi_az                = true
+database_create_read_replica     = true
+database_deletion_protection     = true
+database_skip_final_snapshot     = false
+database_backup_retention_period = 30
+
+# Prod budget + anomaly threshold tighter than dev.
+cost_budget_monthly_usd        = 500
+cost_anomaly_threshold_percent = 15

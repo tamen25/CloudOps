@@ -29,7 +29,7 @@ The GitHub Actions job output lists every CRITICAL finding with `checkName`, `re
 
 ### From Grafana alert
 
-1. Open [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture) → **Findings by Severity** panel
+1. Open [Security Posture dashboard](https://grafana.example.com/d/security-posture) → **Findings by Severity** panel
 2. Expand the **Compliance Status** row — drill into the failing check category
 
 ### From DynamoDB directly
@@ -159,6 +159,6 @@ If a finding is a known accepted risk:
 
 ## References
 
-- [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture)
+- [Security Posture dashboard](https://grafana.example.com/d/security-posture)
 - [AWS Security Hub findings reference](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-findings-format.html)
 - [CIS AWS Foundations Benchmark](https://www.cisecurity.org/benchmark/amazon_web_services)

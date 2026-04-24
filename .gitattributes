@@ -1,0 +1,25 @@
+# Normalize line endings so diffs/commits don't churn between Windows and Linux.
+# Text files: LF in the repo, native in the working tree.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# Shell / CI / config files are always LF.
+*.sh    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.tf    text eol=lf
+*.tfvars text eol=lf
+*.hcl   text eol=lf
+*.json  text eol=lf
+*.js    text eol=lf
+*.md    text eol=lf
+
+# Binary — don't try to diff or line-end-normalize.
+*.zip   binary
+*.png   binary
+*.jpg   binary
+*.pdf   binary

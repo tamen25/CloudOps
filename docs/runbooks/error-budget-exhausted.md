@@ -231,4 +231,4 @@ The freeze lifts when:
 |---|---|
 | SLO Dashboard (30d view) | `https://grafana.<your-domain>/d/slo-dashboard` — set time range to 30d |
 | DynamoDB SLO History | AWS Console → DynamoDB → `cloudops-error-budgets` → Explore items |
-| GitHub Actions — infra.yml | `https://github.com/tamen25/CloudOps/actions/workflows/infra.yml` |
+| GitHub Actions — infra.yml | `https://github.com/your-org/your-repo/actions/workflows/infra.yml` |

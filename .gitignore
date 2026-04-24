@@ -25,8 +25,9 @@ override.tf.json
 # Ignore transient lock info files created by terraform apply
 .terraform.tfstate.lock.info
 
-# Terraform provider lock file (auto-generated on init)
-.terraform.lock.hcl
+# Terraform provider lock file (.terraform.lock.hcl) is committed deliberately
+# — pins provider versions + checksums so plans are reproducible across
+# machines and CI. Regenerate only via `terraform init -upgrade`.
 
 # Include override files you do wish to add to version control using negated pattern
 # !example_override.tf

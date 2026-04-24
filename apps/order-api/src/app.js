@@ -2,6 +2,7 @@
 
 const express = require('express');
 const pino = require('pino');
+const rateLimit = require('express-rate-limit');
 const { timingSafeEqual } = require('crypto');
 const { Registry, Counter, Histogram } = require('prom-client');
 
@@ -37,6 +38,10 @@ function createApp({
   // those routes are open — useful for local dev and CI without a secret.
   // Set via API_KEY env var in server.js.
   apiKey = '',
+  // Per-IP rate limit for the data endpoints (windowMs + max).
+  // 60 requests / minute / IP is plenty for a demo and blunts casual abuse.
+  rateLimitWindowMs = 60 * 1000,
+  rateLimitMax = 60,
   metrics = createMetrics({ serviceName, environment: nodeEnv }),
 } = {}) {
   if (!pool || typeof pool.query !== 'function') {
@@ -46,6 +51,11 @@ function createApp({
   const { registry, httpRequestsTotal, httpRequestDuration } = metrics;
 
   const app = express();
+
+  // ALB forwards client IP in X-Forwarded-For. Trust one proxy hop so
+  // express-rate-limit keys by the real client, not the LB.
+  app.set('trust proxy', 1);
+
   app.use(express.json());
 
   app.use((req, res, next) => {
@@ -90,6 +100,14 @@ function createApp({
     }
   });
 
+  const dataLimiter = rateLimit({
+    windowMs: rateLimitWindowMs,
+    max: rateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'too_many_requests' },
+  });
+
   // Simple shared-secret gate for data endpoints. Use timingSafeEqual to avoid
   // exposing the length or prefix of the configured key via response timing.
   const requireApiKey = (req, res, next) => {
@@ -106,7 +124,7 @@ function createApp({
     next();
   };
 
-  app.post('/order', requireApiKey, async (req, res) => {
+  app.post('/order', dataLimiter, requireApiKey, async (req, res) => {
     const orderId = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const { items = [], total = 0 } = req.body;
 
@@ -124,7 +142,7 @@ function createApp({
     }
   });
 
-  app.get('/orders', requireApiKey, async (req, res) => {
+  app.get('/orders', dataLimiter, requireApiKey, async (req, res) => {
     try {
       const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 100');
       res.status(200).json({ orders: result.rows, count: result.rowCount });

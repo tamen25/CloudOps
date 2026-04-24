@@ -118,6 +118,7 @@ module "eks" {
   node_min_size       = var.eks_node_min_size
   node_max_size       = var.eks_node_max_size
   node_desired_size   = var.eks_node_desired_size
+  node_capacity_type  = var.eks_node_capacity_type
 
   order_api_namespace       = var.order_api_namespace
   order_api_service_account = var.order_api_service_account
@@ -176,6 +177,12 @@ module "observability" {
 
   alb_dns_name = var.alb_dns_name
   alb_zone_id  = var.alb_zone_id
+
+  # Grafana unified alerting — contact points + notification policies.
+  # Leave all three empty to run without any Grafana alert notifications.
+  alert_email         = var.security_alert_email
+  alert_sns_topic_arn = var.enable_self_healing ? module.self_healing[0].sns_topic_arn : ""
+  alert_webhook_url   = var.grafana_alert_webhook_url
 
   tags = local.common_tags
 }
@@ -240,6 +247,8 @@ module "security" {
   # var.github_token); fall back to an explicitly provided ARN.
   github_token_secret_arn = local.github_token_secret_arn
   github_repo             = var.security_github_repo
+
+  application_namespace = var.order_api_namespace
 
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""

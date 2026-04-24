@@ -26,7 +26,7 @@ variable "prometheus_url" {
 }
 
 variable "grafana_url" {
-  description = "Grafana base URL (e.g. https://grafana.tamendutta.com). Used for future Grafana API calls."
+  description = "Grafana base URL (e.g. https://grafana.example.com). Used for future Grafana API calls."
   type        = string
   default     = ""
 }

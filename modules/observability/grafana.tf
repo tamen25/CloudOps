@@ -66,7 +66,10 @@ resource "helm_release" "grafana" {
       }
     }
 
-    # Sidecar watches for ConfigMaps labelled grafana_dashboard=1 across all namespaces
+    # Sidecar watches for ConfigMaps across all namespaces:
+    #   grafana_dashboard=1           → dashboards (existing)
+    #   grafana_alert=1               → unified-alerting rules + contact points + policies
+    #   grafana_datasource=1          → extra datasources
     sidecar = {
       dashboards = {
         enabled         = true
@@ -77,6 +80,22 @@ resource "helm_release" "grafana" {
         provider = {
           foldersFromFilesStructure = true
         }
+      }
+      alerts = {
+        enabled         = true
+        searchNamespace = "ALL"
+        label           = "grafana_alert"
+        labelValue      = "1"
+        folder          = "/etc/grafana/provisioning/alerting"
+        # Restart the Grafana pod whenever provisioning files change, since
+        # Grafana does not hot-reload alerting provisioning on all versions.
+        watchMethod = "WATCH"
+      }
+      datasources = {
+        enabled         = true
+        searchNamespace = "ALL"
+        label           = "grafana_datasource"
+        labelValue      = "1"
       }
     }
 
@@ -104,6 +123,15 @@ resource "helm_release" "grafana" {
         }
         auth = {
           disable_login_form = false
+        }
+        # Unified Alerting is on by default in Grafana >= 9 — spelled out here
+        # so the behaviour is obvious and can't drift on future upgrades.
+        unified_alerting = {
+          enabled = true
+        }
+        # Disable legacy alerting explicitly so both systems don't run side by side.
+        alerting = {
+          enabled = false
         }
       }
     }

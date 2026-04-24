@@ -100,6 +100,12 @@ variable "github_repo" {
   default     = ""
 }
 
+variable "application_namespace" {
+  description = "Kubernetes namespace where the managed application runs — Gatekeeper policies scope to this namespace"
+  type        = string
+  default     = "cloudops"
+}
+
 # ── kube-bench IRSA inputs ────────────────────────────────────────────────────
 
 variable "oidc_provider_arn" {

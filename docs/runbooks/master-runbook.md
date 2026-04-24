@@ -2,9 +2,9 @@
 
 **Last updated:** 2026-03-27
 **Owner:** Tamen Dutta
-**Repo:** https://github.com/tamen25/CloudOps
-**Grafana:** https://grafana.tamendutta.com
-**Order API:** https://api.tamendutta.com
+**Repo:** https://github.com/your-org/your-repo
+**Grafana:** https://grafana.example.com
+**Order API:** https://api.example.com
 
 > This is the single document an on-call engineer needs to operate CloudOps. If something is not covered here, open a PR to add it before your next shift ends.
 
@@ -27,7 +27,7 @@
 
 ## 1. System Overview
 
-CloudOps is an AWS infrastructure project that hosts the **order-api** — a Node.js/Express REST service that creates and retrieves orders, backed by an Amazon RDS PostgreSQL database. The API runs as a Kubernetes Deployment on EKS (cloudops-dev-cluster in us-east-1), exposed through an AWS Application Load Balancer via the AWS Load Balancer Controller. All traffic reaches the API over HTTPS at `api.tamendutta.com`. The platform includes a full LGTM observability stack (Loki, Grafana, Tempo, Prometheus + OTel Collector) for logs, traces, and metrics; multi-window burn rate SLO alerting for availability (99.9%) and latency (95% of requests under 300ms); an OSS security stack (Falco runtime threat detection, OPA Gatekeeper admission control, kube-bench CIS benchmarking, compliance scanner Lambda); a self-healing controller that automatically responds to CloudWatch Alarms with safe remediations (rollbacks, scale-outs, node replacement); and a FinOps module tracking cost against a $50/month budget. All infrastructure is managed via Terraform; application deploys go through the GitHub Actions App Pipeline (`apps/order-api/**` → `.github/workflows/app.yml`); infrastructure changes go through the Infra Pipeline (`modules/**`, `*.tf` → `.github/workflows/infra.yml`) with a mandatory human approval gate before `terraform apply` runs on main.
+CloudOps is an AWS infrastructure project that hosts the **order-api** — a Node.js/Express REST service that creates and retrieves orders, backed by an Amazon RDS PostgreSQL database. The API runs as a Kubernetes Deployment on EKS (cloudops-dev-cluster in us-east-1), exposed through an AWS Application Load Balancer via the AWS Load Balancer Controller. All traffic reaches the API over HTTPS at `api.example.com`. The platform includes a full LGTM observability stack (Loki, Grafana, Tempo, Prometheus + OTel Collector) for logs, traces, and metrics; multi-window burn rate SLO alerting for availability (99.9%) and latency (95% of requests under 300ms); an OSS security stack (Falco runtime threat detection, OPA Gatekeeper admission control, kube-bench CIS benchmarking, compliance scanner Lambda); a self-healing controller that automatically responds to CloudWatch Alarms with safe remediations (rollbacks, scale-outs, node replacement); and a FinOps module tracking cost against a $50/month budget. All infrastructure is managed via Terraform; application deploys go through the GitHub Actions App Pipeline (`apps/order-api/**` → `.github/workflows/app.yml`); infrastructure changes go through the Infra Pipeline (`modules/**`, `*.tf` → `.github/workflows/infra.yml`) with a mandatory human approval gate before `terraform apply` runs on main.
 
 ---
 
@@ -35,15 +35,15 @@ CloudOps is an AWS infrastructure project that hosts the **order-api** — a Nod
 
 | Component | What it does | Where it runs | Endpoint / Identifier | Health check |
 |-----------|-------------|---------------|----------------------|--------------|
-| **order-api** | REST API — POST /order, GET /orders, GET /health | EKS `cloudops` namespace | `https://api.tamendutta.com` | `curl https://api.tamendutta.com/health` |
+| **order-api** | REST API — POST /order, GET /orders, GET /health | EKS `cloudops` namespace | `https://api.example.com` | `curl https://api.example.com/health` |
 | **EKS cluster** | Kubernetes control plane + 2× t3.large managed nodes | AWS EKS, us-east-1 | `cloudops-dev-cluster` | `kubectl get nodes` |
 | **RDS PostgreSQL** | Order data persistence | AWS RDS, private subnet | `cloudops-dev` instance | CloudWatch → RDS → DatabaseConnections |
 | **ALB** | TLS termination, host-based routing for all services | AWS ALB, public-facing | `alb_dns_name` in tfvars | AWS Console → EC2 → Load Balancers |
-| **Grafana** | Dashboards, alerting, SLO panels | EKS `monitoring` namespace | `https://grafana.tamendutta.com` | `curl -s https://grafana.tamendutta.com/api/health` |
+| **Grafana** | Dashboards, alerting, SLO panels | EKS `monitoring` namespace | `https://grafana.example.com` | `curl -s https://grafana.example.com/api/health` |
 | **Prometheus** | Metrics storage, scrapes order-api `/metrics` | EKS `monitoring` namespace | `http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090` | Grafana → Explore → `up{job="order-api"}` |
 | **Loki** | Log storage backend (S3 chunks) | EKS `loki` namespace | `http://loki-gateway.loki.svc` | Grafana → Explore → Loki → `{namespace="cloudops"}` |
 | **Tempo** | Distributed trace storage (S3 backend) | EKS `tempo` namespace | `http://tempo.tempo.svc:4318` | Grafana → Explore → Tempo → search |
-| **OTel Collector** | Telemetry gateway: routes traces→Tempo, metrics→Prometheus, logs→Loki | EKS `monitoring` namespace | `https://otel.tamendutta.com` (ext), port 4317/4318 (int) | `kubectl get pods -n monitoring -l app.kubernetes.io/name=opentelemetry-collector` |
+| **OTel Collector** | Telemetry gateway: routes traces→Tempo, metrics→Prometheus, logs→Loki | EKS `monitoring` namespace | `https://otel.example.com` (ext), port 4317/4318 (int) | `kubectl get pods -n monitoring -l app.kubernetes.io/name=opentelemetry-collector` |
 | **Falco** | eBPF runtime threat detection DaemonSet | EKS `falco` namespace | Findings → OTel → Loki | `kubectl get pods -n falco` |
 | **OPA Gatekeeper** | Admission webhook — blocks non-compliant pods | EKS `gatekeeper-system` namespace | ValidatingAdmissionWebhook | `kubectl get constrainttemplate` |
 | **kube-bench** | CIS Kubernetes Benchmark CronJob (daily 03:00 UTC) | EKS `cloudops` namespace | CronJob `kube-bench` | `kubectl get cronjob kube-bench -n cloudops` |
@@ -84,7 +84,7 @@ kubectl get pods -n monitoring
 
 ### 3.2 Grafana access
 
-**URL:** `https://grafana.tamendutta.com`
+**URL:** `https://grafana.example.com`
 
 ```bash
 # Get the admin password from Terraform outputs
@@ -263,7 +263,7 @@ kubectl patch hpa order-api -n cloudops \
 
 ### 4.5 Check SLO status
 
-**Via Grafana:** `https://grafana.tamendutta.com/d/slo-dashboard`
+**Via Grafana:** `https://grafana.example.com/d/slo-dashboard`
 
 Key panels:
 - Availability SLI (top-left stat) — should be ≥ 99.9%
@@ -324,7 +324,7 @@ aws dynamodb query \
 
 ### 4.7 Check security findings
 
-**Via Grafana:** `https://grafana.tamendutta.com/d/security-posture`
+**Via Grafana:** `https://grafana.example.com/d/security-posture`
 
 **Via DynamoDB:**
 ```bash
@@ -355,7 +355,7 @@ Grafana → Explore → Loki
 
 ### 4.8 Check cost status
 
-**Via Grafana:** `https://grafana.tamendutta.com/d/finops-dashboard`
+**Via Grafana:** `https://grafana.example.com/d/finops-dashboard`
 
 **Via CloudWatch:**
 ```bash
@@ -490,15 +490,15 @@ Run this checklist before **any** change to `main` that will trigger a `terrafor
     --period 300 --statistics Average --output text
   ```
 
-- [ ] **CI/CD pipeline green on main branch** — check https://github.com/tamen25/CloudOps/actions. The `quality`, `security-scan`, and `manifest-validation` jobs must all be passing. The `plan` job must have run successfully within the last 24 hours.
+- [ ] **CI/CD pipeline green on main branch** — check https://github.com/your-org/your-repo/actions. The `quality`, `security-scan`, and `manifest-validation` jobs must all be passing. The `plan` job must have run successfully within the last 24 hours.
 
 - [ ] **Infracost delta < $10/month** — review the Infracost comment on the PR. Any delta above $10/month requires explicit justification in the PR description.
 
 - [ ] **Smoke test passing** — after deploy, confirm:
   ```bash
-  curl -sf https://api.tamendutta.com/health | jq .status
+  curl -sf https://api.example.com/health | jq .status
   # Expected: "ok"
-  curl -sf -X POST https://api.tamendutta.com/order \
+  curl -sf -X POST https://api.example.com/order \
     -H 'Content-Type: application/json' \
     -d '{"items":["smoke-test"],"total":0.01}' | jq .success
   # Expected: true
@@ -529,7 +529,7 @@ On any P1/P2 alert, run through this in order before anything else:
 
 1. **Is the API responding?**
    ```bash
-   curl -sf https://api.tamendutta.com/health && echo "UP" || echo "DOWN"
+   curl -sf https://api.example.com/health && echo "UP" || echo "DOWN"
    ```
 
 2. **Are pods running?**
@@ -546,7 +546,7 @@ On any P1/P2 alert, run through this in order before anything else:
 4. **Did anything deploy recently?**
    ```bash
    kubectl rollout history deployment/order-api -n cloudops
-   # Check GitHub Actions: https://github.com/tamen25/CloudOps/actions
+   # Check GitHub Actions: https://github.com/your-org/your-repo/actions
    ```
 
 5. **Is RDS healthy?**
@@ -565,7 +565,7 @@ On any P1/P2 alert, run through this in order before anything else:
 
 For P1 and P2:
 
-1. Open a GitHub Issue in the `tamen25/CloudOps` repo titled: `[INCIDENT-<date>] <brief description>`
+1. Open a GitHub Issue in the `your-org/your-repo` repo titled: `[INCIDENT-<date>] <brief description>`
 2. Add label `incident` + severity label (`P1` or `P2`)
 3. Post the incident communication (see §7.4 template)
 4. Update the issue with timeline entries as the incident progresses
