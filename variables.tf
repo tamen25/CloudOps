@@ -117,6 +117,290 @@ variable "enable_alertmanager" {
   default     = false
 }
 
+# ── Observability bucket hardening ────────────────────────────────────────────
+# Defaults are dev-friendly. Flip these in environments/prod.tfvars.
+
+variable "buckets_force_destroy" {
+  description = "Allow `terraform destroy` to nuke observability buckets even if they contain objects. true = dev/test. false = prod."
+  type        = bool
+  default     = true
+}
+
+variable "buckets_versioning" {
+  description = "Enable S3 object versioning on Loki/Tempo/Mimir buckets. Required for replication."
+  type        = bool
+  default     = false
+}
+
+variable "buckets_kms_cmk" {
+  description = "Use a per-domain customer-managed KMS key for SSE on observability buckets instead of AES-256."
+  type        = bool
+  default     = false
+}
+
+variable "buckets_replication_destination_arn" {
+  description = "S3 bucket ARN in another region for cross-region replication. Empty = no replication."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_replication_role_arn" {
+  description = "IAM role ARN with s3:Replicate* permissions. Required when buckets_replication_destination_arn is set."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_glacier_transition_days" {
+  description = "Days after which observability bucket objects transition to Glacier. 0 = no transition."
+  type        = number
+  default     = 30
+}
+
+variable "buckets_expiration_days" {
+  description = "Days after which observability bucket objects are deleted. 0 = never."
+  type        = number
+  default     = 0
+}
+
+# ── Long-term metrics storage ─────────────────────────────────────────────────
+
+variable "metrics_long_term_storage" {
+  description = "Long-term Prometheus storage backend. \"none\" = local PVC only. \"mimir\" = remote_write to Mimir + S3 (recommended). \"thanos\" = sidecar + S3 (alternative)."
+  type        = string
+  default     = "none"
+
+  validation {
+    condition     = contains(["none", "mimir", "thanos"], var.metrics_long_term_storage)
+    error_message = "metrics_long_term_storage must be one of: none, mimir, thanos."
+  }
+}
+
+# ── Observability HA replicas ─────────────────────────────────────────────────
+
+variable "loki_replication_factor" {
+  description = "Loki write-path replication factor. 1 = dev. 3 = prod."
+  type        = number
+  default     = 1
+}
+
+variable "loki_write_replicas" {
+  description = "Number of Loki write pods. >= loki_replication_factor."
+  type        = number
+  default     = 2
+}
+
+variable "loki_read_replicas" {
+  description = "Number of Loki read pods."
+  type        = number
+  default     = 2
+}
+
+variable "prometheus_replicas" {
+  description = "Number of Prometheus replicas. 1 = dev. 2+ = HA, zone-spread."
+  type        = number
+  default     = 1
+}
+
+variable "prometheus_retention" {
+  description = "Local Prometheus TSDB retention. Drop to 6h once Mimir/Thanos owns long-term."
+  type        = string
+  default     = "15d"
+}
+
+variable "tempo_ingester_replicas" {
+  description = "Number of Tempo ingester replicas. 1 = dev. 3 = prod."
+  type        = number
+  default     = 1
+}
+
+variable "tempo_metrics_generator_enabled" {
+  description = "Enable Tempo's metrics-generator (RED metrics from spans). Requires Prometheus remote_write."
+  type        = bool
+  default     = false
+}
+
+# ── RDS Secrets Manager rotation ──────────────────────────────────────────────
+
+variable "database_rotation_enabled" {
+  description = "Enable automatic rotation of the DB credential secret in Secrets Manager. Requires database_rotation_lambda_arn."
+  type        = bool
+  default     = false
+}
+
+variable "database_rotation_lambda_arn" {
+  description = "Rotation Lambda ARN. Deploy AWS SAR's SecretsManagerRDSPostgreSQLRotationSingleUser and pass the resulting Lambda ARN here."
+  type        = string
+  default     = ""
+}
+
+variable "database_rotation_days" {
+  description = "Days between automatic credential rotations."
+  type        = number
+  default     = 30
+}
+
+variable "database_secret_recovery_window_days" {
+  description = "Days the deleted DB-credential secret remains recoverable. 0 = immediate (test envs only)."
+  type        = number
+  default     = 7
+}
+
+# ── AWS Backup ────────────────────────────────────────────────────────────────
+
+variable "enable_backup" {
+  description = "Deploy AWS Backup vault + plan covering RDS and tagged EBS volumes."
+  type        = bool
+  default     = false
+}
+
+variable "backup_vault_lock_enabled" {
+  description = "Enable AWS Backup vault lock (compliance mode). NEVER true in test envs — locked vaults cannot be destroyed until min_retention_days expires."
+  type        = bool
+  default     = false
+}
+
+variable "backup_vault_lock_min_retention_days" {
+  description = "Minimum retention days for vault lock."
+  type        = number
+  default     = 7
+}
+
+variable "backup_vault_lock_max_retention_days" {
+  description = "Maximum retention days for vault lock."
+  type        = number
+  default     = 365
+}
+
+variable "backup_daily_retention_days" {
+  description = "Days to retain daily backups."
+  type        = number
+  default     = 7
+}
+
+variable "backup_weekly_retention_days" {
+  description = "Days to retain weekly backups."
+  type        = number
+  default     = 30
+}
+
+variable "backup_monthly_retention_days" {
+  description = "Days to retain monthly backups."
+  type        = number
+  default     = 365
+}
+
+# ── WAFv2 ─────────────────────────────────────────────────────────────────────
+
+variable "enable_waf" {
+  description = "Attach a regional WAFv2 web ACL to the public ALB. Default-allow with managed rule groups + rate limit + optional geo block."
+  type        = bool
+  default     = false
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "WAF per-IP rate limit (requests per 5 minutes)."
+  type        = number
+  default     = 2000
+}
+
+variable "waf_geo_block_countries" {
+  description = "ISO 3166-1 alpha-2 country codes to block at the WAF. Empty = no geo block."
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_logging_enabled" {
+  description = "Send WAF sampled blocked-request logs to a dedicated CloudWatch log group."
+  type        = bool
+  default     = true
+}
+
+# ── Compliance (CloudTrail / GuardDuty / Config / Security Hub) ───────────────
+
+variable "enable_compliance" {
+  description = "Master toggle for the compliance module wrapper. Each sub-service has its own toggle below."
+  type        = bool
+  default     = false
+}
+
+variable "enable_cloudtrail" {
+  description = "Deploy a multi-region CloudTrail with log file validation."
+  type        = bool
+  default     = false
+}
+
+variable "cloudtrail_object_lock_enabled" {
+  description = "Enable S3 Object Lock on the CloudTrail bucket (compliance mode). NEVER true in test envs — locked objects cannot be deleted until retention expires."
+  type        = bool
+  default     = false
+}
+
+variable "cloudtrail_object_lock_retention_days" {
+  description = "Object Lock retention period for CloudTrail logs."
+  type        = number
+  default     = 90
+}
+
+variable "enable_guardduty" {
+  description = "Enable GuardDuty for the account."
+  type        = bool
+  default     = false
+}
+
+variable "guardduty_eks_protection" {
+  description = "Enable GuardDuty EKS Audit Logs + Runtime Monitoring."
+  type        = bool
+  default     = true
+}
+
+variable "guardduty_s3_protection" {
+  description = "Enable GuardDuty S3 Protection."
+  type        = bool
+  default     = true
+}
+
+variable "guardduty_malware_protection" {
+  description = "Enable GuardDuty Malware Protection for EBS volumes."
+  type        = bool
+  default     = false
+}
+
+variable "enable_config" {
+  description = "Deploy AWS Config recorder + delivery channel."
+  type        = bool
+  default     = false
+}
+
+variable "config_conformance_packs" {
+  description = "Conformance pack templates to deploy. Each entry needs a name and template_s3_uri."
+  type = list(object({
+    name             = string
+    template_s3_uri  = string
+  }))
+  default = []
+}
+
+variable "enable_security_hub" {
+  description = "Enable Security Hub with the specified standards subscribed."
+  type        = bool
+  default     = false
+}
+
+variable "enable_external_secrets" {
+  description = "Install External Secrets Operator (pulls AWS Secrets Manager values into k8s Secrets via IRSA)."
+  type        = bool
+  default     = false
+}
+
+variable "security_hub_standards" {
+  description = "Security Hub standard ARNs to subscribe to."
+  type        = list(string)
+  default = [
+    "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0",
+    "arn:aws:securityhub:::standards/aws-foundational-security-best-practices/v/1.0.0",
+  ]
+}
+
 variable "grafana_alert_webhook_url" {
   description = "HTTPS webhook for Grafana unified-alerting notifications (Slack, PagerDuty Events v2, or API Gateway → SNS). Empty = no webhook contact point."
   type        = string
@@ -322,6 +606,17 @@ variable "enable_flow_logs" {
   description = "Enable VPC Flow Logs for network monitoring and troubleshooting"
   type        = bool
   default     = false
+}
+
+variable "flow_logs_destination" {
+  description = "VPC flow logs target. \"cloudwatch\" = quick + queryable. \"s3\" = parquet + Athena partitioning, cheaper at scale."
+  type        = string
+  default     = "cloudwatch"
+
+  validation {
+    condition     = contains(["cloudwatch", "s3"], var.flow_logs_destination)
+    error_message = "flow_logs_destination must be one of: cloudwatch, s3."
+  }
 }
 
 variable "flow_logs_retention_days" {

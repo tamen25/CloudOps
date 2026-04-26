@@ -173,6 +173,30 @@ variable "iam_database_authentication_enabled" {
   default     = false
 }
 
+variable "rotation_enabled" {
+  description = "Enable Secrets Manager rotation for the DB credential secret. Requires rotation_lambda_arn pointing at a deployed rotation Lambda (e.g. AWS SAR SecretsManagerRDSPostgreSQLRotationSingleUser)."
+  type        = bool
+  default     = false
+}
+
+variable "rotation_lambda_arn" {
+  description = "ARN of the rotation Lambda. AWS publishes templates in SAR; deploy SecretsManagerRDSPostgreSQLRotationSingleUser and pass the resulting Lambda ARN here."
+  type        = string
+  default     = ""
+}
+
+variable "rotation_days" {
+  description = "Days between automatic rotations."
+  type        = number
+  default     = 30
+}
+
+variable "secret_recovery_window_days" {
+  description = "Days a deleted secret stays recoverable before permanent deletion. 0 = immediate (use only for test envs)."
+  type        = number
+  default     = 7
+}
+
 variable "publicly_accessible" {
   description = "Make database publicly accessible (NEVER true for production)"
   type        = bool

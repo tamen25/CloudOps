@@ -36,9 +36,36 @@ resource "helm_release" "prometheus" {
 
     prometheus = {
       prometheusSpec = {
-        retention          = "15d"
+        retention          = var.prometheus_retention
+        replicas           = var.prometheus_replicas
         scrapeInterval     = "30s"
         evaluationInterval = "30s"
+
+        # Spread replicas across nodes (and AZs, since node groups are AZ-pinned).
+        affinity = var.prometheus_replicas > 1 ? {
+          podAntiAffinity = {
+            requiredDuringSchedulingIgnoredDuringExecution = [{
+              labelSelector = {
+                matchLabels = { "app.kubernetes.io/name" = "prometheus" }
+              }
+              topologyKey = "topology.kubernetes.io/zone"
+            }]
+          }
+        } : null
+
+        # Remote write to Mimir/Thanos when long-term storage is wired up.
+        # Mimir distributor address is set by the mimir.tf module.
+        remoteWrite = var.metrics_long_term_storage == "mimir" ? [{
+          url = "http://mimir-distributor.mimir.svc:8080/api/v1/push"
+          headers = {
+            "X-Scope-OrgID" = "anonymous"
+          }
+          writeRelabelConfigs = [{
+            sourceLabels = ["__name__"]
+            regex        = ".*"
+            action       = "keep"
+          }]
+        }] : []
 
         # Accept remote write from OTel Collector
         enableRemoteWriteReceiver = true

@@ -1,9 +1,30 @@
-# S3 bucket for Loki chunk storage
-resource "aws_s3_bucket" "loki" {
-  bucket        = "cloudops-loki-chunks-${var.aws_account_id}"
-  force_destroy = true
+# Observability buckets.
+# All hardening flips via root-level vars (see variables.tf):
+#   buckets_force_destroy / buckets_versioning / buckets_kms_cmk
+#   buckets_replication_destination_arn / buckets_replication_role_arn
+#   buckets_glacier_transition_days / buckets_expiration_days
+#
+# Defaults are dev-friendly. prod.tfvars flips them.
 
-  tags = merge(local.common_tags, { Name = "cloudops-loki-chunks-${var.aws_account_id}" })
+locals {
+  buckets = {
+    loki  = "${var.name_prefix}-loki-chunks-${var.aws_account_id}"
+    tempo = "${var.name_prefix}-tempo-traces-${var.aws_account_id}"
+  }
+
+  bucket_kms_arn = {
+    loki  = var.buckets_kms_cmk ? aws_kms_key.loki[0].arn : null
+    tempo = var.buckets_kms_cmk ? aws_kms_key.tempo[0].arn : null
+  }
+}
+
+# ── Loki bucket ──────────────────────────────────────────────────────────────
+
+resource "aws_s3_bucket" "loki" {
+  bucket        = local.buckets.loki
+  force_destroy = var.buckets_force_destroy
+
+  tags = merge(local.common_tags, { Name = local.buckets.loki })
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "loki" {
@@ -11,8 +32,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "loki" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = var.buckets_kms_cmk ? "aws:kms" : "AES256"
+      kms_master_key_id = local.bucket_kms_arn.loki
     }
+    bucket_key_enabled = var.buckets_kms_cmk
   }
 }
 
@@ -24,22 +47,18 @@ resource "aws_s3_bucket_public_access_block" "loki" {
   restrict_public_buckets = true
 }
 
-# Transition to Glacier after 30 days
+resource "aws_s3_bucket_versioning" "loki" {
+  bucket = aws_s3_bucket.loki.id
+
+  versioning_configuration {
+    status = var.buckets_versioning ? "Enabled" : "Suspended"
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "loki" {
   bucket = aws_s3_bucket.loki.id
 
-  rule {
-    id     = "glacier-after-30-days"
-    status = "Enabled"
-
-    filter {}
-
-    transition {
-      days          = 30
-      storage_class = "GLACIER"
-    }
-  }
-
+  # Always enabled — handles abort-incomplete-multipart even in minimal setups.
   rule {
     id     = "abort-incomplete-multipart"
     status = "Enabled"
@@ -48,14 +67,76 @@ resource "aws_s3_bucket_lifecycle_configuration" "loki" {
       days_after_initiation = 7
     }
   }
+
+  dynamic "rule" {
+    for_each = var.buckets_glacier_transition_days > 0 ? [1] : []
+    content {
+      id     = "glacier-transition"
+      status = "Enabled"
+      filter {}
+      transition {
+        days          = var.buckets_glacier_transition_days
+        storage_class = "GLACIER"
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.buckets_expiration_days > 0 ? [1] : []
+    content {
+      id     = "expire"
+      status = "Enabled"
+      filter {}
+      expiration {
+        days = var.buckets_expiration_days
+      }
+    }
+  }
+
+  # Old versions are pointless after the live object is purged — dedupe storage.
+  dynamic "rule" {
+    for_each = var.buckets_versioning ? [1] : []
+    content {
+      id     = "expire-noncurrent-versions"
+      status = "Enabled"
+      filter {}
+      noncurrent_version_expiration {
+        noncurrent_days = 30
+      }
+    }
+  }
 }
 
-# S3 bucket for Tempo trace storage
-resource "aws_s3_bucket" "tempo" {
-  bucket        = "cloudops-tempo-traces-${var.aws_account_id}"
-  force_destroy = true
+resource "aws_s3_bucket_replication_configuration" "loki" {
+  count = var.buckets_replication_destination_arn != "" ? 1 : 0
 
-  tags = merge(local.common_tags, { Name = "cloudops-tempo-traces-${var.aws_account_id}" })
+  bucket = aws_s3_bucket.loki.id
+  role   = var.buckets_replication_role_arn
+
+  rule {
+    id     = "replicate-all"
+    status = "Enabled"
+
+    destination {
+      bucket        = var.buckets_replication_destination_arn
+      storage_class = "STANDARD_IA"
+    }
+
+    delete_marker_replication {
+      status = "Enabled"
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.loki]
+}
+
+# ── Tempo bucket ─────────────────────────────────────────────────────────────
+
+resource "aws_s3_bucket" "tempo" {
+  bucket        = local.buckets.tempo
+  force_destroy = var.buckets_force_destroy
+
+  tags = merge(local.common_tags, { Name = local.buckets.tempo })
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "tempo" {
@@ -63,8 +144,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "tempo" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = var.buckets_kms_cmk ? "aws:kms" : "AES256"
+      kms_master_key_id = local.bucket_kms_arn.tempo
     }
+    bucket_key_enabled = var.buckets_kms_cmk
   }
 }
 
@@ -76,20 +159,16 @@ resource "aws_s3_bucket_public_access_block" "tempo" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
+resource "aws_s3_bucket_versioning" "tempo" {
   bucket = aws_s3_bucket.tempo.id
 
-  rule {
-    id     = "glacier-after-30-days"
-    status = "Enabled"
-
-    filter {}
-
-    transition {
-      days          = 30
-      storage_class = "GLACIER"
-    }
+  versioning_configuration {
+    status = var.buckets_versioning ? "Enabled" : "Suspended"
   }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
+  bucket = aws_s3_bucket.tempo.id
 
   rule {
     id     = "abort-incomplete-multipart"
@@ -99,4 +178,64 @@ resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
       days_after_initiation = 7
     }
   }
+
+  dynamic "rule" {
+    for_each = var.buckets_glacier_transition_days > 0 ? [1] : []
+    content {
+      id     = "glacier-transition"
+      status = "Enabled"
+      filter {}
+      transition {
+        days          = var.buckets_glacier_transition_days
+        storage_class = "GLACIER"
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.buckets_expiration_days > 0 ? [1] : []
+    content {
+      id     = "expire"
+      status = "Enabled"
+      filter {}
+      expiration {
+        days = var.buckets_expiration_days
+      }
+    }
+  }
+
+  dynamic "rule" {
+    for_each = var.buckets_versioning ? [1] : []
+    content {
+      id     = "expire-noncurrent-versions"
+      status = "Enabled"
+      filter {}
+      noncurrent_version_expiration {
+        noncurrent_days = 30
+      }
+    }
+  }
+}
+
+resource "aws_s3_bucket_replication_configuration" "tempo" {
+  count = var.buckets_replication_destination_arn != "" ? 1 : 0
+
+  bucket = aws_s3_bucket.tempo.id
+  role   = var.buckets_replication_role_arn
+
+  rule {
+    id     = "replicate-all"
+    status = "Enabled"
+
+    destination {
+      bucket        = var.buckets_replication_destination_arn
+      storage_class = "STANDARD_IA"
+    }
+
+    delete_marker_replication {
+      status = "Enabled"
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.tempo]
 }

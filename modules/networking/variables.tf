@@ -115,6 +115,29 @@ variable "enable_flow_logs" {
   default     = false
 }
 
+variable "flow_logs_destination" {
+  description = "Where to send VPC flow logs. \"cloudwatch\" = quick + queryable, more expensive at scale. \"s3\" = cheaper, parquet + Athena partitioning."
+  type        = string
+  default     = "cloudwatch"
+
+  validation {
+    condition     = contains(["cloudwatch", "s3"], var.flow_logs_destination)
+    error_message = "flow_logs_destination must be one of: cloudwatch, s3."
+  }
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID — used for globally unique flow-logs S3 bucket name."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_force_destroy" {
+  description = "Allow `terraform destroy` to nuke flow-logs S3 bucket even if it contains objects. Set true in test envs only."
+  type        = bool
+  default     = true
+}
+
 variable "flow_logs_retention_days" {
   description = "Number of days to retain VPC Flow Logs in CloudWatch"
   type        = number

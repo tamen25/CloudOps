@@ -69,6 +69,32 @@ variable "grafana_subdomain" {
   default     = "grafana"
 }
 
+# ── WAFv2 ──────────────────────────────────────────────────────────────────────
+
+variable "enable_waf" {
+  description = "Attach a regional WAFv2 web ACL to the public ALB."
+  type        = bool
+  default     = false
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "Per-IP rate limit (requests per 5 minutes). 2000 is the AWS-recommended default."
+  type        = number
+  default     = 2000
+}
+
+variable "waf_geo_block_countries" {
+  description = "ISO 3166-1 alpha-2 country codes to block. Empty = no geo block."
+  type        = list(string)
+  default     = []
+}
+
+variable "waf_logging_enabled" {
+  description = "Send sampled WAF blocked-request logs to CloudWatch."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Additional tags to apply to all resources"
   type        = map(string)

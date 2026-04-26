@@ -24,7 +24,7 @@ resource "helm_release" "loki" {
       auth_enabled = false
 
       commonConfig = {
-        replication_factor = 1
+        replication_factor = var.loki_replication_factor
       }
 
       storage = {
@@ -34,10 +34,19 @@ resource "helm_release" "loki" {
           ruler  = aws_s3_bucket.loki.id
           admin  = aws_s3_bucket.loki.id
         }
-        s3 = {
-          region           = var.region
-          s3ForcePathStyle = false
-        }
+        s3 = merge(
+          {
+            region           = var.region
+            s3ForcePathStyle = false
+          },
+          var.buckets_kms_cmk ? {
+            sse_encryption = true
+            sse = {
+              type        = "SSE-KMS"
+              kms_key_id  = aws_kms_key.loki[0].arn
+            }
+          } : {}
+        )
       }
 
       schemaConfig = {
@@ -64,12 +73,12 @@ resource "helm_release" "loki" {
       }
     }
 
-    # Simple scalable components — 2 write/read for HA, 1 backend
+    # Simple scalable components — replicas driven by vars so prod can flip up.
     write = {
-      replicas = 2
+      replicas = var.loki_write_replicas
     }
     read = {
-      replicas = 2
+      replicas = var.loki_read_replicas
     }
     backend = {
       replicas = 1

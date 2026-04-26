@@ -106,6 +106,18 @@ variable "application_namespace" {
   default     = "cloudops"
 }
 
+variable "enable_external_secrets" {
+  description = "Install External Secrets Operator (pulls AWS Secrets Manager values into k8s Secrets via IRSA). Provisions a default ClusterSecretStore."
+  type        = bool
+  default     = false
+}
+
+variable "oidc_provider_url" {
+  description = "OIDC provider URL without https:// (from EKS module). Required for External Secrets IRSA."
+  type        = string
+  default     = ""
+}
+
 # ── kube-bench IRSA inputs ────────────────────────────────────────────────────
 
 variable "oidc_provider_arn" {

@@ -86,6 +86,9 @@ module "networking" {
 
   enable_flow_logs         = var.enable_flow_logs
   flow_logs_retention_days = var.flow_logs_retention_days
+  flow_logs_destination    = var.flow_logs_destination
+  aws_account_id           = local.account_id
+  buckets_force_destroy    = var.buckets_force_destroy
 
   allowed_cidr_blocks = var.allowed_cidr_blocks
   enable_https        = var.enable_https
@@ -150,6 +153,12 @@ module "ingress" {
   alb_dns_name = var.alb_dns_name
   alb_zone_id  = var.alb_zone_id
 
+  # WAFv2
+  enable_waf              = var.enable_waf
+  waf_rate_limit_per_5min = var.waf_rate_limit_per_5min
+  waf_geo_block_countries = var.waf_geo_block_countries
+  waf_logging_enabled     = var.waf_logging_enabled
+
   tags = local.common_tags
 }
 
@@ -185,6 +194,27 @@ module "observability" {
   alert_webhook_url   = var.grafana_alert_webhook_url
 
   enable_alertmanager = var.enable_alertmanager
+
+  # Bucket hardening (defaults dev-friendly; flip via prod tfvars)
+  buckets_force_destroy                = var.buckets_force_destroy
+  buckets_versioning                   = var.buckets_versioning
+  buckets_kms_cmk                      = var.buckets_kms_cmk
+  buckets_replication_destination_arn  = var.buckets_replication_destination_arn
+  buckets_replication_role_arn         = var.buckets_replication_role_arn
+  buckets_glacier_transition_days      = var.buckets_glacier_transition_days
+  buckets_expiration_days              = var.buckets_expiration_days
+
+  # HA replicas
+  loki_replication_factor          = var.loki_replication_factor
+  loki_write_replicas              = var.loki_write_replicas
+  loki_read_replicas               = var.loki_read_replicas
+  prometheus_replicas              = var.prometheus_replicas
+  prometheus_retention             = var.prometheus_retention
+  tempo_ingester_replicas          = var.tempo_ingester_replicas
+  tempo_metrics_generator_enabled  = var.tempo_metrics_generator_enabled
+
+  # Long-term metrics storage backend (none|mimir|thanos)
+  metrics_long_term_storage = var.metrics_long_term_storage
 
   tags = local.common_tags
 }
@@ -254,6 +284,8 @@ module "security" {
 
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
+
+  enable_external_secrets = var.enable_external_secrets
 
   tags = local.common_tags
 
@@ -354,6 +386,72 @@ module "database" {
 
   performance_insights_enabled = var.database_performance_insights_enabled
   monitoring_interval          = var.database_monitoring_interval
+
+  # Secrets Manager hardening
+  rotation_enabled            = var.database_rotation_enabled
+  rotation_lambda_arn         = var.database_rotation_lambda_arn
+  rotation_days               = var.database_rotation_days
+  secret_recovery_window_days = var.database_secret_recovery_window_days
+
+  tags = local.common_tags
+}
+
+# Compliance — CloudTrail / GuardDuty / Config / Security Hub.
+# Each toggle is independent; defaults OFF so dev tear-down is not gated by
+# org-level audit state. Flip on in prod-test.tfvars to validate the wiring.
+
+module "compliance" {
+  count  = var.enable_compliance ? 1 : 0
+  source = "./modules/compliance"
+
+  name_prefix    = local.name_prefix
+  environment    = var.environment
+  region         = var.region
+  aws_account_id = local.account_id
+
+  # CloudTrail
+  enable_cloudtrail                     = var.enable_cloudtrail
+  cloudtrail_object_lock_enabled        = var.cloudtrail_object_lock_enabled
+  cloudtrail_object_lock_retention_days = var.cloudtrail_object_lock_retention_days
+  cloudtrail_buckets_force_destroy      = var.buckets_force_destroy
+
+  # GuardDuty
+  enable_guardduty             = var.enable_guardduty
+  guardduty_eks_protection     = var.guardduty_eks_protection
+  guardduty_s3_protection      = var.guardduty_s3_protection
+  guardduty_malware_protection = var.guardduty_malware_protection
+
+  # Config
+  enable_config            = var.enable_config
+  config_conformance_packs = var.config_conformance_packs
+
+  # Security Hub
+  enable_security_hub    = var.enable_security_hub
+  security_hub_standards = var.security_hub_standards
+
+  tags = local.common_tags
+}
+
+# AWS Backup vault — covers RDS + tagged EBS volumes.
+# vault_lock_enabled is OFF by default. Locked vaults CANNOT be destroyed
+# until min_retention_days expires — only enable in real prod.
+
+module "backup" {
+  count  = var.enable_backup ? 1 : 0
+  source = "./modules/backup"
+
+  name_prefix = local.name_prefix
+  environment = var.environment
+
+  rds_instance_arns = var.enable_database ? [module.database[0].rds_arn] : []
+
+  vault_lock_enabled            = var.backup_vault_lock_enabled
+  vault_lock_min_retention_days = var.backup_vault_lock_min_retention_days
+  vault_lock_max_retention_days = var.backup_vault_lock_max_retention_days
+
+  daily_retention_days   = var.backup_daily_retention_days
+  weekly_retention_days  = var.backup_weekly_retention_days
+  monthly_retention_days = var.backup_monthly_retention_days
 
   tags = local.common_tags
 }

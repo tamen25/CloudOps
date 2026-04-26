@@ -106,6 +106,119 @@ variable "tags" {
   default     = {}
 }
 
+# ─── Bucket hardening ─────────────────────────────────────────────────────────
+# Defaults are dev-friendly (force_destroy=true, no versioning, no replication,
+# AES-256 instead of CMK). prod.tfvars flips these to the durable settings.
+
+variable "buckets_force_destroy" {
+  description = "Allow `terraform destroy` to nuke observability buckets even if they contain objects. true = dev/test (disposable). false = prod (must empty manually)."
+  type        = bool
+  default     = true
+}
+
+variable "buckets_versioning" {
+  description = "Enable S3 object versioning on Loki/Tempo/Mimir buckets. Prevents accidental overwrite or delete; required for replication."
+  type        = bool
+  default     = false
+}
+
+variable "buckets_kms_cmk" {
+  description = "Use a per-domain customer-managed KMS key (CMK) for SSE on observability buckets instead of AES-256. Enables key rotation + audit."
+  type        = bool
+  default     = false
+}
+
+variable "buckets_replication_destination_arn" {
+  description = "S3 bucket ARN in another region to replicate observability data to. Empty = no replication. Requires buckets_versioning=true and a replication IAM role; passed in via buckets_replication_role_arn."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_replication_role_arn" {
+  description = "IAM role ARN with s3:Replicate* + KMS:Decrypt on source/destination buckets. Required when buckets_replication_destination_arn is set."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_expiration_days" {
+  description = "Days after which observability bucket objects (already in Glacier) are deleted. 0 = never expire. Defaults to 365d in prod-shaped setups."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.buckets_expiration_days >= 0
+    error_message = "buckets_expiration_days must be 0 (no expiration) or positive."
+  }
+}
+
+variable "buckets_glacier_transition_days" {
+  description = "Days after which objects transition to Glacier. 0 = no transition (keep in Standard)."
+  type        = number
+  default     = 30
+}
+
+# ─── Long-term metrics storage ────────────────────────────────────────────────
+
+variable "metrics_long_term_storage" {
+  description = "Long-term Prometheus storage backend. \"none\" = local PVC only (15d retention). \"mimir\" = remote_write to Mimir + S3 (recommended). \"thanos\" = sidecar + S3 (alternative)."
+  type        = string
+  default     = "none"
+
+  validation {
+    condition     = contains(["none", "mimir", "thanos"], var.metrics_long_term_storage)
+    error_message = "metrics_long_term_storage must be one of: none, mimir, thanos."
+  }
+}
+
+# ─── HA replicas (defaults stay dev-friendly) ─────────────────────────────────
+
+variable "loki_replication_factor" {
+  description = "Loki write-path replication factor. 1 = dev (single point of loss). 3 = prod (HA writes)."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.loki_replication_factor >= 1
+    error_message = "loki_replication_factor must be at least 1."
+  }
+}
+
+variable "loki_write_replicas" {
+  description = "Number of Loki write pods. Should be >= loki_replication_factor for replication to work."
+  type        = number
+  default     = 2
+}
+
+variable "loki_read_replicas" {
+  description = "Number of Loki read pods."
+  type        = number
+  default     = 2
+}
+
+variable "prometheus_replicas" {
+  description = "Number of Prometheus replicas. 1 = dev. 2+ = HA. Replicas are zone-spread automatically by the operator."
+  type        = number
+  default     = 1
+}
+
+variable "prometheus_retention" {
+  description = "Local Prometheus TSDB retention. Drop to 6h once Mimir/Thanos owns long-term."
+  type        = string
+  default     = "15d"
+}
+
+variable "tempo_ingester_replicas" {
+  description = "Number of Tempo ingester replicas. 1 = dev. 3 = prod."
+  type        = number
+  default     = 1
+}
+
+variable "tempo_metrics_generator_enabled" {
+  description = "Enable Tempo's metrics-generator to derive RED metrics from spans. Requires Prometheus remote_write."
+  type        = bool
+  default     = false
+}
+
 # ─── SLO Targets ─────────────────────────────────────────────────────────────
 
 variable "slo_availability_target" {
