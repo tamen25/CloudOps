@@ -51,7 +51,7 @@ jobs:
         run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
 
       - name: terraform init
-        run: terraform init
+        run: ./scripts/tf-init.sh
 
       # ── 5. Run plan and capture exit code ───────────────────────────────────
       # -detailed-exitcode: 0 = no changes, 1 = error, 2 = changes (drift)

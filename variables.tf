@@ -111,6 +111,12 @@ variable "cost_anomaly_threshold_percent" {
   default     = 20
 }
 
+variable "enable_alertmanager" {
+  description = "Enable the kube-prometheus-stack Alertmanager pod. Required for SLO PrometheusRule alerts to surface in the Grafana unified Alerts UI via the Alertmanager datasource."
+  type        = bool
+  default     = false
+}
+
 variable "grafana_alert_webhook_url" {
   description = "HTTPS webhook for Grafana unified-alerting notifications (Slack, PagerDuty Events v2, or API Gateway → SNS). Empty = no webhook contact point."
   type        = string

@@ -59,8 +59,11 @@ resource "helm_release" "prometheus" {
       }
     }
 
+    # When enabled, kube-prometheus-stack runs an Alertmanager pod that
+    # aggregates PrometheusRule alerts. Required for the Grafana
+    # Alertmanager datasource (alerting.tf) to actually return data.
     alertmanager = {
-      enabled = false
+      enabled = var.enable_alertmanager
     }
 
     prometheusOperator = {

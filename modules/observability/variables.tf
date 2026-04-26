@@ -74,6 +74,12 @@ variable "application_namespace" {
   default     = "cloudops"
 }
 
+variable "enable_alertmanager" {
+  description = "Run kube-prometheus-stack's Alertmanager pod. Required for the Grafana Alertmanager datasource to return data. Adds ~50m CPU / ~100Mi RAM."
+  type        = bool
+  default     = false
+}
+
 # ── Grafana unified alerting ──────────────────────────────────────────────────
 
 variable "alert_email" {

@@ -185,7 +185,7 @@ jobs:
           fi
 
       - name: terraform init
-        run: terraform init
+        run: ./scripts/tf-init.sh
 
       - name: terraform plan
         id: plan
@@ -372,7 +372,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform Init
-        run: terraform init
+        run: ./scripts/tf-init.sh
 
       - name: Pluralith Init
         uses: Pluralith/actions/init@v1.4.0
@@ -468,7 +468,7 @@ jobs:
           fi
 
       - name: terraform init
-        run: terraform init
+        run: ./scripts/tf-init.sh
 
       - name: Release stale state lock
         # Terraform 1.11 S3 native locking stores the lock as <key>.tflock.

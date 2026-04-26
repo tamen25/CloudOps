@@ -191,3 +191,8 @@ cost_anomaly_threshold_percent = 20
 # alerts via Slack/PagerDuty/SNS, set a webhook URL below. Empty = alerts still
 # fire but are only visible in the Grafana Alerting UI.
 grafana_alert_webhook_url = ""
+
+# Run the kube-prometheus-stack Alertmanager pod. Required for SLO
+# PrometheusRule alerts to show up in the Grafana unified Alerts UI.
+# Adds ~50m CPU / ~100Mi RAM. Cheap.
+enable_alertmanager = true

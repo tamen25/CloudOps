@@ -184,6 +184,8 @@ module "observability" {
   alert_sns_topic_arn = var.enable_self_healing ? module.self_healing[0].sns_topic_arn : ""
   alert_webhook_url   = var.grafana_alert_webhook_url
 
+  enable_alertmanager = var.enable_alertmanager
+
   tags = local.common_tags
 }
 

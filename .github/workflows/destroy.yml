@@ -74,7 +74,7 @@ jobs:
         run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
 
       - name: terraform init
-        run: terraform init
+        run: ./scripts/tf-init.sh
 
       # ── 5. Install bucket-emptying helper ──────────────────────────────────
       # Written once to /usr/local/bin and reused for Loki, Tempo, and state buckets.
