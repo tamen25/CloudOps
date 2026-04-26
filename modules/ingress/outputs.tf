@@ -1,10 +1,10 @@
 output "certificate_arn" {
-  description = "ACM wildcard certificate ARN for *.${var.domain_name}"
+  description = "ACM wildcard certificate ARN for the project domain"
   value       = aws_acm_certificate_validation.main.certificate_arn
 }
 
 output "hosted_zone_id" {
-  description = "Route 53 hosted zone ID for ${var.domain_name}"
+  description = "Route 53 hosted zone ID for the project domain"
   value       = var.zone_id
 }
 

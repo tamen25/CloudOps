@@ -39,7 +39,7 @@ resource "aws_backup_plan" "main" {
   rule {
     rule_name         = "daily"
     target_vault_name = aws_backup_vault.main.name
-    schedule          = "cron(0 5 ? * * *)"  # 05:00 UTC daily
+    schedule          = "cron(0 5 ? * * *)" # 05:00 UTC daily
 
     lifecycle {
       delete_after = var.daily_retention_days
@@ -49,7 +49,7 @@ resource "aws_backup_plan" "main" {
   rule {
     rule_name         = "weekly"
     target_vault_name = aws_backup_vault.main.name
-    schedule          = "cron(0 5 ? * SUN *)"  # Sunday 05:00 UTC
+    schedule          = "cron(0 5 ? * SUN *)" # Sunday 05:00 UTC
 
     lifecycle {
       delete_after = var.weekly_retention_days
@@ -59,7 +59,7 @@ resource "aws_backup_plan" "main" {
   rule {
     rule_name         = "monthly"
     target_vault_name = aws_backup_vault.main.name
-    schedule          = "cron(0 5 1 * ? *)"  # 1st of each month, 05:00 UTC
+    schedule          = "cron(0 5 1 * ? *)" # 1st of each month, 05:00 UTC
 
     lifecycle {
       delete_after = var.monthly_retention_days

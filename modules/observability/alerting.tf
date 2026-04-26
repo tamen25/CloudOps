@@ -46,9 +46,9 @@ locals {
                 # The self-healing module already exposes the SNS topic;
                 # consumers connect to it via email/slack/pagerduty subscriptions.
                 # Grafana sends JSON; an API Gateway in front of SNS is typical.
-                url         = var.alert_webhook_url
-                httpMethod  = "POST"
-                maxAlerts   = 50
+                url        = var.alert_webhook_url
+                httpMethod = "POST"
+                maxAlerts  = 50
               }
             },
           ]
@@ -122,12 +122,12 @@ resource "kubernetes_config_map" "grafana_alertmanager_datasource" {
       apiVersion = 1
       datasources = [
         {
-          name      = "Alertmanager"
-          type      = "alertmanager"
-          uid       = "alertmanager"
-          url       = "http://prometheus-kube-prometheus-alertmanager.monitoring.svc:9093"
-          access    = "proxy"
-          editable  = false
+          name     = "Alertmanager"
+          type     = "alertmanager"
+          uid      = "alertmanager"
+          url      = "http://prometheus-kube-prometheus-alertmanager.monitoring.svc:9093"
+          access   = "proxy"
+          editable = false
           jsonData = {
             handleGrafanaManagedAlerts = true
             implementation             = "prometheus"

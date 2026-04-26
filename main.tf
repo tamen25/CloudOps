@@ -179,9 +179,9 @@ module "observability" {
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
-  acm_cert_arn = var.enable_ingress ? module.ingress[0].certificate_arn : ""
-  domain       = var.domain_name
-  zone_id      = !var.destroy_all ? module.dns[0].zone_id : ""
+  acm_cert_arn          = var.enable_ingress ? module.ingress[0].certificate_arn : ""
+  domain                = var.domain_name
+  zone_id               = !var.destroy_all ? module.dns[0].zone_id : ""
   application_namespace = var.order_api_namespace
 
   alb_dns_name = var.alb_dns_name
@@ -196,22 +196,22 @@ module "observability" {
   enable_alertmanager = var.enable_alertmanager
 
   # Bucket hardening (defaults dev-friendly; flip via prod tfvars)
-  buckets_force_destroy                = var.buckets_force_destroy
-  buckets_versioning                   = var.buckets_versioning
-  buckets_kms_cmk                      = var.buckets_kms_cmk
-  buckets_replication_destination_arn  = var.buckets_replication_destination_arn
-  buckets_replication_role_arn         = var.buckets_replication_role_arn
-  buckets_glacier_transition_days      = var.buckets_glacier_transition_days
-  buckets_expiration_days              = var.buckets_expiration_days
+  buckets_force_destroy               = var.buckets_force_destroy
+  buckets_versioning                  = var.buckets_versioning
+  buckets_kms_cmk                     = var.buckets_kms_cmk
+  buckets_replication_destination_arn = var.buckets_replication_destination_arn
+  buckets_replication_role_arn        = var.buckets_replication_role_arn
+  buckets_glacier_transition_days     = var.buckets_glacier_transition_days
+  buckets_expiration_days             = var.buckets_expiration_days
 
   # HA replicas
-  loki_replication_factor          = var.loki_replication_factor
-  loki_write_replicas              = var.loki_write_replicas
-  loki_read_replicas               = var.loki_read_replicas
-  prometheus_replicas              = var.prometheus_replicas
-  prometheus_retention             = var.prometheus_retention
-  tempo_ingester_replicas          = var.tempo_ingester_replicas
-  tempo_metrics_generator_enabled  = var.tempo_metrics_generator_enabled
+  loki_replication_factor         = var.loki_replication_factor
+  loki_write_replicas             = var.loki_write_replicas
+  loki_read_replicas              = var.loki_read_replicas
+  prometheus_replicas             = var.prometheus_replicas
+  prometheus_retention            = var.prometheus_retention
+  tempo_ingester_replicas         = var.tempo_ingester_replicas
+  tempo_metrics_generator_enabled = var.tempo_metrics_generator_enabled
 
   # Long-term metrics storage backend (none|mimir|thanos)
   metrics_long_term_storage = var.metrics_long_term_storage

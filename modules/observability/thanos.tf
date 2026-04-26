@@ -118,8 +118,8 @@ resource "kubernetes_secret" "thanos_objstore" {
         endpoint = "s3.${var.region}.amazonaws.com"
         region   = var.region
         sse_config = var.buckets_kms_cmk ? {
-          type        = "SSE-KMS"
-          kms_key_id  = aws_kms_key.mimir[0].arn
+          type       = "SSE-KMS"
+          kms_key_id = aws_kms_key.mimir[0].arn
         } : null
       }
     })
@@ -143,7 +143,7 @@ resource "helm_release" "thanos" {
     existingObjstoreSecret = "thanos-objstore"
 
     query = {
-      enabled  = true
+      enabled      = true
       replicaCount = 2
       stores = [
         # Sidecar inside prometheus pod — set up via Prom helm values when needed.
@@ -153,7 +153,7 @@ resource "helm_release" "thanos" {
     }
 
     storegateway = {
-      enabled  = true
+      enabled = true
       serviceAccount = {
         create = true
         name   = "thanos-storegateway"
@@ -169,7 +169,7 @@ resource "helm_release" "thanos" {
     }
 
     compactor = {
-      enabled  = true
+      enabled = true
       serviceAccount = {
         create = true
         name   = "thanos-compactor"

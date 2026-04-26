@@ -34,19 +34,15 @@ resource "helm_release" "loki" {
           ruler  = aws_s3_bucket.loki.id
           admin  = aws_s3_bucket.loki.id
         }
-        s3 = merge(
-          {
-            region           = var.region
-            s3ForcePathStyle = false
-          },
-          var.buckets_kms_cmk ? {
-            sse_encryption = true
-            sse = {
-              type        = "SSE-KMS"
-              kms_key_id  = aws_kms_key.loki[0].arn
-            }
-          } : {}
-        )
+        s3 = {
+          region           = var.region
+          s3ForcePathStyle = false
+          sse_encryption   = var.buckets_kms_cmk
+          sse = var.buckets_kms_cmk ? {
+            type       = "SSE-KMS"
+            kms_key_id = aws_kms_key.loki[0].arn
+          } : null
+        }
       }
 
       schemaConfig = {

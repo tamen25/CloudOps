@@ -61,7 +61,7 @@ resource "helm_release" "tempo" {
       # Metrics generator derives RED metrics (rate/errors/duration) from spans
       # and remote-writes them to Prometheus. Useful for service maps in Grafana.
       metricsGenerator = var.tempo_metrics_generator_enabled ? {
-        enabled = true
+        enabled        = true
         remoteWriteUrl = "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/write"
       } : { enabled = false }
     }

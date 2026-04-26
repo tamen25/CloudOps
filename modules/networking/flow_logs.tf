@@ -119,7 +119,7 @@ resource "aws_flow_log" "main" {
   traffic_type = "ALL"
 
   # CloudWatch path
-  iam_role_arn    = var.flow_logs_destination == "cloudwatch" ? aws_iam_role.vpc_flow_logs[0].arn : null
+  iam_role_arn         = var.flow_logs_destination == "cloudwatch" ? aws_iam_role.vpc_flow_logs[0].arn : null
   log_destination_type = var.flow_logs_destination == "cloudwatch" ? "cloud-watch-logs" : "s3"
   log_destination = (
     var.flow_logs_destination == "cloudwatch" ?

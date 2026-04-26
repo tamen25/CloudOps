@@ -115,9 +115,9 @@ resource "aws_config_configuration_recorder_status" "main" {
 resource "aws_config_conformance_pack" "main" {
   for_each = var.enable_config ? { for p in var.config_conformance_packs : p.name => p } : {}
 
-  name                = each.value.name
-  template_s3_uri     = each.value.template_s3_uri
-  delivery_s3_bucket  = aws_s3_bucket.config[0].id
+  name               = each.value.name
+  template_s3_uri    = each.value.template_s3_uri
+  delivery_s3_bucket = aws_s3_bucket.config[0].id
 
   depends_on = [aws_config_configuration_recorder_status.main]
 }

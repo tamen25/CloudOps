@@ -40,7 +40,7 @@ output "acm_certificate_arn" {
 }
 
 output "route53_name_servers" {
-  description = "${var.domain_name} name servers — update your registrar to these after first dns apply"
+  description = "Route 53 name servers for the project domain — point your registrar's NS records at these after the first dns apply"
   value       = !var.destroy_all ? module.dns[0].name_servers : null
 }
 

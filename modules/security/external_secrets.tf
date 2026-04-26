@@ -24,7 +24,7 @@ resource "aws_iam_role" "external_secrets" {
     }]
   })
 
-  tags = local.common_tags
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy" "external_secrets" {

@@ -112,12 +112,6 @@ variable "enable_external_secrets" {
   default     = false
 }
 
-variable "oidc_provider_url" {
-  description = "OIDC provider URL without https:// (from EKS module). Required for External Secrets IRSA."
-  type        = string
-  default     = ""
-}
-
 # ── kube-bench IRSA inputs ────────────────────────────────────────────────────
 
 variable "oidc_provider_arn" {

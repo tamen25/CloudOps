@@ -221,12 +221,12 @@ resource "helm_release" "mimir" {
             },
             var.buckets_kms_cmk ? {
               s3 = {
-                bucket_name      = aws_s3_bucket.mimir[0].id
-                region           = var.region
-                endpoint         = "s3.${var.region}.amazonaws.com"
+                bucket_name = aws_s3_bucket.mimir[0].id
+                region      = var.region
+                endpoint    = "s3.${var.region}.amazonaws.com"
                 sse = {
-                  type        = "SSE-KMS"
-                  kms_key_id  = aws_kms_key.mimir[0].arn
+                  type       = "SSE-KMS"
+                  kms_key_id = aws_kms_key.mimir[0].arn
                 }
               }
             } : {}
@@ -237,7 +237,7 @@ resource "helm_release" "mimir" {
         multitenancy_enabled = false
 
         limits = {
-          ingestion_rate         = 100000
+          ingestion_rate             = 100000
           max_global_series_per_user = 1000000
         }
       }
@@ -256,9 +256,9 @@ resource "helm_release" "mimir" {
     ingester = {
       replicas = 1
       persistence = {
-        enabled          = true
-        size             = "10Gi"
-        storageClass     = "gp3"
+        enabled      = true
+        size         = "10Gi"
+        storageClass = "gp3"
       }
     }
     querier = {

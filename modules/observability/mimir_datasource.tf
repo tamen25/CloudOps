@@ -17,17 +17,17 @@ resource "kubernetes_config_map" "grafana_mimir_datasource" {
       apiVersion = 1
       datasources = [
         {
-          name      = "Mimir"
-          type      = "prometheus"
-          uid       = "mimir"
-          url       = "http://mimir-query-frontend.mimir.svc:8080/prometheus"
-          access    = "proxy"
-          editable  = false
+          name     = "Mimir"
+          type     = "prometheus"
+          uid      = "mimir"
+          url      = "http://mimir-query-frontend.mimir.svc:8080/prometheus"
+          access   = "proxy"
+          editable = false
           jsonData = {
-            httpMethod    = "POST"
-            timeInterval  = "30s"
+            httpMethod            = "POST"
+            timeInterval          = "30s"
             customQueryParameters = ""
-            httpHeaderName1 = "X-Scope-OrgID"
+            httpHeaderName1       = "X-Scope-OrgID"
           }
           secureJsonData = {
             httpHeaderValue1 = "anonymous"

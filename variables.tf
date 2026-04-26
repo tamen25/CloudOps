@@ -374,8 +374,8 @@ variable "enable_config" {
 variable "config_conformance_packs" {
   description = "Conformance pack templates to deploy. Each entry needs a name and template_s3_uri."
   type = list(object({
-    name             = string
-    template_s3_uri  = string
+    name            = string
+    template_s3_uri = string
   }))
   default = []
 }
