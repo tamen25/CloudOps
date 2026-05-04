@@ -69,6 +69,26 @@ variable "grafana_subdomain" {
   default     = "grafana"
 }
 
+variable "otel_subdomain" {
+  description = "Subdomain for the OTel Collector ingestion endpoint. Closes backlog #17."
+  type        = string
+  default     = "otel"
+}
+
+# OTel ALB alias — populated after the LBC creates the cloudops-otel ALB on a
+# second pass. Empty on first deploy (skips the DNS record + WAF association).
+variable "otel_alb_dns_name" {
+  description = "ALB DNS name for the cloudops-otel group (separate ALB for gRPC ingestion)"
+  type        = string
+  default     = ""
+}
+
+variable "otel_alb_zone_id" {
+  description = "ALB hosted zone ID for the cloudops-otel ALB (used for the otel.<domain> Route 53 alias)"
+  type        = string
+  default     = ""
+}
+
 # ── WAFv2 ──────────────────────────────────────────────────────────────────────
 
 variable "enable_waf" {

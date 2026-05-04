@@ -22,7 +22,7 @@
 resource "kubernetes_network_policy" "order_api" {
   metadata {
     name      = "order-api"
-    namespace = "cloudops"
+    namespace = var.application_namespace
   }
 
   spec {
@@ -33,15 +33,18 @@ resource "kubernetes_network_policy" "order_api" {
     policy_types = ["Ingress", "Egress"]
 
     # ── Ingress ────────────────────────────────────────────────────────────────
-    # Allow from kube-system namespace (ALB health checks + LBC probes) on port 3000.
-    # External ALB-to-pod traffic also originates from kube-system subnets in ip-target mode.
+    # Closes backlog #26. With `target-type: ip` the ALB writes packets
+    # directly to pod IPs, sourced from the ALB ENIs that live in the public
+    # subnets — NOT from any pod in kube-system. NetworkPolicy `from` matches
+    # by source IP at the dataplane, so we use an ipBlock on the VPC CIDR
+    # (covers ALB ENIs + every other in-cluster pod). Tighten to the public
+    # subnet CIDRs by passing var.public_subnet_cidrs once that input is wired.
+    #
+    # In-cluster monitoring scrapes hit port 9090 instead (separate ingress
+    # rule on the app-side NetworkPolicy in apps/order-api/k8s/networkpolicy.yaml).
     ingress {
       from {
-        namespace_selector {
-          match_labels = {
-            "kubernetes.io/metadata.name" = "kube-system"
-          }
-        }
+        ip_block { cidr = var.vpc_cidr }
       }
       ports {
         port     = "3000"
@@ -141,7 +144,7 @@ resource "kubernetes_network_policy" "otel_collector_ingress" {
       from {
         namespace_selector {
           match_labels = {
-            "kubernetes.io/metadata.name" = "cloudops"
+            "kubernetes.io/metadata.name" = var.application_namespace
           }
         }
       }
@@ -157,7 +160,7 @@ resource "kubernetes_network_policy" "otel_collector_ingress" {
       from {
         namespace_selector {
           match_labels = {
-            "kubernetes.io/metadata.name" = "cloudops"
+            "kubernetes.io/metadata.name" = var.application_namespace
           }
         }
       }

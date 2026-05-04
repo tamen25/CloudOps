@@ -1,3 +1,12 @@
+# Personal interview-prep explainer — local only, never committed.
+# Agents (including Claude) must NOT read this file for context.
+# It is human-maintained narrative documentation, not part of the codebase.
+PROJECT_EXPLAINER.md
+
+# Personal docs — case studies, rate cards, outreach drafts, freelance/job-hunt
+# material. Local only, never committed.
+private/
+
 # Local .terraform directories
 .terraform/
 
@@ -46,7 +55,14 @@ CLAUDE.md
 # Pluralith local output
 .pluralith/
 
-# Lambda build artifacts — rebuilt by Terraform at apply time
+# Lambda build artifacts — rebuilt by scripts/build-lambdas.sh before
+# `terraform apply`. Closes backlog #20: applies no longer run npm install.
 modules/**/lambda_function/*.zip
 modules/**/lambda_function_*/*.zip
 modules/slo/lambda_function.zip
+modules/**/lambda_function/**/node_modules/
+modules/**/lambda_function_*/node_modules/
+modules/slo/lambda_function/node_modules/
+
+# Local tool downloads (kubeconform, etc) — closes backlog #35.
+.tools/

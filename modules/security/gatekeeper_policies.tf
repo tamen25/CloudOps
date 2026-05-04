@@ -166,7 +166,7 @@ resource "kubernetes_manifest" "c_required_resources" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops", "monitoring"]
+        namespaces = [var.application_namespace, "monitoring"]
       }
     }
   }

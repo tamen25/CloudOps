@@ -18,11 +18,14 @@ resource "kubernetes_service_account" "lb_controller" {
   }
 }
 
-# AWS Load Balancer Controller — watches Ingress/Service resources and provisions ALBs/NLBs
+# AWS Load Balancer Controller — watches Ingress/Service resources and provisions ALBs/NLBs.
+# Chart version is pinned (closes backlog #29 — supply-chain reproducibility).
+# Bumping requires a coordinated test of LBC behavior + matching app image tag.
 resource "helm_release" "lb_controller" {
   name            = "aws-load-balancer-controller"
   repository      = "https://aws.github.io/eks-charts"
   chart           = "aws-load-balancer-controller"
+  version         = "1.8.4"
   namespace       = "kube-system"
   timeout         = 600
   cleanup_on_fail = true

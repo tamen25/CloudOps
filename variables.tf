@@ -117,6 +117,12 @@ variable "enable_alertmanager" {
   default     = false
 }
 
+variable "enable_yace" {
+  description = "Deploy yet-another-cloudwatch-exporter (yace) into the monitoring namespace to scrape AWS/RDS, AWS/ApplicationELB, AWS/NATGateway, AWS/Lambda metrics into Prometheus. Closes backlog #14. Requires enable_observability."
+  type        = bool
+  default     = false
+}
+
 # ── Observability bucket hardening ────────────────────────────────────────────
 # Defaults are dev-friendly. Flip these in environments/prod.tfvars.
 
@@ -228,9 +234,15 @@ variable "database_rotation_enabled" {
 }
 
 variable "database_rotation_lambda_arn" {
-  description = "Rotation Lambda ARN. Deploy AWS SAR's SecretsManagerRDSPostgreSQLRotationSingleUser and pass the resulting Lambda ARN here."
+  description = "Rotation Lambda ARN. Deploy AWS SAR's SecretsManagerRDSPostgreSQLRotationSingleUser and pass the resulting Lambda ARN here. Leave empty when database_rotation_lambda_auto_deploy = true."
   type        = string
   default     = ""
+}
+
+variable "database_rotation_lambda_auto_deploy" {
+  description = "When true and database_rotation_lambda_arn is empty, the database module auto-deploys the SAR rotation app via CloudFormation. Closes the manual SAR-deploy step."
+  type        = bool
+  default     = false
 }
 
 variable "database_rotation_days" {
@@ -392,6 +404,12 @@ variable "enable_external_secrets" {
   default     = false
 }
 
+variable "external_secrets_allowed_arns" {
+  description = "Secrets Manager ARNs (or ARN wildcards) the External Secrets Operator IRSA may read. Empty = legacy account-wide `*` (only for bootstrap)."
+  type        = list(string)
+  default     = []
+}
+
 variable "security_hub_standards" {
   description = "Security Hub standard ARNs to subscribe to."
   type        = list(string)
@@ -463,15 +481,53 @@ variable "aws_account_id" {
 }
 
 variable "alb_dns_name" {
-  description = "ALB DNS name created by the Load Balancer Controller (set after first deploy)"
+  description = "DNS name of the public `cloudops` ALB (api + grafana). Populated after the LBC creates it on first deploy. Closes backlog #17."
   type        = string
   default     = ""
 }
 
 variable "alb_zone_id" {
-  description = "ALB hosted zone ID for Route 53 alias records (set after first deploy)"
+  description = "Hosted zone ID of the public `cloudops` ALB."
   type        = string
   default     = ""
+}
+
+variable "otel_alb_dns_name" {
+  description = "DNS name of the `cloudops-otel` ALB (gRPC OTel ingestion). Populated after the LBC creates it. Empty = otel.<domain> Route 53 record is skipped."
+  type        = string
+  default     = ""
+}
+
+variable "otel_alb_zone_id" {
+  description = "Hosted zone ID of the `cloudops-otel` ALB."
+  type        = string
+  default     = ""
+}
+
+# ── OTel ingestion hardening (closes backlog #38) ────────────────────────────
+
+variable "otel_ingestion_internal" {
+  description = "When true, the cloudops-otel ALB is provisioned as `internal` (no public IP). Production: true. Customer apps reach the collector via VPC peering / Transit Gateway / Direct Connect."
+  type        = bool
+  default     = false
+}
+
+variable "otel_allowed_cidrs" {
+  description = "Source CIDRs allowed to reach the OTel ingestion ALB. Empty = no allow-list (rely on bearer token + WAF rate limit)."
+  type        = list(string)
+  default     = []
+}
+
+variable "otel_rate_limit_per_5min" {
+  description = "Per-IP rate limit applied at the cloudops-otel ALB via WAFv2. 0 = WAF not attached."
+  type        = number
+  default     = 0
+}
+
+variable "otel_token_rotation_days" {
+  description = "Days between rotation of the OTel collector bearer token. 0 = manual rotation only."
+  type        = number
+  default     = 0
 }
 
 variable "destroy_all" {
@@ -717,6 +773,26 @@ variable "eks_node_capacity_type" {
   default     = "ON_DEMAND"
 }
 
+# ── EKS control-plane endpoint exposure (backlog #42) ────────────────────────
+
+variable "eks_endpoint_private_access" {
+  description = "Enable EKS control plane access from inside the VPC."
+  type        = bool
+  default     = true
+}
+
+variable "eks_endpoint_public_access" {
+  description = "Enable EKS control plane access from the internet. Production: set false and reach the API server via VPN / bastion / private runners."
+  type        = bool
+  default     = true
+}
+
+variable "eks_endpoint_public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the public EKS endpoint. Default `0.0.0.0/0` matches the dev flow. Tighten for prod."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "order_api_namespace" {
   description = "Kubernetes namespace for the order-api service account (IRSA)"
   type        = string
@@ -727,6 +803,12 @@ variable "order_api_service_account" {
   description = "Kubernetes service account name for order-api IRSA"
   type        = string
   default     = "order-api"
+}
+
+variable "order_api_api_key_secret_arn" {
+  description = "Secrets Manager ARN for the order-api X-Api-Key (consumed by app via API_KEY_SECRET_ARN). When set, the IRSA policy allows reading this exact ARN. Leave empty to skip."
+  type        = string
+  default     = ""
 }
 
 # Existing Infrastructure (for EKS-only deployments without networking module)
@@ -889,4 +971,45 @@ variable "database_monitoring_interval" {
   description = "Enhanced monitoring interval in seconds (0, 1, 5, 10, 15, 30, 60)"
   type        = number
   default     = 60
+}
+
+# ── Database logging policy (closes backlog #41) ─────────────────────────────
+# Production should not log every DML payload. Recommended prod settings:
+#   database_log_statement                 = "ddl"
+#   database_log_duration                  = false
+#   database_log_min_duration_statement_ms = 500
+
+variable "database_log_connections" {
+  description = "RDS Postgres `log_connections`. Default true (dev/audit). Flip false in prod once perf monitoring is mature."
+  type        = bool
+  default     = true
+}
+
+variable "database_log_disconnections" {
+  description = "RDS Postgres `log_disconnections`."
+  type        = bool
+  default     = true
+}
+
+variable "database_log_duration" {
+  description = "RDS Postgres `log_duration` (logs duration of every completed statement). Prefer log_min_duration_statement_ms in prod."
+  type        = bool
+  default     = true
+}
+
+variable "database_log_statement" {
+  description = "RDS Postgres `log_statement`. `all` leaks customer payloads — use `ddl` or `none` in prod."
+  type        = string
+  default     = "all"
+
+  validation {
+    condition     = contains(["none", "ddl", "mod", "all"], var.database_log_statement)
+    error_message = "database_log_statement must be one of: none, ddl, mod, all."
+  }
+}
+
+variable "database_log_min_duration_statement_ms" {
+  description = "Log statements slower than this many milliseconds. -1 = disabled. Production: 500–1000."
+  type        = number
+  default     = -1
 }

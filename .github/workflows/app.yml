@@ -17,6 +17,15 @@ on:
     branches: [main]
     paths:
       - 'apps/order-api/**'
+      - '.github/workflows/app.yml'
+  pull_request:
+    # Closes backlog #25 — run tests/lint/manifest validation before merge.
+    # AWS-touching jobs (build-and-push, deploy, integration-test) are gated
+    # below on `github.event_name != 'pull_request'` so PRs never push images
+    # or touch the cluster.
+    paths:
+      - 'apps/order-api/**'
+      - '.github/workflows/app.yml'
   workflow_dispatch:
     inputs:
       override_budget_check:
@@ -100,16 +109,33 @@ jobs:
           ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/example
           ORDER_API_HOST: api.example.com
           API_KEY_SECRET_ARN: ""
+          IMAGE_TAG: validate
+          # NetworkPolicy ipBlock for ALB-sourced traffic (closes backlog #26).
+          VPC_CIDR: 10.0.0.0/16
+          # OIDC / JWKS auth — empty placeholders for schema validation only
+          # (closes backlog #7). Real values come from secrets in the deploy
+          # step below.
+          OIDC_ISSUER: ""
+          OIDC_AUDIENCE: ""
+          OIDC_JWKS_URL: ""
+          OIDC_REQUIRED_SCOPES: ""
         run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
 
-      - name: Install kubeval
+      # kubeval is unmaintained; switched to the actively maintained
+      # kubeconform fork (closes backlog #35 + #39 — version pinned, no
+      # mutable downloads). Mirrors what scripts/validate-k8s-manifests.sh
+      # does locally.
+      - name: Install kubeconform
         run: |
-          wget -q https://github.com/instrumenta/kubeval/releases/download/v0.16.1/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin/
+          KUBECONFORM_VERSION=0.6.7
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          chmod +x /usr/local/bin/kubeconform
 
-      - name: kubeval — strict schema validation
-        run: kubeval --strict /tmp/order-api-k8s/*.yaml
+      - name: kubeconform — strict schema validation
+        run: |
+          kubeconform -strict -kubernetes-version 1.32.0 -ignore-missing-schemas \
+            -summary /tmp/order-api-k8s/*.yaml
 
       - name: kubectl apply --dry-run=client
         run: |
@@ -177,12 +203,21 @@ jobs:
   #   5. Scan SBOM with Grype — fail on CRITICAL CVEs that have a fix available
   # ─────────────────────────────────────────────────────────────────────────────
   build-and-push:
+    # Gated off on PR events — closes backlog #25. PRs run tests +
+    # manifest-validation only; image push, deploy, and integration tests
+    # require a merge to main (or workflow_dispatch).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: test
     permissions:
       id-token: write      # OIDC for AWS credentials + Cosign keyless signing
       contents: read
       security-events: write  # Grype SARIF upload to GitHub code scanning
+    outputs:
+      # Image manifest digest — propagated to the deploy job so rollout pins
+      # on the immutable `@sha256:` reference, not the mutable `:tag`.
+      # Closes backlog #18.
+      image_digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - uses: actions/checkout@v5
@@ -201,13 +236,15 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: apps/order-api
           push: true
-          tags: |
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
-            ${{ env.ECR_REPOSITORY_URL }}:latest
+          # Closes backlog #18 — only the SHA tag is published. The `:latest`
+          # mutable tag is intentionally NOT pushed; the deploy step pins on
+          # the resulting `@sha256:` digest from this step's output.
+          tags: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -219,7 +256,8 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        # Pinned (closes backlog #39).
+        uses: sigstore/cosign-installer@v3.7.0
 
       - name: Sign image
         run: |
@@ -243,9 +281,9 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
 
       - name: Install Syft
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin
+        # Closes backlog #39 — install pinned from `main` to a tagged release.
+        # Bump the tag intentionally; never let `main` flow through CI.
+        uses: anchore/sbom-action/download-syft@v0.17.7
 
       - name: Generate SBOM
         run: |
@@ -308,9 +346,8 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
 
       - name: Install Grype
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
-            | sh -s -- -b /usr/local/bin
+        # Closes backlog #39 — install pinned from `main` to a tagged release.
+        uses: anchore/scan-action/download-grype@v5.2.1
 
       - name: Scan SBOM with Grype
         id: grype
@@ -366,6 +403,7 @@ jobs:
   # Job 4: Trivy image scan — blocks deploy on CRITICAL vulnerabilities
   # ─────────────────────────────────────────────────────────────────────────────
   image-scan:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: build-and-push
     permissions:
@@ -387,8 +425,12 @@ jobs:
 
       - name: Scan image for CRITICAL vulnerabilities
         id: trivy
-        continue-on-error: true  # allow summary step to run before failing
-        uses: aquasecurity/trivy-action@master
+        # Closes backlog #39 — pinned from mutable `@master` to a tagged
+        # release. continue-on-error is preserved ONLY so the SARIF upload +
+        # failure-summary steps run; the explicit `Fail job on CRITICAL
+        # findings` step at the end of this job is the actual hard gate.
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: image
           image-ref: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
@@ -437,10 +479,11 @@ jobs:
   budget-check:
     runs-on: ubuntu-latest
     needs: image-scan
-    # Skip this job when the override input is explicitly set to true.
-    # For push triggers (no inputs), github.event.inputs.override_budget_check is null,
-    # which evaluates to != 'true', so the job runs normally.
-    if: ${{ github.event.inputs.override_budget_check != 'true' }}
+    # Skip on PRs (closes backlog #25 — no CloudWatch reads from forks).
+    # Skip when the override input is explicitly set to true.
+    # For push triggers (no inputs), github.event.inputs.override_budget_check
+    # is null, which evaluates to != 'true', so the job runs normally.
+    if: ${{ github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true' }}
     permissions:
       id-token: write
       contents: read
@@ -454,6 +497,14 @@ jobs:
 
       - name: Check SLO error budget
         run: |
+          # Pull the Grafana hostname out of the tfvars secret so the dashboard
+          # link in the step summary renders as a real URL.
+          DOMAIN=$(echo "${{ secrets.TF_VARS }}" \
+            | grep '^domain_name' \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1)
+          DOMAIN="${DOMAIN:-example.com}"
+
           START_TIME=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -559,11 +610,18 @@ jobs:
   # only images signed by this workflow are deployed to the cluster.
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [budget-check, manifest-validation]
+    needs: [budget-check, manifest-validation, build-and-push]
     permissions:
       id-token: write
       contents: read
+    env:
+      # Immutable image reference — closes backlog #18.
+      # Format: <repo>@sha256:<digest>. The build-and-push job exposes the
+      # digest as a job output; rollout, signature verification, and the
+      # rendered manifests all use this exact reference.
+      IMAGE_REF: ${{ secrets.ECR_REPOSITORY_URL }}@${{ needs.build-and-push.outputs.image_digest }}
     steps:
       - uses: actions/checkout@v5
 
@@ -611,15 +669,44 @@ jobs:
           ORDER_API_SERVICE_ACCOUNT=$(grep '^order_api_service_account' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
           ORDER_API_ENVIRONMENT=$(grep '^environment' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
           DB_NAME=$(grep '^database_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+          # VPC_CIDR feeds the order-api NetworkPolicy ipBlock (closes backlog #26).
+          VPC_CIDR=$(grep '^vpc_cidr' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
 
           ORDER_API_NAMESPACE=${ORDER_API_NAMESPACE:-cloudops}
           ORDER_API_SERVICE_ACCOUNT=${ORDER_API_SERVICE_ACCOUNT:-order-api}
           ORDER_API_ENVIRONMENT=${ORDER_API_ENVIRONMENT:-dev}
           DB_NAME=${DB_NAME:-cloudops}
+          VPC_CIDR=${VPC_CIDR:-10.0.0.0/16}
 
           OTEL_RESOURCE_ATTRIBUTES="deployment.environment=${ORDER_API_ENVIRONMENT},k8s.cluster.name=${EKS_CLUSTER_NAME}"
 
+          # Closes backlog #37 — assert the deploy-time API-key secret ARN
+          # matches the Terraform-managed `order_api_api_key_secret_arn`. If
+          # the secret drifts from the IRSA-allowed list, the running Pod
+          # silently loses access; we'd rather fail the deploy.
           API_KEY_SECRET_ARN="${{ secrets.ORDER_API_KEY_SECRET_ARN }}"
+
+          # OIDC / JWKS auth — closes backlog #7. Empty values disable JWT
+          # verification at runtime; setting all three (issuer, audience,
+          # JWKS URL) enables it. Required scopes is a space-separated list
+          # or empty.
+          OIDC_ISSUER="${{ secrets.OIDC_ISSUER }}"
+          OIDC_AUDIENCE="${{ secrets.OIDC_AUDIENCE }}"
+          OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
+          OIDC_REQUIRED_SCOPES="${{ secrets.OIDC_REQUIRED_SCOPES }}"
+
+          TF_KEY_ARN=$(terraform output -raw order_api_api_key_secret_arn 2>/dev/null || echo "")
+          if [ "$ORDER_API_ENVIRONMENT" != "dev" ] && [ "$ORDER_API_ENVIRONMENT" != "test" ] && [ "$ORDER_API_ENVIRONMENT" != "local" ]; then
+            if [ -z "$TF_KEY_ARN" ]; then
+              echo "::error::Terraform output order_api_api_key_secret_arn is empty in environment=$ORDER_API_ENVIRONMENT — set var.order_api_api_key_secret_arn so the IRSA policy can scope to it"
+              exit 1
+            fi
+            if [ "$API_KEY_SECRET_ARN" != "$TF_KEY_ARN" ]; then
+              echo "::error::secrets.ORDER_API_KEY_SECRET_ARN ($API_KEY_SECRET_ARN) does not match terraform output order_api_api_key_secret_arn ($TF_KEY_ARN). Update the GitHub secret to match Terraform."
+              exit 1
+            fi
+            echo "✓ ORDER_API_KEY_SECRET_ARN matches Terraform"
+          fi
 
           {
             echo "ORDER_API_URL=${ORDER_API_URL}"
@@ -634,6 +721,11 @@ jobs:
             echo "DB_NAME=${DB_NAME}"
             echo "OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES}"
             echo "API_KEY_SECRET_ARN=${API_KEY_SECRET_ARN}"
+            echo "VPC_CIDR=${VPC_CIDR}"
+            echo "OIDC_ISSUER=${OIDC_ISSUER:-}"
+            echo "OIDC_AUDIENCE=${OIDC_AUDIENCE:-}"
+            echo "OIDC_JWKS_URL=${OIDC_JWKS_URL:-}"
+            echo "OIDC_REQUIRED_SCOPES=${OIDC_REQUIRED_SCOPES:-}"
           } >> "$GITHUB_ENV"
 
       # ── Signature gate ────────────────────────────────────────────────────────
@@ -643,15 +735,16 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────────
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        # Pinned (closes backlog #39).
+        uses: sigstore/cosign-installer@v3.7.0
 
       - name: Verify image signature
         run: |
-          echo "Verifying Cosign signature for ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
+          echo "Verifying Cosign signature for $IMAGE_REF"
           cosign verify \
             --certificate-identity-regexp="https://github\.com/${{ github.repository }}/\.github/workflows/app\.yml@refs/heads/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+            "$IMAGE_REF"
           echo "✓ Signature verified — proceeding with deployment"
 
       - name: Capture current deployment state
@@ -668,14 +761,33 @@ jobs:
 
       - name: Render Kubernetes manifests
         env:
-          ORDER_API_IMAGE: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          ORDER_API_IMAGE: ${{ env.IMAGE_REF }}
         run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+
+      - name: Run DB migration Job
+        run: |
+          set -e
+          JOB_NAME="order-api-migrate-${IMAGE_TAG}"
+          echo "Applying migration Job ${JOB_NAME} in namespace ${ORDER_API_NAMESPACE}"
+          kubectl apply -f /tmp/order-api-k8s/migration-job.yaml
+
+          # Wait up to 5 minutes for the Job to complete. --for=condition=complete
+          # returns immediately on success; --for=condition=failed exits non-zero.
+          if ! kubectl wait --for=condition=complete --timeout=300s \
+              "job/${JOB_NAME}" -n "$ORDER_API_NAMESPACE"; then
+            echo "::error::Migration Job ${JOB_NAME} failed or timed out — aborting deploy"
+            kubectl logs --tail=200 "job/${JOB_NAME}" -n "$ORDER_API_NAMESPACE" || true
+            kubectl describe "job/${JOB_NAME}" -n "$ORDER_API_NAMESPACE" || true
+            exit 1
+          fi
+          echo "✓ Migrations applied"
 
       - name: Apply manifests and verify rollout
         run: |
           set -e
 
-          echo "Applying manifests for image: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
+          echo "Applying manifests for image: $IMAGE_REF"
+          # Migration Job already applied + waited above; re-applying is a no-op.
           kubectl apply -f /tmp/order-api-k8s/
 
           if ! kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s; then
@@ -697,7 +809,7 @@ jobs:
 
           | | |
           |---|---|
-          | **Attempted image** | \`${{ env.IMAGE_TAG }}\` |
+          | **Attempted image** | \`$IMAGE_REF\` |
           | **Previous image**  | \`$PREVIOUS_IMAGE\` |
           | **Rolled back to**  | \`$ROLLED_BACK_TO\` |
           | **Action required** | Investigate the rollout failure before re-deploying |
@@ -714,6 +826,7 @@ jobs:
   # Job 7: Integration tests against live endpoints
   # ─────────────────────────────────────────────────────────────────────────────
   integration-test:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: deploy
     permissions:
@@ -803,8 +916,8 @@ jobs:
             echo "Attempt $i/5"
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/order" \
               -H "Content-Type: application/json" \
-              ${API_KEY:+-H "X-Api-Key: $API_KEY"} \
-              -d '{"items":[{"name":"test","price":9.99}]}')
+              ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" \
+              -d '{"items":[{"sku":"test","quantity":1}],"total":9.99}')
             STATUS=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
             echo "  HTTP $STATUS"
@@ -832,8 +945,8 @@ jobs:
         run: |
           for i in $(seq 1 5); do
             echo "Attempt $i/5"
-            BODY=$(curl -sf ${API_KEY:+-H "X-Api-Key: $API_KEY"} "$BASE_URL/orders" 2>/dev/null || echo "")
-            STATUS=$(curl -s -o /dev/null ${API_KEY:+-H "X-Api-Key: $API_KEY"} -w "%{http_code}" "$BASE_URL/orders")
+            BODY=$(curl -sf ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" "$BASE_URL/orders" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" -w "%{http_code}" "$BASE_URL/orders")
             echo "  HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "  Body (first 200 chars): ${BODY:0:200}"
@@ -935,6 +1048,14 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
+          # Pull the Grafana hostname out of the tfvars secret so the dashboard
+          # link in the step summary renders as a real URL.
+          DOMAIN=$(echo "${{ secrets.TF_VARS }}" \
+            | grep '^domain_name' \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1)
+          DOMAIN="${DOMAIN:-example.com}"
+
           START_TIME=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -1007,13 +1128,47 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
-    needs: [build-and-push, image-scan, budget-check, deploy, integration-test]
+    needs: [test, manifest-validation, build-and-push, image-scan, budget-check, deploy, integration-test]
     if: always()
     steps:
       - name: Write pipeline summary
         run: |
           OVERRIDE="${{ github.event.inputs.override_budget_check }}"
           BUDGET_RESULT="${{ needs.budget-check.result }}"
+          EVENT_NAME="${{ github.event_name }}"
+          TEST_RESULT="${{ needs.test.result }}"
+          MANIFEST_RESULT="${{ needs.manifest-validation.result }}"
+
+          # Closes backlog #33 — PR runs only execute test + manifest-validation;
+          # AWS-touching jobs are intentionally skipped. Render a PR-shaped
+          # summary so successful PRs no longer report "Deployment Failed".
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if [ "$TEST_RESULT" = "success" ] && [ "$MANIFEST_RESULT" = "success" ]; then
+              cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ✅ PR Validation Passed
+
+          | | |
+          |---|---|
+          | **Tests**             | ✓ |
+          | **Manifest validation** | ✓ |
+          | **AWS jobs**          | Skipped on PR (build-and-push, deploy, integration-test) |
+          | **Run**               | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+            else
+              FAILED=""
+              [ "$TEST_RESULT"     != "success" ] && FAILED="test"
+              [ "$MANIFEST_RESULT" != "success" ] && FAILED="${FAILED:+$FAILED, }manifest-validation"
+              cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ❌ PR Validation Failed
+
+          | | |
+          |---|---|
+          | **Failed job(s)** | \`${FAILED:-unknown}\` |
+          | **Run**           | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+            fi
+            exit 0
+          fi
 
           if [[ "${{ needs.integration-test.result }}" == "success" ]]; then
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF

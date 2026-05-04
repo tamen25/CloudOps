@@ -161,10 +161,29 @@ resource "aws_wafv2_web_acl" "main" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-public-alb" })
 }
 
-# Association — attached to the ALB created by the LBC for the cloudops group.
+# Association — attached to the public `cloudops` ALB only. The cloudops-otel
+# ALB carries OTel gRPC ingestion (typically locked down at the SG layer or
+# routed via PrivateLink in prod), so adding L7 inspection there is out of
+# scope. WAF here is the public-traffic perimeter for api.<domain> +
+# grafana.<domain>. Closes backlog #17.
+#
 # The ALB is created lazily by the LB controller once an Ingress in the
 # "cloudops" group is applied. We can't reference it as a TF resource (not
 # managed by this code), so we look it up by tag.
+#
+# ── Two-pass apply (chicken-and-egg) ───────────────────────────────────────────
+# On a fresh stack the order is:
+#   pass 1 (alb_dns_name = ""):  enable_waf can be true; web ACL is created but
+#                                association + data.aws_lb are skipped via count.
+#                                LBC reconciles the cloudops Ingress, ALB comes
+#                                up, ingress.route53 records populate
+#                                alb_dns_name.
+#   pass 2 (alb_dns_name set):   data.aws_lb.public resolves by tag,
+#                                aws_wafv2_web_acl_association.alb attaches.
+#
+# The explicit `count = ... && var.alb_dns_name != ""` is the two-pass marker.
+# The depends_on below makes the ordering survive a refresh that races the LBC:
+# the data lookup will not run until the LBC helm release is applied.
 
 data "aws_lb" "public" {
   count = var.enable_waf && var.alb_dns_name != "" ? 1 : 0
@@ -173,6 +192,8 @@ data "aws_lb" "public" {
     "elbv2.k8s.aws/cluster" = var.cluster_name
     "ingress.k8s.aws/stack" = "cloudops"
   }
+
+  depends_on = [helm_release.lb_controller]
 }
 
 resource "aws_wafv2_web_acl_association" "alb" {
@@ -180,6 +201,8 @@ resource "aws_wafv2_web_acl_association" "alb" {
 
   resource_arn = data.aws_lb.public[0].arn
   web_acl_arn  = aws_wafv2_web_acl.main[0].arn
+
+  depends_on = [helm_release.lb_controller]
 }
 
 # CloudWatch log group for WAF logs (sampled blocked requests).

@@ -130,6 +130,42 @@ self_healing_rollback_on_error_rate  = 5
 enable_external_secrets   = true
 grafana_alert_webhook_url = ""           # paste Slack/PD/SNS webhook to enable
 
+# Closes backlog #37 — explicit ARN scoping for ESO + order-api IRSA in non-dev
+# envs. Replace these with real ARNs from your account before applying. The
+# `*-db-credentials-*` pattern matches the Secrets Manager suffix appended by
+# AWS. The order-api API key ARN is the single secret the app reads via
+# API_KEY_SECRET_ARN; it must also match `secrets.ORDER_API_KEY_SECRET_ARN` in
+# GitHub (the deploy step asserts this).
+external_secrets_allowed_arns = [
+  # "arn:aws:secretsmanager:us-east-1:<account>:secret:cloudops-db-credentials-*",
+  # "arn:aws:secretsmanager:us-east-1:<account>:secret:cloudops-order-api-key-*",
+]
+order_api_api_key_secret_arn  = ""        # paste cloudops-order-api-key ARN once provisioned
+
+# ── Database logging policy (backlog #41) ────────────────────────────────────
+# Production should not log every DML payload. These settings capture slow
+# queries + DDL events for audit without leaking customer data.
+# - log_statement="ddl"            — DDL only (CREATE/ALTER/DROP)
+# - log_duration=false             — rely on min-duration threshold instead
+# - log_min_duration_statement=500 — log queries slower than 500 ms
+# Adjust the threshold per your latency SLO. Logs land in CloudWatch Logs
+# with the standard RDS retention; tighten retention in your CW log group
+# policy or via `database_*` vars below.
+database_log_connections                  = true
+database_log_disconnections               = true
+database_log_duration                     = false
+database_log_statement                    = "ddl"
+database_log_min_duration_statement_ms    = 500
+
+# ── EKS control-plane endpoint (backlog #42) ─────────────────────────────────
+# Production should keep the public endpoint OFF and reach the API server via
+# private runners / VPN / bastion. If you need a one-shot emergency window,
+# flip eks_endpoint_public_access=true *and* tighten eks_endpoint_public_access_cidrs
+# to your admin egress IPs — never leave it as 0.0.0.0/0 in prod.
+eks_endpoint_private_access      = true
+eks_endpoint_public_access       = false
+eks_endpoint_public_access_cidrs = ["0.0.0.0/0"]   # ignored while public access is false
+
 # ── FinOps ──────────────────────────────────────────────────────────────────
 cost_budget_monthly_usd        = 500
 cost_alert_email               = ""

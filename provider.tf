@@ -24,13 +24,15 @@ terraform {
     }
   }
 
-  # Partial S3 backend. Bucket is intentionally NOT set here so the same code
-  # works for any fork. Pass it at init time:
-  #   terraform init -backend-config="bucket=<your bucket>"
-  # Workflows do this automatically by reading bootstrap_bucket_name from
-  # terraform.tfvars (see scripts/tf-init.sh).
+  # Partial S3 backend. Bucket AND key are intentionally NOT set here so the
+  # same code works for any fork and any environment. Pass both at init time:
+  #   terraform init \
+  #     -backend-config="bucket=<your bucket>" \
+  #     -backend-config="key=<env>/terraform.tfstate"
+  # scripts/tf-init.sh does this automatically: bucket from
+  # bootstrap_bucket_name, key derived from `environment` in terraform.tfvars
+  # (e.g. environment=dev → dev/terraform.tfstate). Override with STATE_KEY=...
   backend "s3" {
-    key          = "main/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
     use_lockfile = true

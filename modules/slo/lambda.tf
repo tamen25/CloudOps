@@ -1,10 +1,11 @@
 # Error budget tracker Lambda — queries Prometheus SLO recording rules every 5 minutes,
 # calculates error budgets and burn rates, and publishes to CloudWatch + DynamoDB.
 #
-# IMPORTANT — before running `terraform apply`, install Lambda dependencies:
-#   cd modules/slo/lambda_function && npm install --omit=dev && cd -
-# The node_modules directory must be present for the archive_file zip to include them.
-# AWS SDK v3 is NOT bundled with the Node.js 20.x Lambda runtime.
+# Lambda dependencies must be installed BEFORE `terraform apply` via:
+#   ./scripts/build-lambdas.sh
+# This used to run inline as a null_resource + local-exec; that made applies
+# executor-dependent. Closes backlog #20. The precondition below fails plan
+# fast with a clear message if the build step was skipped.
 #
 # NOTE — Prometheus connectivity:
 # The default Prometheus URL is cluster-internal (only reachable from within the EKS VPC).
@@ -12,26 +13,10 @@
 # proxy endpoint: https://grafana.<domain>/api/datasources/proxy/uid/prometheus
 # and supply grafana_api_key_secret_arn so the Lambda can authenticate.
 
-# Install production dependencies then zip the function directory.
-# Triggers re-install + re-zip when package.json or source changes.
-resource "null_resource" "lambda_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function ${path.module}/lambda_function"
-    working_dir = path.module
-  }
-}
-
 data "archive_file" "lambda" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function"
   output_path = "${path.module}/lambda_function.zip"
-
-  depends_on = [null_resource.lambda_build]
 }
 
 # CloudWatch log group — created explicitly so we control retention
@@ -84,6 +69,13 @@ resource "aws_lambda_function" "error_budget_tracker" {
     aws_cloudwatch_log_group.lambda,
     data.archive_file.lambda,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/package.json") && fileexists("${path.module}/lambda_function/node_modules/.package-lock.json")
+      error_message = "modules/slo/lambda_function/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-error-budget-tracker" })
 }

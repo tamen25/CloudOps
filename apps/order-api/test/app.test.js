@@ -143,7 +143,7 @@ test('POST /order is rate-limited — burst returns 429 after the configured max
   const { server, baseUrl } = await startServer(pool, { rateLimitMax: 2, rateLimitWindowMs: 60_000 });
 
   try {
-    const body = JSON.stringify({ items: [], total: 0 });
+    const body = JSON.stringify({ items: [{ sku: 'book-1', quantity: 1 }], total: 9.99 });
     const headers = { 'Content-Type': 'application/json' };
 
     const r1 = await fetch(`${baseUrl}/order`, { method: 'POST', headers, body });
@@ -166,21 +166,21 @@ test('POST /order requires X-Api-Key when apiKey is configured', async () => {
     const without = await fetch(`${baseUrl}/order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: [], total: 0 }),
+      body: JSON.stringify({ items: [{ sku: 'book-1', quantity: 1 }], total: 9.99 }),
     });
     assert.equal(without.status, 401);
 
     const withWrong = await fetch(`${baseUrl}/order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'wrong' },
-      body: JSON.stringify({ items: [], total: 0 }),
+      body: JSON.stringify({ items: [{ sku: 'book-1', quantity: 1 }], total: 9.99 }),
     });
     assert.equal(withWrong.status, 401);
 
     const withRight = await fetch(`${baseUrl}/order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'secret-123' },
-      body: JSON.stringify({ items: [], total: 0 }),
+      body: JSON.stringify({ items: [{ sku: 'book-1', quantity: 1 }], total: 9.99 }),
     });
     assert.equal(withRight.status, 201);
   } finally {

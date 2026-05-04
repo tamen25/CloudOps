@@ -12,29 +12,16 @@ locals {
   controller_zip     = "${path.module}/lambda_function/self_healing_controller.zip"
 }
 
-# ── Build — npm install + zip ─────────────────────────────────────────────────
-
-resource "null_resource" "self_healing_build" {
-  triggers = {
-    src_hash = sha256(join("", [
-      filesha256("${local.controller_src_dir}/index.js"),
-      filesha256("${local.controller_src_dir}/package.json"),
-    ]))
-  }
-
-  provisioner "local-exec" {
-    working_dir = local.controller_src_dir
-    command     = "npm install --omit=dev --quiet"
-  }
-}
+# ── Zip ───────────────────────────────────────────────────────────────────────
+# npm install runs in scripts/build-lambdas.sh before terraform apply (closes
+# backlog #20). The lifecycle.precondition on aws_lambda_function below fails
+# fast with a clear message if the build step was skipped.
 
 data "archive_file" "self_healing" {
   type        = "zip"
   source_dir  = local.controller_src_dir
   output_path = local.controller_zip
   excludes    = ["*.zip"]
-
-  depends_on = [null_resource.self_healing_build]
 }
 
 # ── Lambda ────────────────────────────────────────────────────────────────────
@@ -73,6 +60,13 @@ resource "aws_lambda_function" "self_healing_controller" {
       DRY_RUN                 = tostring(var.dry_run)
       APPLICATION_NAMESPACE   = var.application_namespace
       APPLICATION_NAME        = var.application_name
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${local.controller_src_dir}/node_modules/.package-lock.json")
+      error_message = "modules/self_healing/lambda_function/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
     }
   }
 

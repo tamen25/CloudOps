@@ -26,7 +26,7 @@ resource "kubernetes_config_map" "falco_cloudops_rules" {
         condition: >
           spawned_process and
           container and
-          (k8s.ns.name = "cloudops" or k8s.ns.name = "monitoring") and
+          (k8s.ns.name = "${var.application_namespace}" or k8s.ns.name = "monitoring") and
           shell_procs
         output: >
           Shell spawned in container
@@ -49,7 +49,7 @@ resource "kubernetes_config_map" "falco_cloudops_rules" {
         condition: >
           outbound and
           container and
-          k8s.ns.name = "cloudops" and
+          k8s.ns.name = "${var.application_namespace}" and
           not fd.rport in (5432, 4318, 443, 53) and
           not fd.rip startswith "169.254."
         output: >

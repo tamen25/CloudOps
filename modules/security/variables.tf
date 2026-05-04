@@ -112,6 +112,12 @@ variable "enable_external_secrets" {
   default     = false
 }
 
+variable "external_secrets_allowed_arns" {
+  description = "Secrets Manager ARNs (or ARN wildcards) the External Secrets Operator IRSA may read. Empty list falls back to `Resource = \"*\"` — use only for initial bootstrap. Closes backlog #22."
+  type        = list(string)
+  default     = []
+}
+
 # ── kube-bench IRSA inputs ────────────────────────────────────────────────────
 
 variable "oidc_provider_arn" {

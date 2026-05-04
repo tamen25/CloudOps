@@ -14,17 +14,21 @@ resource "aws_secretsmanager_secret" "db_credentials" {
   )
 }
 
-# Automatic rotation. Caller must deploy the SAR rotation Lambda
-# (SecretsManagerRDSPostgreSQLRotationSingleUser) and pass its ARN.
+# Automatic rotation. Two paths:
+#   - rotation_lambda_arn set explicitly: use it (caller-managed Lambda).
+#   - rotation_lambda_arn empty + rotation_lambda_auto_deploy = true: this
+#     module deploys the SAR app and feeds the resulting ARN here.
 resource "aws_secretsmanager_secret_rotation" "db_credentials" {
-  count = var.rotation_enabled && var.rotation_lambda_arn != "" ? 1 : 0
+  count = var.rotation_enabled && local.resolved_rotation_lambda_arn != "" ? 1 : 0
 
   secret_id           = aws_secretsmanager_secret.db_credentials.id
-  rotation_lambda_arn = var.rotation_lambda_arn
+  rotation_lambda_arn = local.resolved_rotation_lambda_arn
 
   rotation_rules {
     automatically_after_days = var.rotation_days
   }
+
+  depends_on = [aws_lambda_permission.rotation_secretsmanager]
 }
 
 # Store the database connection details and credentials as a JSON-encoded secret version

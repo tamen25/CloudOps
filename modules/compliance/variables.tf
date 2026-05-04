@@ -3,16 +3,6 @@ variable "name_prefix" {
   type        = string
 }
 
-variable "environment" {
-  description = "Environment name."
-  type        = string
-}
-
-variable "region" {
-  description = "AWS region."
-  type        = string
-}
-
 variable "aws_account_id" {
   description = "AWS account ID — used for globally unique S3 bucket names."
   type        = string

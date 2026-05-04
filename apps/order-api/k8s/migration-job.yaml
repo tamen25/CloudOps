@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "order-api-migrate-${IMAGE_TAG}"
+  namespace: "${ORDER_API_NAMESPACE}"
+  labels:
+    app: order-api
+    role: migrate
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: order-api
+        role: migrate
+    spec:
+      serviceAccountName: "${ORDER_API_SERVICE_ACCOUNT}"
+      restartPolicy: Never
+      # Closes backlog #36 — match the order-api Deployment so Gatekeeper
+      # K8sNoRootContainers admits this Job's pod.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: "${ORDER_API_IMAGE}"
+          command: ["node", "src/migrate.js"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: AWS_REGION
+              value: "${AWS_REGION}"
+            - name: DB_NAME
+              value: "${DB_NAME}"
+            - name: DB_SECRET_ARN
+              value: "${DB_SECRET_ARN}"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

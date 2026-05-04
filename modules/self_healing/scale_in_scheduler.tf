@@ -130,26 +130,15 @@ resource "local_file" "scale_in_package" {
   })
 }
 
-resource "null_resource" "scale_in_build" {
-  triggers = {
-    pkg_hash = sha256(local_file.scale_in_package.content)
-  }
-
-  provisioner "local-exec" {
-    working_dir = local.scale_in_src_dir
-    command     = "npm install --omit=dev --quiet"
-  }
-
-  depends_on = [local_file.scale_in_index, local_file.scale_in_package]
-}
-
+# npm install runs in scripts/build-lambdas.sh before terraform apply.
+# Closes backlog #20.
 data "archive_file" "scale_in_scheduler" {
   type        = "zip"
   source_dir  = local.scale_in_src_dir
   output_path = local.scale_in_zip
   excludes    = ["*.zip"]
 
-  depends_on = [null_resource.scale_in_build]
+  depends_on = [local_file.scale_in_index, local_file.scale_in_package]
 }
 
 resource "aws_lambda_function" "scale_in_scheduler" {
@@ -178,6 +167,13 @@ resource "aws_lambda_function" "scale_in_scheduler" {
       EKS_CLUSTER_NAME  = var.eks_cluster_name
       BASELINE_MIN_PODS = tostring(var.min_healthy_pods)
       DRY_RUN           = tostring(var.dry_run)
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${local.scale_in_src_dir}/node_modules/.package-lock.json")
+      error_message = "modules/self_healing/lambda_function_scale_in/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
     }
   }
 

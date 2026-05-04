@@ -14,9 +14,23 @@ spec:
         app: order-api
     spec:
       serviceAccountName: "${ORDER_API_SERVICE_ACCOUNT}"
+      # Closes backlog #36 — Gatekeeper K8sNoRootContainers requires
+      # runAsNonRoot=true or runAsUser>0. UID 1001 matches the `nodejs` user
+      # created in the Dockerfile.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: order-api
           image: "${ORDER_API_IMAGE}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 3000
@@ -59,6 +73,17 @@ spec:
             # /order and /orders. Leave empty to run unauthenticated.
             - name: API_KEY_SECRET_ARN
               value: "${API_KEY_SECRET_ARN}"
+            # OIDC / JWKS bearer-token auth (closes backlog #7). Set all
+            # three to enable JWT validation in addition to (or instead of)
+            # the X-Api-Key path. Leave empty to disable.
+            - name: OIDC_ISSUER
+              value: "${OIDC_ISSUER}"
+            - name: OIDC_AUDIENCE
+              value: "${OIDC_AUDIENCE}"
+            - name: OIDC_JWKS_URL
+              value: "${OIDC_JWKS_URL}"
+            - name: OIDC_REQUIRED_SCOPES
+              value: "${OIDC_REQUIRED_SCOPES}"
           livenessProbe:
             httpGet:
               path: /health

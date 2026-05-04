@@ -33,18 +33,37 @@ resource "aws_iam_role_policy" "external_secrets" {
   name = "external-secrets-read"
   role = aws_iam_role.external_secrets[0].id
 
+  # Resource scoping (closes backlog #22 + #37):
+  # - GetSecretValue / DescribeSecret are limited to var.external_secrets_allowed_arns when set.
+  # - ListSecrets cannot be resource-scoped by the Secrets Manager API and stays "*".
+  # - Non-dev environments MUST provide an explicit ARN list (precondition below).
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:ListSecrets",
-      ]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Sid    = "ReadSecrets"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+        ]
+        Resource = length(var.external_secrets_allowed_arns) > 0 ? var.external_secrets_allowed_arns : ["*"]
+      },
+      {
+        Sid      = "ListSecrets"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:ListSecrets"]
+        Resource = "*"
+      },
+    ]
   })
+
+  lifecycle {
+    precondition {
+      condition     = var.environment == "dev" || length(var.external_secrets_allowed_arns) > 0
+      error_message = "external_secrets_allowed_arns must be a non-empty list in environment=${var.environment}. The dev fallback to Resource=\"*\" is not allowed in staging/prod (backlog #37)."
+    }
+  }
 }
 
 resource "helm_release" "external_secrets" {

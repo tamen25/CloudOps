@@ -19,6 +19,7 @@ module.exports = [
         module: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
+        URL: 'readonly',
       },
     },
     rules: {

@@ -200,13 +200,18 @@ resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
 #   - python3 (stdlib only)
 #   - aws CLI authenticated with secretsmanager:PutSecretValue on the secret ARN
 #
-# The provisioner is idempotent: if a service account named
-# cloudops-lambda-reader already exists, it reuses it rather than creating a
-# duplicate. Each run creates a new token; this is intentional (rotation).
+# Idempotency + cleanup (closes part of backlog #20):
+#   - Service account named cloudops-lambda-reader is reused if it exists.
+#   - BEFORE creating a new token the script deletes every existing token on
+#     the same service account, so applies do not silently accumulate stale
+#     tokens in Grafana.
+#   - The trigger is now a fixed string ("v1") so re-applies do NOT rotate the
+#     token by default. To force rotation: `terraform apply
+#     -replace=module.observability.null_resource.grafana_service_account`.
 resource "null_resource" "grafana_service_account" {
   triggers = {
-    grafana_url = "https://grafana.${var.domain}"
-    secret_arn  = aws_secretsmanager_secret.grafana_api_key.arn
+    # Bump this string to force a token rotation on the next apply.
+    rotation_marker = "v1"
   }
 
   provisioner "local-exec" {
@@ -271,7 +276,28 @@ except Exception:
         echo "Service account cloudops-lambda-reader already exists (ID $SA_ID) — reusing."
       fi
 
-      # ── Create a new token (rotates on each trigger change) ─────────────────
+      # ── Delete existing tokens on this SA to avoid silent accumulation ─────
+      echo "Listing existing tokens on service account $SA_ID..."
+      EXISTING=$(curl -sf -u "admin:$ADMIN_PASSWORD" \
+        -H "Accept: application/json" \
+        "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" 2>/dev/null || echo '[]')
+
+      echo "$EXISTING" | python3 -c "
+import sys, json
+try:
+    for t in json.load(sys.stdin) or []:
+        if t.get('id') is not None:
+            print(t['id'])
+except Exception:
+    pass
+" 2>/dev/null | while read -r OLD_ID; do
+        [ -z "$OLD_ID" ] && continue
+        echo "  Deleting stale token id $OLD_ID"
+        curl -sf -X DELETE -u "admin:$ADMIN_PASSWORD" \
+          "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens/$OLD_ID" >/dev/null 2>&1 || true
+      done
+
+      # ── Create a new token ────────────────────────────────────────────────
       echo "Creating API token for service account $SA_ID..."
       TOKEN_NAME="cloudops-lambda-slo-$(date -u +%Y%m%d%H%M%S 2>/dev/null || date -u +%s)"
       TOKEN_RESP=$(curl -sf -X POST "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" \

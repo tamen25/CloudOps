@@ -74,6 +74,43 @@ variable "application_namespace" {
   default     = "cloudops"
 }
 
+# ── OTel ingestion exposure (closes backlog #38) ─────────────────────────────
+# Production should set `otel_ingestion_internal = true` so the cloudops-otel
+# ALB is internal-only (reachable from VPC peers / Transit Gateway / Direct
+# Connect, not the internet). If you must keep internet exposure, populate
+# `otel_allowed_cidrs` with a tight list AND document the rotation cadence for
+# the bearer token in the runbook.
+
+variable "otel_ingestion_internal" {
+  description = "When true, the cloudops-otel ALB is provisioned as `internal` (no public IP). Production default."
+  type        = bool
+  default     = false
+}
+
+variable "otel_allowed_cidrs" {
+  description = "Source CIDRs allowed to reach the OTel ingestion ALB. Empty = no CIDR allow-list (bearer token + WAF rate limit only)."
+  type        = list(string)
+  default     = []
+}
+
+variable "otel_rate_limit_per_5min" {
+  description = "Per-IP rate limit applied at the cloudops-otel ALB via WAFv2. 0 = WAF not attached. Production: ~60000 (200 req/s)."
+  type        = number
+  default     = 0
+}
+
+variable "otel_token_rotation_days" {
+  description = "Days between rotation of the OTel collector bearer token (used by `secrets.tf`'s rotation marker). 0 = manual rotation only."
+  type        = number
+  default     = 0
+}
+
+variable "otel_alb_dns_name" {
+  description = "DNS name of the cloudops-otel ALB. Empty on the first pass; populated after the LBC creates the ALB. Acts as the two-pass marker for the OTel WAF association — we cannot look up the ALB by tag until it exists. Closes backlog #38."
+  type        = string
+  default     = ""
+}
+
 variable "enable_alertmanager" {
   description = "Run kube-prometheus-stack's Alertmanager pod. Required for the Grafana Alertmanager datasource to return data. Adds ~50m CPU / ~100Mi RAM."
   type        = bool
@@ -241,4 +278,12 @@ variable "slo_latency_target" {
     condition     = var.slo_latency_target > 0 && var.slo_latency_target < 1
     error_message = "slo_latency_target must be a decimal between 0 and 1 (e.g. 0.95 for 95%)."
   }
+}
+
+# ── yace (CloudWatch exporter) ────────────────────────────────────────────────
+
+variable "enable_yace" {
+  description = "Deploy yet-another-cloudwatch-exporter to scrape AWS/RDS, AWS/ApplicationELB, AWS/NATGateway, AWS/Lambda metrics into Prometheus. Closes backlog #14."
+  type        = bool
+  default     = false
 }

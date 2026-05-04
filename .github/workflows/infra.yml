@@ -59,6 +59,10 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Terraform no longer runs npm install during apply.
+        run: bash scripts/build-lambdas.sh
+
       - name: Check formatting
         run: terraform fmt -check -recursive
 
@@ -75,13 +79,32 @@ jobs:
         run: tflint --init
 
       - name: tflint
-        run: tflint --recursive --minimum-failure-severity=error
+        # --config is required when running --recursive so the root .tflint.hcl
+        # (e.g. the disable for terraform_required_providers) is honored inside
+        # every child module. Closes backlog #31 — without it, child modules
+        # re-enable the recommended preset and emit ~30 noisy warnings.
+        run: tflint --recursive --config="$(pwd)/.tflint.hcl" --minimum-failure-severity=error
 
+      - name: actionlint — workflow lint
+        # Closes backlog #23 — catches typos / wrong action input names /
+        # shellcheck violations in run: blocks before they ship.
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.4
+          ./actionlint -color
+
+      # Closes backlog #39 — pinned version (was unpinned `@v1.0.0` is fine
+      # but documenting the digest pin policy here) and made tfsec a hard gate
+      # for HIGH/CRITICAL findings. Documented suppressions live in `.tfsec/`
+      # config (`exclude` keys per check); no findings should slip through
+      # silently anymore. `soft_fail: false` is the default; making it
+      # explicit so a future contributor can't flip it back without reviewing.
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.0
+        uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          soft_fail: true
+          soft_fail: false
           format: sarif
+          additional_args: --minimum-severity HIGH
 
       - name: Upload tfsec results (artifact)
         uses: actions/upload-artifact@v4
@@ -163,6 +186,16 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Lambda zips need node_modules in place before
+        # `terraform plan` so `data.archive_file` builds the correct artifact.
+        run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -274,9 +307,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Closes backlog #39 — Trivy was previously pinned to the mutable
+      # `@master` ref. Now pinned to a tagged release; HIGH/CRITICAL findings
+      # are a hard gate (continue-on-error removed). To suppress an
+      # intentional finding, add a `# trivy:ignore:<id>` comment in the TF
+      # source and document the reason in PROJECT_EXPLAINER or a runbook.
       - name: Run Trivy on Terraform config
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
           scan-ref: .
@@ -294,11 +331,15 @@ jobs:
           retention-days: 30
 
       - name: Install Checkov
-        run: pip install checkov --quiet
+        # Pin checkov so a midnight upstream release can't change scan results.
+        run: pip install checkov==3.2.298 --quiet
 
-      - name: Run Checkov (soft fail — informational)
+      - name: Run Checkov (HIGH/CRITICAL hard gate)
+        # Closes backlog #39 — was previously `|| true` (informational).
+        # Now fails the job on HIGH/CRITICAL. Use a `.checkov.yml` skip-check
+        # entry to document any intentional suppressions.
         run: |
-          checkov -d . --framework terraform --output github_failed_only || true
+          checkov -d . --framework terraform --output github_failed_only --check HIGH,CRITICAL
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 5: Manifest validation — kubeconform schema validation
@@ -446,6 +487,16 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Lambda zips need node_modules in place before
+        # any `terraform apply` so the zips are deterministic + complete.
+        run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -611,53 +662,11 @@ jobs:
       - name: Final sync
         run: terraform apply -auto-approve
 
-      - name: Deploy sample app
-        env:
-          ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-        run: |
-          if [ -z "$ECR_REPOSITORY_URL" ]; then
-            echo "ECR_REPOSITORY_URL secret is not set — skipping sample app deploy"
-            exit 0
-          fi
-
-          CLUSTER=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "")
-          ACM_CERT_ARN=$(terraform output -raw acm_certificate_arn 2>/dev/null || echo "")
-          DB_SECRET_ARN=$(terraform output -raw database_secret_arn 2>/dev/null || echo "")
-          OTEL_ENDPOINT=$(terraform output -raw otel_endpoint 2>/dev/null || echo "")
-          ORDER_API_IRSA_ROLE_ARN=$(terraform output -raw order_api_irsa_role_arn 2>/dev/null || echo "")
-          ORDER_API_URL=$(terraform output -raw order_api_url 2>/dev/null || echo "")
-
-          if [ -z "$CLUSTER" ] || [ -z "$ACM_CERT_ARN" ] || [ -z "$DB_SECRET_ARN" ] || [ -z "$OTEL_ENDPOINT" ] || [ -z "$ORDER_API_IRSA_ROLE_ARN" ]; then
-            echo "Sample app prerequisites are not fully available — skipping deploy"
-            exit 0
-          fi
-
-          ORDER_API_HOST=${ORDER_API_URL#https://}
-          ORDER_API_HOST=${ORDER_API_HOST#http://}
-
-          ORDER_API_NAMESPACE=$(grep '^order_api_namespace' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
-          ORDER_API_SERVICE_ACCOUNT=$(grep '^order_api_service_account' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
-          ORDER_API_ENVIRONMENT=$(grep '^environment' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
-          DB_NAME=$(grep '^database_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
-
-          export ORDER_API_NAMESPACE=${ORDER_API_NAMESPACE:-cloudops}
-          export ORDER_API_SERVICE_ACCOUNT=${ORDER_API_SERVICE_ACCOUNT:-order-api}
-          export ORDER_API_ENVIRONMENT=${ORDER_API_ENVIRONMENT:-dev}
-          export DB_NAME=${DB_NAME:-cloudops}
-          export AWS_REGION
-          export ORDER_API_HOST
-          export ACM_CERT_ARN
-          export DB_SECRET_ARN
-          export OTEL_ENDPOINT
-          export ORDER_API_IRSA_ROLE_ARN
-          export ORDER_API_IMAGE="${ECR_REPOSITORY_URL}:latest"
-          export OTEL_RESOURCE_ATTRIBUTES="deployment.environment=${ORDER_API_ENVIRONMENT},k8s.cluster.name=${CLUSTER}"
-          export API_KEY_SECRET_ARN="${{ secrets.ORDER_API_KEY_SECRET_ARN }}"
-
-          aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
-          node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
-          kubectl apply -f /tmp/order-api-k8s/
-          kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s
+      # NOTE: order-api is deployed by .github/workflows/app.yml — that
+      # workflow owns build, sign, scan, render, apply, rollout, integration
+      # tests, and rollback. infra.yml only provisions platform prerequisites
+      # (cluster, IRSA, ACM, DNS, observability, security, database, OTel).
+      # Closes backlog #18.
 
       - name: Capture and summarize outputs
         if: always()
@@ -770,6 +779,15 @@ jobs:
 
       - name: Check for new CRITICAL findings
         run: |
+          # Pull the Grafana hostname out of the tfvars secret so the dashboard
+          # link in the step summary renders as a real URL. Falls back to a
+          # placeholder if domain_name is not set.
+          DOMAIN=$(echo "${{ secrets.TF_VARS }}" \
+            | grep '^domain_name' \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1)
+          DOMAIN="${DOMAIN:-example.com}"
+
           # Findings detected in the last 30 minutes are considered potentially
           # introduced by or coincident with this Terraform apply.
           SCAN_START=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \

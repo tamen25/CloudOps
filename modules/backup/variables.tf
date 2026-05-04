@@ -3,11 +3,6 @@ variable "name_prefix" {
   type        = string
 }
 
-variable "environment" {
-  description = "Environment name"
-  type        = string
-}
-
 variable "kms_key_arn" {
   description = "KMS CMK ARN for encrypting backup vault contents. Empty = AWS-managed aws/backup."
   type        = string

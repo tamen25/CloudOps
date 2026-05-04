@@ -87,7 +87,7 @@ resource "aws_cloudwatch_metric_alarm" "order_api_pod_count_low" {
 
   dimensions = {
     ClusterName = var.eks_cluster_name
-    Namespace   = "cloudops"
+    Namespace   = var.application_namespace
     Service     = "order-api"
   }
 

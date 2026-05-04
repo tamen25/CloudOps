@@ -33,6 +33,11 @@ output "order_api_irsa_role_arn" {
   value       = var.enable_eks ? module.eks[0].order_api_irsa_role_arn : null
 }
 
+output "order_api_api_key_secret_arn" {
+  description = "Secrets Manager ARN that the order-api Pod reads via API_KEY_SECRET_ARN. Source of truth for the app deploy assertion (closes backlog #37). Empty = unauthenticated dev mode (NODE_ENV must be dev/test/local)."
+  value       = var.order_api_api_key_secret_arn
+}
+
 # Ingress
 output "acm_certificate_arn" {
   description = "ACM wildcard certificate ARN"
@@ -81,6 +86,11 @@ output "grafana_admin_password" {
 output "otel_endpoint" {
   description = "OTel Collector HTTPS endpoint"
   value       = var.enable_observability ? module.observability[0].otel_endpoint : null
+}
+
+output "otel_url" {
+  description = "Public URL for the OTel Collector (otel.<domain>) — populated once otel_alb_dns_name is set. Closes backlog #17."
+  value       = var.enable_observability && var.otel_alb_dns_name != "" ? "https://otel.${var.domain_name}" : null
 }
 
 output "otel_api_key" {

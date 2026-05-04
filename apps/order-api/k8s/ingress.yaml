@@ -9,6 +9,12 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/certificate-arn: "${ACM_CERT_ARN}"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    # Closes backlog #17 — order-api joins the shared `cloudops` ALB group so
+    # it lands on the same ALB as Grafana. WAF + DNS expect a single public
+    # ALB tagged ingress.k8s.aws/stack=cloudops.
+    alb.ingress.kubernetes.io/group.name: cloudops
+    alb.ingress.kubernetes.io/group.order: "30"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
 spec:
   rules:
     - host: "${ORDER_API_HOST}"

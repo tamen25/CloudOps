@@ -5,30 +5,14 @@
 # DynamoDB, new HIGH/CRITICAL findings trigger SNS, and metrics are published to
 # CloudWatch under the CloudOps/Security namespace.
 #
-# IMPORTANT — install Lambda dependencies before terraform apply:
-#   cd modules/security/lambda_function/compliance_scanner && npm install --omit=dev && cd -
-# The node_modules directory must be present for archive_file to include them.
-# AWS SDK v3 is NOT bundled with the Node.js 20.x Lambda runtime.
-
-# Re-install and re-zip when package.json or source changes.
-resource "null_resource" "compliance_scanner_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/compliance_scanner/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/compliance_scanner/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function/compliance_scanner ${path.module}/lambda_function/compliance_scanner"
-    working_dir = path.module
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "compliance_scanner" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/compliance_scanner"
   output_path = "${path.module}/lambda_function/compliance_scanner.zip"
-
-  depends_on = [null_resource.compliance_scanner_build]
 }
 
 resource "aws_cloudwatch_log_group" "compliance_scanner" {
@@ -83,6 +67,13 @@ resource "aws_lambda_function" "compliance_scanner" {
     aws_cloudwatch_log_group.compliance_scanner,
     data.archive_file.compliance_scanner,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/compliance_scanner/node_modules/.package-lock.json")
+      error_message = "modules/security/lambda_function/compliance_scanner/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-compliance-scanner" })
 }

@@ -96,6 +96,39 @@ variable "order_api_service_account" {
   default     = "order-api"
 }
 
+variable "order_api_secret_arns" {
+  description = "Secrets Manager ARNs (or ARN wildcards) the order-api IRSA may read. Empty list falls back to the legacy `Resource = \"*\"` policy — only use during initial bootstrap."
+  type        = list(string)
+  default     = []
+}
+
+# ── Control-plane endpoint exposure (closes backlog #42) ─────────────────────
+
+variable "endpoint_private_access" {
+  description = "Enable EKS control plane access from inside the VPC."
+  type        = bool
+  default     = true
+}
+
+variable "endpoint_public_access" {
+  description = "Enable EKS control plane access from the internet. Production should set this `false` and reach the cluster via private runners / VPN / bastion. Keep `true` only when GitHub-hosted runners with dynamic IPs need direct access."
+  type        = bool
+  default     = true
+}
+
+variable "endpoint_public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the public EKS endpoint. Defaults to `0.0.0.0/0` for the dev flow with GitHub-hosted runners. Production: tighten to admin/VPN egress IPs and document the emergency-access path."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition = alltrue([
+      for cidr in var.endpoint_public_access_cidrs : can(cidrhost(cidr, 0))
+    ])
+    error_message = "All endpoint_public_access_cidrs entries must be valid IPv4 CIDR blocks."
+  }
+}
+
 # Tagging
 
 variable "tags" {

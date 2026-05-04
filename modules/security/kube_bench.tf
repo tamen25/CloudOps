@@ -258,24 +258,14 @@ resource "kubernetes_config_map" "kube_bench_script" {
 
 # ── kube_bench_processor Lambda ───────────────────────────────────────────────
 
-resource "null_resource" "kube_bench_processor_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/kube_bench_processor/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/kube_bench_processor/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function/kube_bench_processor ${path.module}/lambda_function/kube_bench_processor"
-    working_dir = path.module
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "kube_bench_processor" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/kube_bench_processor"
   output_path = "${path.module}/lambda_function/kube_bench_processor.zip"
-
-  depends_on = [null_resource.kube_bench_processor_build]
 }
 
 resource "aws_cloudwatch_log_group" "kube_bench_processor" {
@@ -383,6 +373,13 @@ resource "aws_lambda_function" "kube_bench_processor" {
     aws_cloudwatch_log_group.kube_bench_processor,
     data.archive_file.kube_bench_processor,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/kube_bench_processor/node_modules/.package-lock.json")
+      error_message = "modules/security/lambda_function/kube_bench_processor/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-kube-bench-processor" })
 }

@@ -33,7 +33,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  TF_VERSION: 1.7.0
+  TF_VERSION: 1.11.0
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -70,10 +70,48 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false  # disable wrapper so terraform output -raw returns clean strings
 
+      # Closes backlog #24 — wire the `environment` input to the tfvars secret
+      # and to the state-key derivation. If a per-env secret exists
+      # (TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD), use it; otherwise fall
+      # back to the shared TF_VARS. The next step asserts the tfvars `environment`
+      # field matches `inputs.environment` so a destroy can never run against
+      # the wrong state.
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          TF_VARS_ENV: ${{ secrets[format('TF_VARS_{0}', inputs.environment)] }}
+          TF_VARS_DEFAULT: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -n "${TF_VARS_ENV:-}" ]; then
+            echo "Using secrets.TF_VARS_${{ inputs.environment }} (per-env tfvars)"
+            printf '%s' "$TF_VARS_ENV" > terraform.tfvars
+          elif [ -n "${TF_VARS_DEFAULT:-}" ]; then
+            echo "Using secrets.TF_VARS (shared)"
+            printf '%s' "$TF_VARS_DEFAULT" > terraform.tfvars
+          else
+            echo "::error::No tfvars secret found — set secrets.TF_VARS or secrets.TF_VARS_${{ inputs.environment }}"
+            exit 1
+          fi
+
+      - name: Assert tfvars environment matches input
+        run: |
+          TFVARS_ENV=$(grep '^environment' terraform.tfvars \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1)
+          if [ -z "$TFVARS_ENV" ]; then
+            echo "::error::terraform.tfvars is missing the `environment = ` field"
+            exit 1
+          fi
+          if [ "$TFVARS_ENV" != "${{ inputs.environment }}" ]; then
+            echo "::error::Refusing to destroy: inputs.environment is '${{ inputs.environment }}' but terraform.tfvars says environment = '$TFVARS_ENV'"
+            echo "::error::Either correct the workflow input, or update the tfvars secret used for this environment."
+            exit 1
+          fi
+          echo "✓ tfvars environment ($TFVARS_ENV) matches input"
 
       - name: terraform init
+        # tf-init.sh derives STATE_KEY from `environment` in tfvars (backlog
+        # #10), so the assertion above guarantees the destroy targets the
+        # state file matching the selected input.
         run: ./scripts/tf-init.sh
 
       # ── 5. Install bucket-emptying helper ──────────────────────────────────

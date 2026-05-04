@@ -1,3 +1,7 @@
+terraform {
+  required_version = ">= 1.5.0"
+}
+
 # Public hosted zone — created once and kept alive permanently.
 # Only destroyed when destroy_all = true (module count = 0 at root level).
 # After first apply, update your domain registrar's nameservers to the values

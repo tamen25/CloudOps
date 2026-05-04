@@ -5,27 +5,14 @@
 # publishes CloudWatch metrics to CloudOps/FinOps, and alerts via SNS when
 # costs spike or the projected monthly spend exceeds the configured budget.
 #
-# IMPORTANT — install Lambda dependencies before terraform apply:
-#   cd modules/finops/lambda_function/cost_ingestion && npm install --omit=dev && cd -
-
-resource "null_resource" "cost_ingestion_build" {
-  triggers = {
-    package_json = filemd5("${path.module}/lambda_function/cost_ingestion/package.json")
-    index_js     = filemd5("${path.module}/lambda_function/cost_ingestion/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev"
-    working_dir = "${path.module}/lambda_function/cost_ingestion"
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20 — applies are no longer executor-dependent.
 
 data "archive_file" "cost_ingestion" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/cost_ingestion"
   output_path = "${path.module}/lambda_function/cost_ingestion.zip"
-
-  depends_on = [null_resource.cost_ingestion_build]
 }
 
 resource "aws_lambda_function" "cost_ingestion" {
@@ -61,6 +48,13 @@ resource "aws_lambda_function" "cost_ingestion" {
       COST_BUDGET_MONTHLY_USD             = tostring(var.cost_budget_monthly_usd)
       AWS_ACCOUNT_ID                      = var.aws_account_id
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/cost_ingestion/node_modules/.package-lock.json")
+      error_message = "modules/finops/lambda_function/cost_ingestion/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
     }
   }
 

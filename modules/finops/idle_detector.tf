@@ -9,27 +9,14 @@
 # service=idle-detection / date=YYYY-MM-DD and alerts via SNS when estimated
 # wasted cost exceeds $5/day.
 #
-# IMPORTANT — install Lambda dependencies before terraform apply:
-#   cd modules/finops/lambda_function/idle_detector && npm install --omit=dev && cd -
-
-resource "null_resource" "idle_detector_build" {
-  triggers = {
-    package_json = filemd5("${path.module}/lambda_function/idle_detector/package.json")
-    index_js     = filemd5("${path.module}/lambda_function/idle_detector/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev"
-    working_dir = "${path.module}/lambda_function/idle_detector"
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "idle_detector" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/idle_detector"
   output_path = "${path.module}/lambda_function/idle_detector.zip"
-
-  depends_on = [null_resource.idle_detector_build]
 }
 
 resource "aws_lambda_function" "idle_detector" {
@@ -65,6 +52,13 @@ resource "aws_lambda_function" "idle_detector" {
       IDLE_CPU_THRESHOLD                  = tostring(var.idle_cpu_threshold)
       IDLE_REQUEST_THRESHOLD              = tostring(var.idle_request_threshold)
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/idle_detector/node_modules/.package-lock.json")
+      error_message = "modules/finops/lambda_function/idle_detector/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
     }
   }
 

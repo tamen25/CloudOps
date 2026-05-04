@@ -5,7 +5,8 @@ const pino = require('pino');
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
 const { Pool } = require('pg');
 const { createApp, createMetricsApp, createMetrics } = require('./app');
-const { runMigrations } = require('./migrations');
+const { assertAuthConfigured } = require('./auth-config');
+const { createJwtVerifier } = require('./auth-jwt');
 
 const PORT = process.env.PORT || 3000;
 const METRICS_PORT = process.env.METRICS_PORT || 9090;
@@ -17,6 +18,17 @@ const DB_NAME = process.env.DB_NAME || 'cloudops';
 // API_KEY_SECRET_ARN below. Empty = endpoints are open.
 const API_KEY = process.env.API_KEY || '';
 const API_KEY_SECRET_ARN = process.env.API_KEY_SECRET_ARN || '';
+
+// OIDC / JWKS auth (closes backlog #7). When OIDC_ISSUER + OIDC_AUDIENCE +
+// OIDC_JWKS_URL are all set, server.js builds a JWT verifier middleware
+// that runs before the API-key fallback. OIDC_REQUIRED_SCOPES is a
+// space-separated list (empty = no scope check).
+const OIDC_ISSUER = process.env.OIDC_ISSUER || '';
+const OIDC_AUDIENCE = process.env.OIDC_AUDIENCE || '';
+const OIDC_JWKS_URL = process.env.OIDC_JWKS_URL || '';
+const OIDC_REQUIRED_SCOPES = (process.env.OIDC_REQUIRED_SCOPES || '')
+  .split(/\s+/)
+  .filter(Boolean);
 
 const logger = pino({ level: 'info' });
 
@@ -39,7 +51,10 @@ async function initDatabase() {
     connectionTimeoutMillis: 2000,
   });
 
-  await runMigrations({ pool, logger });
+  // Migrations run as a separate Kubernetes Job before rollout (see
+  // k8s/migration-job.yaml + .github/workflows/app.yml). The server only
+  // verifies it can reach the DB.
+  await pool.query('SELECT 1');
   logger.info('database initialized');
 }
 
@@ -85,9 +100,20 @@ async function resolveApiKey() {
 initDatabase()
   .then(async () => {
     const apiKey = await resolveApiKey();
-    if (!apiKey) {
-      logger.warn('API_KEY not configured — /order and /orders are unauthenticated');
+
+    let jwtVerifier = null;
+    if (OIDC_ISSUER && OIDC_AUDIENCE && OIDC_JWKS_URL) {
+      jwtVerifier = createJwtVerifier({
+        issuer: OIDC_ISSUER,
+        audience: OIDC_AUDIENCE,
+        jwksUrl: OIDC_JWKS_URL,
+        requiredScopes: OIDC_REQUIRED_SCOPES,
+        logger,
+      });
+      logger.info({ issuer: OIDC_ISSUER, audience: OIDC_AUDIENCE }, 'oidc verifier configured');
     }
+
+    assertAuthConfigured({ apiKey, jwtVerifier, nodeEnv: NODE_ENV, logger });
 
     const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
     const { app } = createApp({
@@ -96,6 +122,7 @@ initDatabase()
       nodeEnv: NODE_ENV,
       awsRegion: AWS_REGION,
       apiKey,
+      jwtVerifier,
       metrics,
     });
 

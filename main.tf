@@ -3,6 +3,133 @@
 
 data "aws_caller_identity" "current" {}
 
+# Toggle dependency guard — fails plan early when module flags conflict.
+# Closes backlog #19. Rules live here (not in module variable blocks) so the
+# error names every offending root flag together instead of one at a time.
+resource "terraform_data" "toggle_guard" {
+  input = {
+    enable_eks              = var.enable_eks
+    enable_networking       = var.enable_networking
+    enable_ingress          = var.enable_ingress
+    enable_observability    = var.enable_observability
+    enable_security         = var.enable_security
+    enable_slo              = var.enable_slo
+    enable_self_healing     = var.enable_self_healing
+    enable_yace             = var.enable_yace
+    enable_alertmanager     = var.enable_alertmanager
+    enable_external_secrets = var.enable_external_secrets
+    enable_backup           = var.enable_backup
+    enable_database         = var.enable_database
+    enable_waf              = var.enable_waf
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ingress || var.enable_eks
+      error_message = "enable_ingress=true requires enable_eks=true (LBC IRSA needs the cluster's OIDC provider)."
+    }
+
+    precondition {
+      condition = (
+        !var.enable_ingress ||
+        var.enable_networking ||
+        (var.existing_vpc_id != "" && length(var.existing_private_subnet_ids) > 0 && length(var.existing_public_subnet_ids) > 0)
+      )
+      error_message = "enable_ingress=true requires either enable_networking=true OR existing_vpc_id + existing_private_subnet_ids + existing_public_subnet_ids."
+    }
+
+    precondition {
+      condition     = !var.enable_observability || (var.enable_eks && var.enable_ingress)
+      error_message = "enable_observability=true requires enable_eks=true AND enable_ingress=true (Grafana/Loki/Tempo ingresses need the ACM cert from the ingress module)."
+    }
+
+    precondition {
+      condition     = !var.enable_security || (var.enable_eks && var.enable_observability)
+      error_message = "enable_security=true requires enable_eks=true AND enable_observability=true (Falco routes to OTel collector; otel_api_key comes from observability)."
+    }
+
+    precondition {
+      condition     = !var.enable_slo || var.enable_observability || var.slo_prometheus_url != ""
+      error_message = "enable_slo=true requires enable_observability=true OR slo_prometheus_url set to an external Prometheus/Grafana proxy URL."
+    }
+
+    precondition {
+      condition     = !var.enable_self_healing || (var.enable_eks && var.enable_observability)
+      error_message = "enable_self_healing=true requires enable_eks=true AND enable_observability=true (CloudWatch alarms need observability metrics + EKS for k8s rollback)."
+    }
+
+    precondition {
+      condition     = !var.enable_yace || var.enable_observability
+      error_message = "enable_yace=true requires enable_observability=true (yace publishes a ServiceMonitor consumed by kube-prometheus-stack)."
+    }
+
+    precondition {
+      condition     = !var.enable_alertmanager || var.enable_observability
+      error_message = "enable_alertmanager=true requires enable_observability=true (Alertmanager is part of the kube-prometheus-stack release)."
+    }
+
+    precondition {
+      condition     = !var.enable_external_secrets || var.enable_eks
+      error_message = "enable_external_secrets=true requires enable_eks=true (ESO is a Helm release into the cluster)."
+    }
+
+    precondition {
+      condition     = !var.enable_backup || var.enable_database
+      error_message = "enable_backup=true requires enable_database=true today (backup plan selection currently only includes the RDS instance ARN)."
+    }
+
+    precondition {
+      condition     = !var.enable_waf || var.enable_ingress
+      error_message = "enable_waf=true requires enable_ingress=true (WAFv2 ACL associates with the ALB created by the LBC)."
+    }
+
+    precondition {
+      condition     = !(var.self_healing_alb_arn_suffix != "" && var.self_healing_target_group_arn_suffix == "")
+      error_message = "self_healing_alb_arn_suffix is set but self_healing_target_group_arn_suffix is empty — ALB-backed alarms need both dimensions or neither."
+    }
+
+    precondition {
+      condition     = !(var.self_healing_target_group_arn_suffix != "" && var.self_healing_alb_arn_suffix == "")
+      error_message = "self_healing_target_group_arn_suffix is set but self_healing_alb_arn_suffix is empty — ALB-backed alarms need both dimensions or neither."
+    }
+
+    precondition {
+      condition     = !var.database_rotation_enabled || var.database_rotation_lambda_arn != "" || var.database_rotation_lambda_auto_deploy
+      error_message = "database_rotation_enabled=true requires either database_rotation_lambda_arn set OR database_rotation_lambda_auto_deploy=true."
+    }
+
+    precondition {
+      condition     = !(var.buckets_replication_destination_arn != "" && var.buckets_replication_role_arn == "")
+      error_message = "buckets_replication_destination_arn requires buckets_replication_role_arn (S3 CRR needs an IAM role with s3:Replicate*)."
+    }
+
+    precondition {
+      condition     = !(var.buckets_replication_destination_arn != "" && !var.buckets_versioning)
+      error_message = "buckets_replication_destination_arn requires buckets_versioning=true (S3 CRR requires versioning enabled)."
+    }
+
+    # Closes backlog #28 — base-infra inputs.
+    precondition {
+      condition = (
+        !var.enable_eks ||
+        var.enable_networking ||
+        (
+          var.existing_vpc_id != "" &&
+          length(var.existing_private_subnet_ids) > 0 &&
+          length(var.existing_public_subnet_ids) > 0 &&
+          var.existing_node_sg_id != ""
+        )
+      )
+      error_message = "enable_eks=true with enable_networking=false requires existing_vpc_id + existing_private_subnet_ids + existing_public_subnet_ids + existing_node_sg_id."
+    }
+
+    precondition {
+      condition     = !var.enable_database || var.enable_networking
+      error_message = "enable_database=true requires enable_networking=true today (the database module reads the DB subnet group + RDS security group from the networking module — bring-your-own networking for RDS is not yet wired through). To run RDS against existing infra, extend modules/database to accept explicit db_subnet_group_name + rds_security_group_id at the root level first."
+    }
+  }
+}
+
 locals {
   name_prefix = var.project_name
 
@@ -17,6 +144,15 @@ locals {
   #   2. Else fall back to the explicitly supplied security_github_token_secret_arn
   #   3. If neither is provided, security module disables GitHub issue creation
   github_token_secret_arn = var.github_token != "" ? module.bootstrap[0].github_token_secret_arn : var.security_github_token_secret_arn
+
+  # Order-api Secrets Manager scoping (closes backlog #22). Built from the
+  # deterministic DB-credentials secret name + the optional API-key ARN. Pattern
+  # uses the `-*` wildcard because Secrets Manager appends a 6-char suffix.
+  order_api_db_secret_arn_pattern = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.name_prefix}-db-credentials-*"
+  order_api_secret_arns = compact(concat(
+    var.enable_database ? [local.order_api_db_secret_arn_pattern] : [],
+    var.order_api_api_key_secret_arn != "" ? [var.order_api_api_key_secret_arn] : [],
+  ))
 
   common_tags = {
     Project     = var.project_name
@@ -125,6 +261,12 @@ module "eks" {
 
   order_api_namespace       = var.order_api_namespace
   order_api_service_account = var.order_api_service_account
+  order_api_secret_arns     = local.order_api_secret_arns
+
+  # Control-plane endpoint (backlog #42)
+  endpoint_private_access      = var.eks_endpoint_private_access
+  endpoint_public_access       = var.eks_endpoint_public_access
+  endpoint_public_access_cidrs = var.eks_endpoint_public_access_cidrs
 
   tags = local.common_tags
 }
@@ -149,9 +291,13 @@ module "ingress" {
   zone_id     = !var.destroy_all ? module.dns[0].zone_id : ""
   domain_name = var.domain_name
 
-  # Set these after the LBC has provisioned the ALB (leave empty on first deploy)
-  alb_dns_name = var.alb_dns_name
-  alb_zone_id  = var.alb_zone_id
+  # Set these after the LBC has provisioned the ALB (leave empty on first deploy).
+  # cloudops group: api.<domain> + grafana.<domain> (shared public ALB).
+  # cloudops-otel group: otel.<domain> (separate ALB, gRPC traceport).
+  alb_dns_name      = var.alb_dns_name
+  alb_zone_id       = var.alb_zone_id
+  otel_alb_dns_name = var.otel_alb_dns_name
+  otel_alb_zone_id  = var.otel_alb_zone_id
 
   # WAFv2
   enable_waf              = var.enable_waf
@@ -194,6 +340,14 @@ module "observability" {
   alert_webhook_url   = var.grafana_alert_webhook_url
 
   enable_alertmanager = var.enable_alertmanager
+  enable_yace         = var.enable_yace
+
+  # OTel hardening (backlog #38)
+  otel_ingestion_internal  = var.otel_ingestion_internal
+  otel_allowed_cidrs       = var.otel_allowed_cidrs
+  otel_rate_limit_per_5min = var.otel_rate_limit_per_5min
+  otel_token_rotation_days = var.otel_token_rotation_days
+  otel_alb_dns_name        = var.otel_alb_dns_name
 
   # Bucket hardening (defaults dev-friendly; flip via prod tfvars)
   buckets_force_destroy               = var.buckets_force_destroy
@@ -258,10 +412,18 @@ module "security" {
   environment      = var.environment
   project_name     = var.project_name
 
-  aws_account_id  = local.account_id
-  region          = var.region
-  db_subnet_cidrs = var.db_subnet_cidrs != null ? var.db_subnet_cidrs : []
-  vpc_cidr        = var.vpc_cidr
+  aws_account_id = local.account_id
+  region         = var.region
+  # Closes backlog #32 — pass the effective DB subnet CIDRs from networking
+  # (caller's input or auto-generated). The legacy `var.db_subnet_cidrs ?? []`
+  # fallback would silently drop the order-api → RDS NetworkPolicy egress
+  # rule once VPC CNI enforcement (backlog #26) is on, breaking 5432.
+  db_subnet_cidrs = (
+    var.enable_networking
+    ? module.networking[0].db_subnet_cidrs
+    : (var.db_subnet_cidrs != null ? var.db_subnet_cidrs : [])
+  )
+  vpc_cidr = var.vpc_cidr
 
   # Compliance scanner inputs
   vpc_id          = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
@@ -285,7 +447,8 @@ module "security" {
   oidc_provider_arn = var.enable_eks ? module.eks[0].oidc_provider_arn : ""
   oidc_provider_url = var.enable_eks ? module.eks[0].oidc_provider_url : ""
 
-  enable_external_secrets = var.enable_external_secrets
+  enable_external_secrets       = var.enable_external_secrets
+  external_secrets_allowed_arns = var.external_secrets_allowed_arns
 
   tags = local.common_tags
 
@@ -387,11 +550,21 @@ module "database" {
   performance_insights_enabled = var.database_performance_insights_enabled
   monitoring_interval          = var.database_monitoring_interval
 
+  # Logging policy (closes backlog #41)
+  log_connections               = var.database_log_connections
+  log_disconnections            = var.database_log_disconnections
+  log_duration                  = var.database_log_duration
+  log_statement                 = var.database_log_statement
+  log_min_duration_statement_ms = var.database_log_min_duration_statement_ms
+
   # Secrets Manager hardening
-  rotation_enabled            = var.database_rotation_enabled
-  rotation_lambda_arn         = var.database_rotation_lambda_arn
-  rotation_days               = var.database_rotation_days
-  secret_recovery_window_days = var.database_secret_recovery_window_days
+  rotation_enabled                  = var.database_rotation_enabled
+  rotation_lambda_arn               = var.database_rotation_lambda_arn
+  rotation_lambda_auto_deploy       = var.database_rotation_lambda_auto_deploy
+  rotation_lambda_subnet_ids        = var.enable_networking ? module.networking[0].private_subnet_ids : []
+  rotation_lambda_security_group_id = var.enable_networking ? module.networking[0].rds_sg_id : ""
+  rotation_days                     = var.database_rotation_days
+  secret_recovery_window_days       = var.database_secret_recovery_window_days
 
   tags = local.common_tags
 }
@@ -405,8 +578,6 @@ module "compliance" {
   source = "./modules/compliance"
 
   name_prefix    = local.name_prefix
-  environment    = var.environment
-  region         = var.region
   aws_account_id = local.account_id
 
   # CloudTrail
@@ -441,7 +612,6 @@ module "backup" {
   source = "./modules/backup"
 
   name_prefix = local.name_prefix
-  environment = var.environment
 
   rds_instance_arns = var.enable_database ? [module.database[0].rds_arn] : []
 

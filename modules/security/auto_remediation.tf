@@ -13,27 +13,14 @@
 # Kinesis, DynamoDB Streams). SNS uses a push model; the permission below
 # allows SNS to invoke the function on each delivery.
 #
-# IMPORTANT — install Lambda dependencies before terraform apply:
-#   cd modules/security/lambda_function/auto_remediation && npm install --omit=dev && cd -
-
-resource "null_resource" "auto_remediation_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/auto_remediation/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/auto_remediation/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function/auto_remediation ${path.module}/lambda_function/auto_remediation"
-    working_dir = path.module
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "auto_remediation" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/auto_remediation"
   output_path = "${path.module}/lambda_function/auto_remediation.zip"
-
-  depends_on = [null_resource.auto_remediation_build]
 }
 
 resource "aws_cloudwatch_log_group" "auto_remediation" {
@@ -84,6 +71,13 @@ resource "aws_lambda_function" "auto_remediation" {
     aws_cloudwatch_log_group.auto_remediation,
     data.archive_file.auto_remediation,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/auto_remediation/node_modules/.package-lock.json")
+      error_message = "modules/security/lambda_function/auto_remediation/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-auto-remediation" })
 }
