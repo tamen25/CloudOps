@@ -501,6 +501,7 @@ resource "kubernetes_manifest" "c_allowed_repos" {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_require_image_signature" {
+  count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {
     apiVersion = "templates.gatekeeper.sh/v1"
     kind       = "ConstraintTemplate"
@@ -590,6 +591,7 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
 }
 
 resource "kubernetes_manifest" "c_require_image_signature" {
+  count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
     kind       = "K8sRequireImageSignature"

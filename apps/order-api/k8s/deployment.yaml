@@ -24,13 +24,51 @@ spec:
         fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: rds-ca
+          emptyDir: {}
+        # Backlog #56 — readOnlyRootFilesystem requires a writable tmp dir
+        # for any libraries that write scratch files (pino transports,
+        # tempfiles in the AWS SDK).
+        - name: tmp
+          emptyDir: {}
+      # Backlog #57 — fetch the RDS global CA bundle once per pod start. The
+      # bundle is published at a stable URL by AWS; no IAM required. The
+      # main container reads `/etc/rds/global-bundle.pem` via DB_SSL_CA_BUNDLE.
+      initContainers:
+        - name: fetch-rds-ca
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - >-
+              curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+              -o /etc/rds/global-bundle.pem
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: order-api
           image: "${ORDER_API_IMAGE}"
           securityContext:
             allowPrivilegeEscalation: false
+            # Backlog #56 — read-only root filesystem; writable scratch via
+            # the `tmp` emptyDir mount.
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
           ports:
             - name: http
               containerPort: 3000
@@ -54,6 +92,11 @@ spec:
               value: "${DB_NAME}"
             - name: DB_SECRET_ARN
               value: "${DB_SECRET_ARN}"
+            # Backlog #57 — TLS to RDS. Bundle is fetched by the
+            # `fetch-rds-ca` initContainer; pg.Pool is configured with
+            # rejectUnauthorized=true.
+            - name: DB_SSL_CA_BUNDLE
+              value: "/etc/rds/global-bundle.pem"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "${OTEL_ENDPOINT}"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL

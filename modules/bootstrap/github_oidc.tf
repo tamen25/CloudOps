@@ -7,7 +7,7 @@ resource "aws_iam_openid_connect_provider" "github" {
   tags = merge(local.common_tags, { Name = "github-actions-oidc" })
 }
 
-# Trust policy: allow GitHub Actions workflows on main, feature/*, and PRs
+# Trust policy: deploy role only for protected branch or GitHub environments.
 data "aws_iam_policy_document" "github_actions_assume_role" {
   statement {
     effect  = "Allow"
@@ -25,14 +25,16 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Scope to this repo only; StringLike required for the feature/* wildcard
+    # Scope to this repo only. PR/feature refs cannot assume the deploy role;
+    # environment-bound jobs use GitHub's environment subject claim.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${var.github_repo}:ref:refs/heads/main",
-        "repo:${var.github_repo}:ref:refs/heads/feature/*",
-        "repo:${var.github_repo}:pull_request",
+        "repo:${var.github_repo}:environment:dev",
+        "repo:${var.github_repo}:environment:staging",
+        "repo:${var.github_repo}:environment:production",
       ]
     }
   }

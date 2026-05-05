@@ -4,7 +4,9 @@
 #   ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
 #   EKS_CLUSTER_NAME             — EKS cluster name from: terraform output -raw eks_cluster_name
 #   GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
-#   TF_VARS                      — Full contents of terraform.tfvars (used to keep app manifest rendering aligned with infra state)
+#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#                                  — Full contents of each environment's terraform.tfvars
+#   TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
 #
 # Image signing (Cosign keyless — no secrets required):
 #   Signatures are stored in ECR alongside the image using Sigstore's keyless flow.
@@ -17,6 +19,8 @@ on:
     branches: [main]
     paths:
       - 'apps/order-api/**'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
       - '.github/workflows/app.yml'
   pull_request:
     # Closes backlog #25 — run tests/lint/manifest validation before merge.
@@ -25,16 +29,37 @@ on:
     # or touch the cluster.
     paths:
       - 'apps/order-api/**'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
       - '.github/workflows/app.yml'
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
       override_budget_check:
         description: 'Bypass the error budget gate — use only for hotfixes/security patches (requires justification in commit message)'
         required: false
         type: boolean
         default: false
+      # Backlog #54 — promote an existing signed digest dev → staging → prod
+      # without rebuilding. Pass the sha256 from a prior successful run; the
+      # build-and-push, image-scan, and budget-check jobs are skipped, and
+      # the deploy job verifies + applies the same digest in the higher env.
+      promote_digest:
+        description: 'Image digest to promote (sha256:...). When set, skip build/scan and deploy this digest.'
+        required: false
+        type: string
+        default: ''
 
 env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   AWS_REGION:         ${{ secrets.AWS_REGION }}
   ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
   EKS_CLUSTER_NAME:   ${{ secrets.EKS_CLUSTER_NAME }}
@@ -206,9 +231,13 @@ jobs:
     # Gated off on PR events — closes backlog #25. PRs run tests +
     # manifest-validation only; image push, deploy, and integration tests
     # require a merge to main (or workflow_dispatch).
-    if: github.event_name != 'pull_request'
+    # Closes backlog #54 — also gated off when promoting an existing digest
+    # so a prod approval cannot trigger a rebuild that diverges from the
+    # signed image already validated in lower envs.
+    if: github.event_name != 'pull_request' && inputs.promote_digest == ''
     runs-on: ubuntu-latest
     needs: test
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write      # OIDC for AWS credentials + Cosign keyless signing
       contents: read
@@ -218,6 +247,9 @@ jobs:
       # on the immutable `@sha256:` reference, not the mutable `:tag`.
       # Closes backlog #18.
       image_digest: ${{ steps.build.outputs.digest }}
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
 
     steps:
       - uses: actions/checkout@v5
@@ -254,6 +286,9 @@ jobs:
       # No private key or secret is required — the signing identity is:
       #   https://github.com/${{ github.repository }}/.github/workflows/app.yml@refs/heads/main
       # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
       - name: Install Cosign
         # Pinned (closes backlog #39).
@@ -403,13 +438,19 @@ jobs:
   # Job 4: Trivy image scan — blocks deploy on CRITICAL vulnerabilities
   # ─────────────────────────────────────────────────────────────────────────────
   image-scan:
-    if: github.event_name != 'pull_request'
+    # Skipped on promotion (#54) — the digest was already scanned in the env
+    # where it was first built and pushed.
+    if: github.event_name != 'pull_request' && inputs.promote_digest == ''
     runs-on: ubuntu-latest
     needs: build-and-push
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
       contents: read
       security-events: write
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
     steps:
       - uses: actions/checkout@v5
 
@@ -484,9 +525,16 @@ jobs:
     # For push triggers (no inputs), github.event.inputs.override_budget_check
     # is null, which evaluates to != 'true', so the job runs normally.
     if: ${{ github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true' }}
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
       contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -499,7 +547,12 @@ jobs:
         run: |
           # Pull the Grafana hostname out of the tfvars secret so the dashboard
           # link in the step summary renders as a real URL.
-          DOMAIN=$(echo "${{ secrets.TF_VARS }}" \
+          SELECTED_TF_VARS="${TF_VARS}"
+          if [ "${TARGET_ENVIRONMENT}" = "dev" ] && [ -n "${TF_VARS_DEV}" ]; then SELECTED_TF_VARS="${TF_VARS_DEV}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ -n "${TF_VARS_STAGING}" ]; then SELECTED_TF_VARS="${TF_VARS_STAGING}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "prod" ] && [ -n "${TF_VARS_PROD}" ]; then SELECTED_TF_VARS="${TF_VARS_PROD}"; fi
+
+          DOMAIN=$(echo "${SELECTED_TF_VARS}" \
             | grep '^domain_name' \
             | sed 's/.*= *"\(.*\)".*/\1/' \
             | head -1)
@@ -610,20 +663,46 @@ jobs:
   # only images signed by this workflow are deployed to the cluster.
   # ─────────────────────────────────────────────────────────────────────────────
   deploy:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [budget-check, manifest-validation, build-and-push]
+    # build-and-push (and image-scan/budget-check) are skipped on promotion;
+    # `!cancelled() && !failure()` lets deploy run when those upstream
+    # jobs were skipped but lets a real failure still block.
+    needs: [budget-check, manifest-validation, build-and-push, image-scan]
+    if: ${{ github.event_name != 'pull_request' && !cancelled() && !failure() && needs.manifest-validation.result == 'success' && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped') }}
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
       contents: read
     env:
       # Immutable image reference — closes backlog #18.
-      # Format: <repo>@sha256:<digest>. The build-and-push job exposes the
-      # digest as a job output; rollout, signature verification, and the
-      # rendered manifests all use this exact reference.
-      IMAGE_REF: ${{ secrets.ECR_REPOSITORY_URL }}@${{ needs.build-and-push.outputs.image_digest }}
+      # Format: <repo>@sha256:<digest>. Sourced from build-and-push when this
+      # run built a fresh image, or from `inputs.promote_digest` when this run
+      # is a promotion (closes backlog #54). Either way, rollout, signature
+      # verification, and the rendered manifests use this exact reference —
+      # the digest signed in the source environment is the digest deployed
+      # in the target environment.
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+      IMAGE_REF: ${{ secrets.ECR_REPOSITORY_URL }}@${{ inputs.promote_digest != '' && inputs.promote_digest || needs.build-and-push.outputs.image_digest }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: Validate promotion input
+        # Closes backlog #54 — when promoting, the digest must be a real
+        # sha256 to prevent a typo from selecting an unintended image.
+        if: inputs.promote_digest != ''
+        run: |
+          set -euo pipefail
+          if ! echo "${{ inputs.promote_digest }}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+            echo "::error::promote_digest must match ^sha256:[a-f0-9]{64}$ (got: ${{ inputs.promote_digest }})"
+            exit 1
+          fi
+          echo "✓ Promoting digest ${{ inputs.promote_digest }} to environment=${{ inputs.environment }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -635,35 +714,28 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.11.0
 
       - name: Write terraform.tfvars
-        env:
-          TF_VARS: ${{ secrets.TF_VARS }}
-        run: |
-          if [ -n "$TF_VARS" ]; then
-            printf '%s' "$TF_VARS" > terraform.tfvars
-          fi
+        run: bash scripts/write-ci-tfvars.sh
 
       - name: Init Terraform for outputs
-        run: ./scripts/tf-init.sh
+        run: bash scripts/terraform-stacks.sh init
 
       - name: Load deployment configuration from Terraform state
         run: |
-          ORDER_API_URL=$(terraform output -raw order_api_url)
+          ORDER_API_URL=$(terraform -chdir=stacks/platform output -raw order_api_url)
           ORDER_API_HOST=${ORDER_API_URL#https://}
           ORDER_API_HOST=${ORDER_API_HOST#http://}
 
-          ACM_CERT_ARN=$(terraform output -raw acm_certificate_arn)
-          DB_SECRET_ARN=$(terraform output -raw database_secret_arn)
-          OTEL_ENDPOINT=$(terraform output -raw otel_endpoint)
-          ORDER_API_IRSA_ROLE_ARN=$(terraform output -raw order_api_irsa_role_arn)
+          EKS_CLUSTER_NAME=$(terraform -chdir=stacks/cluster output -raw cluster_name)
+          ACM_CERT_ARN=$(terraform -chdir=stacks/platform output -raw acm_certificate_arn)
+          DB_SECRET_ARN=$(terraform -chdir=stacks/foundation output -raw database_secret_arn)
+          OTEL_ENDPOINT=$(terraform -chdir=stacks/platform output -raw otel_endpoint)
+          ORDER_API_IRSA_ROLE_ARN=$(terraform -chdir=stacks/cluster output -raw order_api_irsa_role_arn)
 
           ORDER_API_NAMESPACE=$(grep '^order_api_namespace' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
           ORDER_API_SERVICE_ACCOUNT=$(grep '^order_api_service_account' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
@@ -695,7 +767,7 @@ jobs:
           OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
           OIDC_REQUIRED_SCOPES="${{ secrets.OIDC_REQUIRED_SCOPES }}"
 
-          TF_KEY_ARN=$(terraform output -raw order_api_api_key_secret_arn 2>/dev/null || echo "")
+          TF_KEY_ARN=$(terraform -chdir=stacks/cluster output -raw order_api_api_key_secret_arn 2>/dev/null || echo "")
           if [ "$ORDER_API_ENVIRONMENT" != "dev" ] && [ "$ORDER_API_ENVIRONMENT" != "test" ] && [ "$ORDER_API_ENVIRONMENT" != "local" ]; then
             if [ -z "$TF_KEY_ARN" ]; then
               echo "::error::Terraform output order_api_api_key_secret_arn is empty in environment=$ORDER_API_ENVIRONMENT — set var.order_api_api_key_secret_arn so the IRSA policy can scope to it"
@@ -711,6 +783,7 @@ jobs:
           {
             echo "ORDER_API_URL=${ORDER_API_URL}"
             echo "ORDER_API_HOST=${ORDER_API_HOST}"
+            echo "EKS_CLUSTER_NAME=${EKS_CLUSTER_NAME}"
             echo "ACM_CERT_ARN=${ACM_CERT_ARN}"
             echo "DB_SECRET_ARN=${DB_SECRET_ARN}"
             echo "OTEL_ENDPOINT=${OTEL_ENDPOINT}"
@@ -829,9 +902,18 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: deploy
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
       contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+      GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -848,43 +930,74 @@ jobs:
           terraform_version: 1.11.0
 
       - name: Write terraform.tfvars
-        env:
-          TF_VARS: ${{ secrets.TF_VARS }}
-        run: |
-          if [ -n "$TF_VARS" ]; then
-            printf '%s' "$TF_VARS" > terraform.tfvars
-          fi
+        run: bash scripts/write-ci-tfvars.sh
 
       - name: Init Terraform for outputs
-        run: ./scripts/tf-init.sh
+        run: bash scripts/terraform-stacks.sh init
 
       - name: Load integration endpoints
         run: |
-          echo "BASE_URL=$(terraform output -raw order_api_url)" >> "$GITHUB_ENV"
-          echo "GRAFANA_URL=$(terraform output -raw grafana_url)" >> "$GITHUB_ENV"
+          echo "BASE_URL=$(terraform -chdir=stacks/platform output -raw order_api_url)" >> "$GITHUB_ENV"
+          echo "GRAFANA_URL=$(terraform -chdir=stacks/platform output -raw grafana_url)" >> "$GITHUB_ENV"
 
-      - name: Resolve API key for authenticated endpoints
+      - name: Resolve auth credential for authenticated endpoints
         env:
           API_KEY_SECRET_ARN: ${{ secrets.ORDER_API_KEY_SECRET_ARN }}
+          OIDC_TOKEN_URL: ${{ secrets.OIDC_TOKEN_URL }}
+          OIDC_CLIENT_ID: ${{ secrets.OIDC_CLIENT_ID }}
+          OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+          OIDC_AUDIENCE: ${{ secrets.OIDC_AUDIENCE }}
         run: |
-          if [ -z "$API_KEY_SECRET_ARN" ]; then
-            echo "ORDER_API_KEY_SECRET_ARN secret is not set — tests will run unauthenticated"
-            echo "API_KEY=" >> "$GITHUB_ENV"
-            exit 0
+          set -euo pipefail
+          # Backlog #50 — prefer a real OIDC client_credentials token when the
+          # IdP is configured; fall back to the API key path. Tests must run
+          # at least one auth path; failing closed when neither is set.
+          if [ -n "${OIDC_TOKEN_URL:-}" ] && [ -n "${OIDC_CLIENT_ID:-}" ] && [ -n "${OIDC_CLIENT_SECRET:-}" ]; then
+            echo "Fetching OIDC client_credentials token from $OIDC_TOKEN_URL"
+            RESP=$(curl -sf -X POST "$OIDC_TOKEN_URL" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              --data-urlencode "grant_type=client_credentials" \
+              --data-urlencode "client_id=$OIDC_CLIENT_ID" \
+              --data-urlencode "client_secret=$OIDC_CLIENT_SECRET" \
+              ${OIDC_AUDIENCE:+--data-urlencode "audience=$OIDC_AUDIENCE"})
+            ACCESS_TOKEN=$(echo "$RESP" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))')
+            if [ -z "$ACCESS_TOKEN" ]; then
+              echo "::error::OIDC token endpoint returned no access_token (response: $RESP)"
+              exit 1
+            fi
+            echo "::add-mask::$ACCESS_TOKEN"
+            echo "OIDC_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+            echo "✓ OIDC access token resolved"
           fi
-          RAW=$(aws secretsmanager get-secret-value --secret-id "$API_KEY_SECRET_ARN" --query SecretString --output text)
-          API_KEY=$(printf '%s' "$RAW" | python3 <<'PY'
-          import json, sys
-          raw = sys.stdin.read()
+
+          if [ -n "${API_KEY_SECRET_ARN:-}" ]; then
+            RAW=$(aws secretsmanager get-secret-value --secret-id "$API_KEY_SECRET_ARN" --query SecretString --output text)
+            API_KEY=$(RAW_SECRET="$RAW" python3 -c '
+          import json
+          import os
+
+          raw = os.environ.get("RAW_SECRET", "").strip()
           try:
-              d = json.loads(raw)
-              print(d.get('api_key') or d.get('apiKey') or d.get('value') or '')
+              parsed = json.loads(raw)
+              if isinstance(parsed, dict):
+                  print(parsed.get("api_key") or parsed.get("apiKey") or parsed.get("value") or "")
+              else:
+                  print(str(parsed))
           except Exception:
               print(raw)
-          PY
-          )
-          echo "::add-mask::$API_KEY"
-          echo "API_KEY=$API_KEY" >> "$GITHUB_ENV"
+          ')
+            if [ -z "$API_KEY" ]; then
+              echo "::error::ORDER_API_KEY_SECRET_ARN resolved to an empty API key"
+              exit 1
+            fi
+            echo "::add-mask::$API_KEY"
+            echo "API_KEY=$API_KEY" >> "$GITHUB_ENV"
+          fi
+
+          if [ -z "${OIDC_ACCESS_TOKEN:-}" ] && [ -z "${API_KEY:-}" ]; then
+            echo "::error::no auth credential available — set ORDER_API_KEY_SECRET_ARN or the OIDC_TOKEN_URL/CLIENT_ID/CLIENT_SECRET trio"
+            exit 1
+          fi
 
       - name: "Test 1 — GET /health → 200 with status:ok"
         id: t1
@@ -916,6 +1029,7 @@ jobs:
             echo "Attempt $i/5"
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/order" \
               -H "Content-Type: application/json" \
+              ${OIDC_ACCESS_TOKEN:+-H "Authorization: Bearer $OIDC_ACCESS_TOKEN"} \
               ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" \
               -d '{"items":[{"sku":"test","quantity":1}],"total":9.99}')
             STATUS=$(echo "$RESPONSE" | tail -1)
@@ -945,8 +1059,8 @@ jobs:
         run: |
           for i in $(seq 1 5); do
             echo "Attempt $i/5"
-            BODY=$(curl -sf ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" "$BASE_URL/orders" 2>/dev/null || echo "")
-            STATUS=$(curl -s -o /dev/null ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" -w "%{http_code}" "$BASE_URL/orders")
+            BODY=$(curl -sf ${OIDC_ACCESS_TOKEN:+-H "Authorization: Bearer $OIDC_ACCESS_TOKEN"} ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" "$BASE_URL/orders" 2>/dev/null || echo "")
+            STATUS=$(curl -s -o /dev/null ${OIDC_ACCESS_TOKEN:+-H "Authorization: Bearer $OIDC_ACCESS_TOKEN"} ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" -w "%{http_code}" "$BASE_URL/orders")
             echo "  HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "  Body (first 200 chars): ${BODY:0:200}"
@@ -981,8 +1095,6 @@ jobs:
 
       - name: "Test 5 — Verify OTel traces flowing in Tempo (last 5 min)"
         id: t5
-        env:
-          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
         run: |
           END=$(date +%s)
           START=$((END - 300))
@@ -1050,8 +1162,7 @@ jobs:
         run: |
           # Pull the Grafana hostname out of the tfvars secret so the dashboard
           # link in the step summary renders as a real URL.
-          DOMAIN=$(echo "${{ secrets.TF_VARS }}" \
-            | grep '^domain_name' \
+          DOMAIN=$(grep '^domain_name' terraform.tfvars \
             | sed 's/.*= *"\(.*\)".*/\1/' \
             | head -1)
           DOMAIN="${DOMAIN:-example.com}"

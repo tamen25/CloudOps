@@ -1,12 +1,14 @@
 'use strict';
 
-// Fail-closed auth check. Non-local envs must boot with an authentication
-// config (API_KEY/API_KEY_SECRET_ARN OR an OIDC JWT verifier);
-// local/test/dev keep the open behavior so the dev cluster and unit tests
-// still run.
-// Closes backlog #22, extended for #7 (accepts JWT verifier too).
+// Fail-closed auth check. Only local unit/integration test runners boot with
+// no auth; every deployed environment (dev, staging, prod) must present
+// either an API key or an OIDC JWT verifier.
+// Closes backlog #22, extended for #7 (accepts JWT verifier too) and #50
+// (dev removed from the unauthenticated set so dev clusters cannot deploy
+// open data routes — covers the "real OIDC in dev/staging/prod" contract in
+// docs/environment-contract.md).
 
-const UNAUTHENTICATED_ENVS = new Set(['dev', 'test', 'local']);
+const UNAUTHENTICATED_ENVS = new Set(['test', 'local']);
 
 function assertAuthConfigured({ apiKey, jwtVerifier = null, nodeEnv, logger }) {
   if (apiKey || jwtVerifier) return;

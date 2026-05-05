@@ -15,16 +15,18 @@ function createLogger() {
   };
 }
 
-test('assertAuthConfigured allows local/dev/test envs without an apiKey (warns only)', () => {
-  for (const nodeEnv of ['dev', 'test', 'local']) {
+test('assertAuthConfigured allows local/test envs without an apiKey (warns only)', () => {
+  for (const nodeEnv of ['test', 'local']) {
     const logger = createLogger();
     assertAuthConfigured({ apiKey: '', nodeEnv, logger });
     assert.equal(logger.calls.warn.length, 1, `expected warn in ${nodeEnv}`);
   }
 });
 
-test('assertAuthConfigured throws in deployed envs when no apiKey is configured', () => {
-  for (const nodeEnv of ['staging', 'prod']) {
+test('assertAuthConfigured throws in deployed envs (dev, staging, prod) when no auth is configured', () => {
+  // Backlog #50 — dev must not deploy unauthenticated; only `test`/`local`
+  // (unit/integration runners) keep the open path.
+  for (const nodeEnv of ['dev', 'staging', 'prod']) {
     assert.throws(
       () => assertAuthConfigured({ apiKey: '', nodeEnv, logger: createLogger() }),
       /auth config required/,

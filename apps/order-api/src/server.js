@@ -1,6 +1,7 @@
 // tracing must be required first — it patches modules before they are loaded
 require('./tracing');
 
+const fs = require('fs');
 const pino = require('pino');
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
 const { Pool } = require('pg');
@@ -14,6 +15,14 @@ const NODE_ENV = process.env.NODE_ENV || 'dev';
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const DB_SECRET_ARN = process.env.DB_SECRET_ARN;
 const DB_NAME = process.env.DB_NAME || 'cloudops';
+// Backlog #57 — TLS to RDS. Default ON in every deployed env; only `test`
+// and `local` (unit/integration runners against an embedded PG) skip TLS.
+// `DB_SSL_CA_BUNDLE` is the path to the RDS CA bundle (mounted via the
+// `rds-ca` initContainer in deployment.yaml). When the bundle is missing we
+// still negotiate TLS but with `rejectUnauthorized: true` against the
+// system CA store — fails closed if RDS uses a CA the system does not trust.
+const DB_SSL_CA_BUNDLE = process.env.DB_SSL_CA_BUNDLE || '';
+const DB_SSL_DISABLED = process.env.DB_SSL_DISABLED === 'true';
 // Optional shared-secret gate for /order and /orders. Set directly or via
 // API_KEY_SECRET_ARN below. Empty = endpoints are open.
 const API_KEY = process.env.API_KEY || '';
@@ -40,6 +49,19 @@ async function initDatabase() {
   const response = await smClient.send(new GetSecretValueCommand({ SecretId: DB_SECRET_ARN }));
   const secret = JSON.parse(response.SecretString);
 
+  let ssl = false;
+  if (!DB_SSL_DISABLED && NODE_ENV !== 'test' && NODE_ENV !== 'local') {
+    ssl = { rejectUnauthorized: true };
+    if (DB_SSL_CA_BUNDLE) {
+      try {
+        ssl.ca = fs.readFileSync(DB_SSL_CA_BUNDLE, 'utf8');
+        logger.info({ caPath: DB_SSL_CA_BUNDLE }, 'loaded RDS CA bundle');
+      } catch (err) {
+        logger.error({ err, caPath: DB_SSL_CA_BUNDLE }, 'failed to read DB_SSL_CA_BUNDLE — falling back to system trust store');
+      }
+    }
+  }
+
   pool = new Pool({
     host: secret.host,
     port: secret.port || 5432,
@@ -49,6 +71,7 @@ async function initDatabase() {
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+    ssl,
   });
 
   // Migrations run as a separate Kubernetes Job before rollout (see

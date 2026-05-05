@@ -79,6 +79,10 @@ ORDER_API_HOST=api.example.com \
 API_KEY_SECRET_ARN= \
 IMAGE_TAG=local \
 VPC_CIDR=10.0.0.0/16 \
+OIDC_ISSUER= \
+OIDC_AUDIENCE= \
+OIDC_JWKS_URL= \
+OIDC_REQUIRED_SCOPES= \
   node apps/order-api/scripts/render-k8s.js apps/order-api/k8s "$RENDER_OUT"
 
 # ── 3. Validate ──────────────────────────────────────────────────────────────

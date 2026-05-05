@@ -10,8 +10,11 @@
 #                       traffic and silently denied requests once the AWS
 #                       VPC CNI began enforcing NetworkPolicy.
 # - port 9090 (metrics): reachable only from the monitoring namespace (Prom).
-# Egress is intentionally unrestricted so RDS / Secrets Manager / OTel exports
-# keep working without an explicit allow list.
+#
+# Backlog #58 — egress is now explicit (was unrestricted). Default-deny
+# egress + named allows for: DNS to kube-system, RDS to the DB subnets, and
+# AWS API / OTel collector via 443 + 4317/4318. Cheap envs run the same
+# rules so egress regressions surface in dev before they hit prod.
 
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -24,6 +27,71 @@ spec:
       app: order-api
   policyTypes:
     - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-api-default-deny-egress
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: order-api
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-api-allow-egress
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: order-api
+  policyTypes:
+    - Egress
+  egress:
+    # DNS — kube-dns / CoreDNS in kube-system.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # RDS — anywhere inside the VPC over the DB port. Tighter scoping
+    # (DB-subnet CIDRs only) lives on the security-module-managed policy
+    # `order-api-egress-rds` in modules/security/network_policies.tf when
+    # enable_security=true.
+    - to:
+        - ipBlock:
+            cidr: "${VPC_CIDR}"
+      ports:
+        - protocol: TCP
+          port: 5432
+    # AWS APIs (Secrets Manager / EKS / STS) over 443 — to anywhere, since
+    # AWS service IPs are not deterministic. Replace with VPC-endpoint CIDRs
+    # when interface endpoints are provisioned.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # OTel collector — gRPC 4317 / HTTP 4318. The collector lives in the
+    # `monitoring` namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

@@ -1,10 +1,10 @@
 # prod.tfvars.example — production launch profile.
 #
 # Closes backlog #40. Every WAF / audit / detection / backup / retention
-# control that prod-test leaves togglable is ON by default here, and every
-# destroy-safety shortcut from prod-test is flipped back to its
-# safe-for-customers value. The diff vs prod-test is intentional and
-# load-bearing — never copy prod-test into a prod env without applying these
+# control that staging leaves togglable is ON by default here, and every
+# destroy-safety shortcut from staging is flipped back to its
+# safe-for-customers value. The diff vs staging is intentional and
+# load-bearing — never copy staging into a prod env without applying these
 # overrides, or you will lose the ability to recover deleted state.
 #
 # Apply with:
@@ -167,4 +167,3 @@ otel_ingestion_internal  = true
 otel_allowed_cidrs       = []                # ignored when internal=true
 otel_rate_limit_per_5min = 60000             # 200 req/s per IP — adjust per fleet size
 otel_token_rotation_days = 30
-

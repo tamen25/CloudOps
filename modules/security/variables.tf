@@ -106,6 +106,25 @@ variable "application_namespace" {
   default     = "cloudops"
 }
 
+# Backlog #56 — image-signature admission gate. The Rego policy calls a
+# Gatekeeper external_data provider named `cosign-provider`; that provider
+# must be deployed in `gatekeeper-system` for the constraint to function.
+# Default OFF: with no provider deployed, the constraint reports system
+# errors on every admission and blocks the cluster. Set to true only after
+# `enable_cosign_provider = true` (or when the provider is deployed
+# out-of-band) so the constraint has something to call.
+variable "enable_cosign_provider" {
+  description = "Deploy the sigstore Cosign Gatekeeper provider sidecar so the K8sRequireImageSignature constraint can verify signatures."
+  type        = bool
+  default     = false
+}
+
+variable "enable_image_signature_constraint" {
+  description = "Activate the K8sRequireImageSignature Gatekeeper constraint. Requires enable_cosign_provider=true (or an out-of-band provider deployment)."
+  type        = bool
+  default     = false
+}
+
 variable "enable_external_secrets" {
   description = "Install External Secrets Operator (pulls AWS Secrets Manager values into k8s Secrets via IRSA). Provisions a default ClusterSecretStore."
   type        = bool

@@ -26,14 +26,47 @@ spec:
         fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: rds-ca
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      # Backlog #57 — same RDS CA fetch as the Deployment so migrations also
+      # talk TLS. RDS parameter group enforces rds.force_ssl=1, so a missing
+      # SSL config would fail-fast at handshake.
+      initContainers:
+        - name: fetch-rds-ca
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - >-
+              curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+              -o /etc/rds/global-bundle.pem
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: migrate
           image: "${ORDER_API_IMAGE}"
           command: ["node", "src/migrate.js"]
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
           env:
             - name: AWS_REGION
               value: "${AWS_REGION}"
@@ -41,6 +74,8 @@ spec:
               value: "${DB_NAME}"
             - name: DB_SECRET_ARN
               value: "${DB_SECRET_ARN}"
+            - name: DB_SSL_CA_BUNDLE
+              value: "/etc/rds/global-bundle.pem"
           resources:
             requests:
               cpu: "100m"

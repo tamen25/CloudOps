@@ -1,68 +1,106 @@
 #!/usr/bin/env bash
-# Wrapper for `terraform init` that reads bucket + state-key config from
-# terraform.tfvars and passes them as -backend-config. Lets the same
-# provider.tf work for any fork and any environment without code changes.
+# Wrapper for `terraform init` that reads bucket + state-key config from the
+# repo-root terraform.tfvars and passes it as backend config.
 #
 # Usage:
-#   scripts/tf-init.sh                       — local: uses ./terraform.tfvars
-#   scripts/tf-init.sh -upgrade              — passes through extra init flags
-#   BOOTSTRAP_BUCKET=foo scripts/tf-init.sh  — explicit bucket override
-#   STATE_KEY=dev/terraform.tfstate scripts/tf-init.sh — explicit key override
-#   SKIP_BUCKET_CHECK=1 scripts/tf-init.sh   — skip bucket existence preflight
+#   scripts/tf-init.sh                         # legacy root stack
+#   STACK=foundation scripts/tf-init.sh        # stacks/foundation
+#   STACK=cluster scripts/tf-init.sh           # stacks/cluster
+#   STACK=platform scripts/tf-init.sh          # stacks/platform
+#   scripts/tf-init.sh -upgrade                # passes through init flags
+#   BOOTSTRAP_BUCKET=foo scripts/tf-init.sh    # explicit bucket override
+#   STATE_KEY=dev/terraform.tfstate scripts/tf-init.sh
+#   SKIP_BUCKET_CHECK=1 scripts/tf-init.sh     # skip bucket preflight
 #
-# State-key layout (backlog #10):
-#   environment=dev  → dev/terraform.tfstate
-#   environment=prod → prod/terraform.tfstate
-#   etc.
-# Existing single-state users (`main/terraform.tfstate`) — migrate with:
-#   STATE_KEY=dev/terraform.tfstate scripts/tf-init.sh -migrate-state
-# from a checkout where the old `main/...` key is still in provider.tf locally.
+# State-key layout:
+#   legacy root:   <env>/terraform.tfstate
+#   stack:         <env>/<stack>/terraform.tfstate
 set -euo pipefail
 
-if [ -z "${BOOTSTRAP_BUCKET:-}" ]; then
-  if [ ! -f terraform.tfvars ]; then
-    echo "Error: terraform.tfvars not found and BOOTSTRAP_BUCKET not set." >&2
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+TFVARS_FILE="${TFVARS_FILE:-$REPO_ROOT/terraform.tfvars}"
+STACK="${STACK:-}"
+
+if [ -n "$STACK" ]; then
+  TF_DIR="$REPO_ROOT/stacks/$STACK"
+  if [ ! -d "$TF_DIR" ]; then
+    echo "Error: STACK=$STACK but $TF_DIR does not exist." >&2
     exit 1
   fi
-  BOOTSTRAP_BUCKET=$(grep '^bootstrap_bucket_name' terraform.tfvars \
+else
+  TF_DIR="$REPO_ROOT"
+fi
+
+read_tfvar_string() {
+  local name="$1"
+  grep -E "^[[:space:]]*${name}[[:space:]]*=" "$TFVARS_FILE" 2>/dev/null \
     | sed 's/.*= *"\(.*\)".*/\1/' \
-    | head -1)
+    | head -1
+}
+
+if [ -z "${BOOTSTRAP_BUCKET:-}" ]; then
+  if [ ! -f "$TFVARS_FILE" ]; then
+    echo "Error: $TFVARS_FILE not found and BOOTSTRAP_BUCKET not set." >&2
+    exit 1
+  fi
+  BOOTSTRAP_BUCKET=$(read_tfvar_string bootstrap_bucket_name)
 fi
 
 if [ -z "$BOOTSTRAP_BUCKET" ]; then
-  echo "Error: bootstrap_bucket_name missing from terraform.tfvars and BOOTSTRAP_BUCKET unset." >&2
+  echo "Error: bootstrap_bucket_name missing from $TFVARS_FILE and BOOTSTRAP_BUCKET unset." >&2
   exit 1
 fi
 
-# ── State key derivation (per-env) ────────────────────────────────────────────
-# Caller may set STATE_KEY explicitly; otherwise we derive from environment.
+ENV_NAME="${ENVIRONMENT:-}"
+NEEDS_ENV=0
+
 if [ -z "${STATE_KEY:-}" ]; then
-  ENV=$(grep '^environment' terraform.tfvars 2>/dev/null \
-    | sed 's/.*= *"\(.*\)".*/\1/' \
-    | head -1)
-  if [ -z "$ENV" ]; then
-    echo "Error: environment missing from terraform.tfvars and STATE_KEY unset." >&2
-    exit 1
-  fi
-  STATE_KEY="${ENV}/terraform.tfstate"
+  NEEDS_ENV=1
 fi
 
-# ── Preflight: confirm bucket actually exists in this AWS account ────────────
+if { [ "$STACK" = "cluster" ] || [ "$STACK" = "platform" ]; } && [ -z "${FOUNDATION_STATE_KEY:-}" ]; then
+  NEEDS_ENV=1
+fi
+
+if [ "$STACK" = "platform" ] && [ -z "${CLUSTER_STATE_KEY:-}" ]; then
+  NEEDS_ENV=1
+fi
+
+if [ -z "$ENV_NAME" ] && [ "$NEEDS_ENV" = "1" ]; then
+  if [ ! -f "$TFVARS_FILE" ]; then
+    echo "Error: $TFVARS_FILE not found and environment could not be derived." >&2
+    exit 1
+  fi
+  ENV_NAME=$(read_tfvar_string environment)
+fi
+
+if [ -z "${STATE_KEY:-}" ]; then
+  if [ -z "$ENV_NAME" ]; then
+    echo "Error: environment missing from $TFVARS_FILE and STATE_KEY unset." >&2
+    exit 1
+  fi
+
+  if [ -n "$STACK" ]; then
+    STATE_KEY="${ENV_NAME}/${STACK}/terraform.tfstate"
+  else
+    STATE_KEY="${ENV_NAME}/terraform.tfstate"
+  fi
+fi
+
 # Closes backlog #6. Without this, a typo in bootstrap_bucket_name silently
-# makes terraform init create a brand-new state bucket pointing at the wrong
-# location, splitting state across two buckets. Skip the check with
-# SKIP_BUCKET_CHECK=1 (e.g. on a fresh fork before the bucket exists).
+# points init at the wrong location. Skip with SKIP_BUCKET_CHECK=1.
 if [ "${SKIP_BUCKET_CHECK:-0}" != "1" ]; then
   if ! command -v aws >/dev/null 2>&1; then
-    echo "Warning: aws CLI not found — skipping bootstrap_bucket_name preflight." >&2
+    echo "Warning: aws CLI not found; skipping bootstrap_bucket_name preflight." >&2
   else
     if ! aws s3api head-bucket --bucket "$BOOTSTRAP_BUCKET" >/dev/null 2>&1; then
       cat >&2 <<EOF
 Error: bootstrap_bucket_name "$BOOTSTRAP_BUCKET" was not found in this account/region.
        Either:
-         1. The bucket does not exist yet — set SKIP_BUCKET_CHECK=1 and let
+         1. The bucket does not exist yet; set SKIP_BUCKET_CHECK=1 and let
             scripts/bootstrap.sh (or module.bootstrap) create it.
-         2. terraform.tfvars is pointing at the wrong bucket — fix the value.
+         2. terraform.tfvars is pointing at the wrong bucket; fix the value.
        Refusing to init against a bucket that does not exist to avoid splitting
        state across two locations.
 EOF
@@ -71,8 +109,57 @@ EOF
   fi
 fi
 
-echo "terraform init -backend-config=\"bucket=$BOOTSTRAP_BUCKET\" -backend-config=\"key=$STATE_KEY\" $*"
-exec terraform init \
+if [ "$STACK" = "cluster" ] || [ "$STACK" = "platform" ]; then
+  if [ -z "${FOUNDATION_STATE_KEY:-}" ] && [ -z "$ENV_NAME" ]; then
+    echo "Error: STACK=$STACK requires environment or FOUNDATION_STATE_KEY." >&2
+    exit 1
+  fi
+
+  FOUNDATION_STATE_KEY="${FOUNDATION_STATE_KEY:-${ENV_NAME}/foundation/terraform.tfstate}"
+  cat > "$TF_DIR/backend.auto.tfvars" <<EOF
+# Generated by scripts/tf-init.sh; ignored by git.
+foundation_state_bucket = "$BOOTSTRAP_BUCKET"
+foundation_state_key    = "$FOUNDATION_STATE_KEY"
+EOF
+  echo "Wrote $TF_DIR/backend.auto.tfvars for foundation remote state."
+fi
+
+if [ "$STACK" = "platform" ]; then
+  if [ -z "${CLUSTER_STATE_KEY:-}" ] && [ -z "$ENV_NAME" ]; then
+    echo "Error: STACK=platform requires environment or CLUSTER_STATE_KEY." >&2
+    exit 1
+  fi
+
+  CLUSTER_STATE_KEY="${CLUSTER_STATE_KEY:-${ENV_NAME}/cluster/terraform.tfstate}"
+  cat >> "$TF_DIR/backend.auto.tfvars" <<EOF
+cluster_state_bucket    = "$BOOTSTRAP_BUCKET"
+cluster_state_key       = "$CLUSTER_STATE_KEY"
+EOF
+  echo "Updated $TF_DIR/backend.auto.tfvars for cluster remote state."
+fi
+
+# Backlog #53 — pass the bootstrap KMS key alias as a backend config when it
+# exists in the account, so the backend negotiates SSE-KMS for state PUTs.
+# Falls back silently to AES256 when the alias has not been created yet
+# (first-time bootstrap, or bootstrap_create_kms=false).
+KMS_KEY_FLAG=()
+if [ -z "${TF_STATE_KMS_KEY_ID:-}" ] && command -v aws >/dev/null 2>&1; then
+  PROJECT_NAME=$(read_tfvar_string project_name 2>/dev/null || echo "")
+  if [ -n "$PROJECT_NAME" ]; then
+    ALIAS="alias/${PROJECT_NAME}-tfstate-kms"
+    KEY_ID=$(aws kms describe-key --key-id "$ALIAS" --query 'KeyMetadata.Arn' --output text 2>/dev/null || true)
+    if [ -n "$KEY_ID" ] && [ "$KEY_ID" != "None" ]; then
+      TF_STATE_KMS_KEY_ID="$KEY_ID"
+    fi
+  fi
+fi
+if [ -n "${TF_STATE_KMS_KEY_ID:-}" ]; then
+  KMS_KEY_FLAG=(-backend-config="kms_key_id=$TF_STATE_KMS_KEY_ID")
+fi
+
+echo "terraform -chdir=\"$TF_DIR\" init -backend-config=\"bucket=$BOOTSTRAP_BUCKET\" -backend-config=\"key=$STATE_KEY\" ${KMS_KEY_FLAG[*]:-} $*"
+exec terraform -chdir="$TF_DIR" init \
   -backend-config="bucket=$BOOTSTRAP_BUCKET" \
   -backend-config="key=$STATE_KEY" \
+  "${KMS_KEY_FLAG[@]}" \
   "$@"

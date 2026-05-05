@@ -41,6 +41,14 @@ resource "aws_db_parameter_group" "main" {
     value = "pg_stat_statements"
   }
 
+  # Backlog #57 — refuse plaintext PG connections at the server, so a missing
+  # client SSL config fails fast at handshake instead of silently sending
+  # credentials/queries in cleartext.
+  parameter {
+    name  = "rds.force_ssl"
+    value = "1"
+  }
+
   tags = merge(
     local.common_tags,
     {

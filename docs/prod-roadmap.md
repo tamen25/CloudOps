@@ -7,6 +7,43 @@ the code is reshaped now and the cost flip happens later via tfvars.
 the repo behind a flag with a safe default. Dev keeps the cheap floor; prod
 unlocks the full set via `environments/prod.tfvars`.
 
+> **Status note (2026-05-05):** this is a roadmap snapshot. The
+> *canonical*, day-to-day backlog (with resolution notes per item) lives in
+> `CLAUDE.md` at the repo root. Items marked `todo` here that are now
+> resolved should be assumed superseded by the CLAUDE.md row of the same
+> topic; updated below where the topic maps cleanly. Items still `todo`
+> here are work that has not yet been picked up.
+
+## What landed since the original snapshot
+
+Tracked by CLAUDE.md backlog ID; cross-referenced for the topics covered in
+this roadmap:
+
+- **A-1** Real auth — `done` (CLAUDE.md #7: JWT verifier via `jose`).
+- **A-2** Per-tenant rate limit — `done` (CLAUDE.md #45: two-tier limiter).
+- **A-4** Tenancy model — `done` (CLAUDE.md #8 + #51: tenant_id + RLS).
+- **D-1** RDS multi-AZ + final snapshot policy — `done` for prod profile (#40).
+- **D-3** Secrets rotation — `done` (#11: SAR app auto-deploys).
+- **D-5** AWS Backup vault — `done` (#14 / prod-enterprise reshape).
+- **E-1** WAFv2 on public ALBs — `done` (prod-enterprise reshape).
+- **K-2** EKS control-plane logs to CloudWatch — `done`.
+- **K-5** Gatekeeper enforce mode — `done` for the deployed constraint set
+  (#56 image-signature constraint default-off until cosign-provider lands).
+- **K-7** Default-deny NetworkPolicy — `done` (#26 + #58).
+- **N-2** VPC flow logs to S3 — `done` (prod-enterprise reshape).
+- **O-1..O-7** Mimir + HA observability — `done` (prod-enterprise reshape).
+- **State KMS** — `done` (#53).
+- **TLS to RDS** — `done` (#57).
+- **App deploy approval + image promotion** — `done` (#54).
+- **Drift per env+stack** — `done` (#59).
+- **Cosign provider deployment** — `todo` (#56 follow-up).
+- **M-1 Cilium service mesh** — `todo` (#9 — open).
+- **N-4 Transit Gateway** — `todo` (still single-VPC).
+- **K-4 Karpenter** — `todo` (autoscaler stays Cluster Autoscaler for now).
+
+The full per-item state — including what changed and why — is in
+`CLAUDE.md` § Known Risks / Follow-ups (backlog).
+
 ---
 
 ## Cost frame

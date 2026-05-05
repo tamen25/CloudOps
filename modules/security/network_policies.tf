@@ -154,8 +154,12 @@ resource "kubernetes_network_policy" "otel_collector_ingress" {
       }
     }
 
-    # HTTP (4318): cloudops namespace pods AND internet via ALB (0.0.0.0/0).
-    # Multiple `from` entries in a single ingress rule are OR'd.
+    # HTTP (4318): cloudops namespace pods AND ALB-fronted clients.
+    # Backlog #58 — replaced the previous 0.0.0.0/0 with var.vpc_cidr. With
+    # ALB target-type=ip and no NLB-style client-IP preservation, the
+    # NetworkPolicy enforcer sees the ALB ENI IP (in-VPC), not the original
+    # internet client IP. The narrower CIDR keeps the same effective ingress
+    # surface while denying any non-VPC source that might bypass the ALB.
     ingress {
       from {
         namespace_selector {
@@ -165,7 +169,7 @@ resource "kubernetes_network_policy" "otel_collector_ingress" {
         }
       }
       from {
-        ip_block { cidr = "0.0.0.0/0" }
+        ip_block { cidr = var.vpc_cidr }
       }
       ports {
         port     = "4318"
@@ -194,11 +198,13 @@ resource "kubernetes_network_policy" "grafana_ingress" {
 
     policy_types = ["Ingress"]
 
-    # Allow from internet via ALB on port 3000 (Grafana's HTTP port in the chart).
-    # ALB forwards to pod IPs directly in ip-target mode.
+    # Allow from ALB ENIs (in-VPC) on port 3000 (Grafana's HTTP port).
+    # Backlog #58 — replaced 0.0.0.0/0 with var.vpc_cidr; same reasoning as
+    # the OTel 4318 rule above. ALB target-type=ip means the source visible
+    # to NetworkPolicy is the ALB ENI IP, not the internet client.
     ingress {
       from {
-        ip_block { cidr = "0.0.0.0/0" }
+        ip_block { cidr = var.vpc_cidr }
       }
       ports {
         port     = "3000"

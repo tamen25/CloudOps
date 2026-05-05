@@ -123,6 +123,18 @@ function createApp({
   // multi-MB JSON payload from a single client.
   app.use(express.json({ limit: '64kb' }));
 
+  // Handle body-parser errors (oversize body, malformed JSON) cleanly so
+  // express's default handler does not dump a stack trace to stderr.
+  app.use((err, req, res, next) => {
+    if (err.type === 'entity.too.large') {
+      return res.status(413).json({ success: false, error: 'payload_too_large' });
+    }
+    if (err.type === 'entity.parse.failed') {
+      return res.status(400).json({ success: false, error: 'invalid_json' });
+    }
+    return next(err);
+  });
+
   app.use((req, res, next) => {
     const start = Date.now();
 
@@ -249,6 +261,34 @@ function createApp({
     ? [unauthLimiter, jwtVerifier, requireApiKey, requireTenant, dataLimiter]
     : [unauthLimiter, requireApiKey, requireTenant, dataLimiter];
 
+  // Closes backlog #51 — wraps a query in a transaction with
+  // `SET LOCAL app.tenant_id` so the RLS policy `tenant_isolation` can
+  // enforce row-level isolation. App-side `WHERE tenant_id = $1` clauses
+  // remain (defence in depth) but the database now refuses to read or
+  // write rows for any other tenant even if those clauses regress.
+  // When the injected pool has no `connect()` (test mocks), falls back to
+  // `pool.query` directly — RLS is a runtime DB concern, so the test path
+  // does not need to model transactions.
+  async function withTenant(tenantId, fn) {
+    if (typeof pool.connect !== 'function') {
+      return fn(pool);
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // set_config is parameterised; SET LOCAL is not.
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* best-effort */ }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   app.post('/order', ...authChain, async (req, res) => {
     // Closes backlog #44 — explicit schema for the order payload. Rejects
     // unexpected shapes (non-array items, missing sku/quantity, NaN total,
@@ -264,9 +304,11 @@ function createApp({
     const orderId = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     try {
-      const result = await pool.query(
-        'INSERT INTO orders (order_id, items, total, environment, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId],
+      const result = await withTenant(req.tenantId, (client) =>
+        client.query(
+          'INSERT INTO orders (order_id, items, total, environment, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId],
+        ),
       );
 
       logger.info({ orderId, total, tenant: req.tenantId }, 'order created');
@@ -279,9 +321,11 @@ function createApp({
 
   app.get('/orders', ...authChain, async (req, res) => {
     try {
-      const result = await pool.query(
-        'SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100',
-        [req.tenantId],
+      const result = await withTenant(req.tenantId, (client) =>
+        client.query(
+          'SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100',
+          [req.tenantId],
+        ),
       );
       res.status(200).json({ orders: result.rows, count: result.rowCount });
     } catch (err) {
