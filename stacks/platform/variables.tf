@@ -265,6 +265,17 @@ variable "otel_token_rotation_days" {
   default = 0
 }
 
+# Backlog #61 — OTel SSM publishing.
+variable "publish_otel_ssm_config" {
+  type    = bool
+  default = false
+}
+
+variable "ssm_kms_key_id" {
+  type    = string
+  default = ""
+}
+
 variable "buckets_force_destroy" {
   type    = bool
   default = true

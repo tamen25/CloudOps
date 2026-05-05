@@ -23,7 +23,7 @@ enable_security      = false  # Enable after eks + observability are deployed
 enable_finops        = false  # Standalone — can be enabled alongside bootstrap
 enable_self_healing  = false  # Enable after eks + observability are deployed
 
-# DANGER ZONE: set to true ONLY when running destroy.sh
+# DANGER ZONE: set to true ONLY when running scripts/destroy.sh
 destroy_all = false
 
 # ─────────────────────────────────────────────────────────────
@@ -196,3 +196,9 @@ grafana_alert_webhook_url = ""
 # PrometheusRule alerts to show up in the Grafana unified Alerts UI.
 # Adds ~50m CPU / ~100Mi RAM. Cheap.
 enable_alertmanager = true
+
+# OTel SDK/client discovery via SSM Parameter Store (optional).
+# Creates /<project>/<env>/otel/endpoint, /endpoint/{metrics,traces,logs},
+# and /api-key (SecureString). Empty KMS key = AWS-managed alias/aws/ssm.
+publish_otel_ssm_config = false
+ssm_kms_key_id          = ""

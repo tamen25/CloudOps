@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ./oidc.sh
+# Usage: scripts/oidc.sh
 # Run once locally before first CI/CD deployment.
 # Creates AWS OIDC provider + GitHub Actions IAM role using AWS CLI only.
 # No Terraform, no S3 bucket, no jq needed — just AWS credentials.
@@ -7,7 +7,13 @@
 
 set -e
 
-# ── Colors (matches deploy.sh) ────────────────────────────────────────────────
+# Backlog #62 — moved from repo root to scripts/. Resolve repo root from
+# this script's location so the bare `terraform.tfvars` lookup below works.
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
+
+# ── Colors (matches scripts/deploy.sh) ────────────────────────────────────────
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'

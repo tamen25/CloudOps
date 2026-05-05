@@ -89,9 +89,9 @@ The sample app is wired into two deployment paths:
 
 1. **`.github/workflows/app.yml`** — full CI: tests, Trivy scan, Cosign keyless
    signing, SBOM attestation, rollout with automatic rollback on failure.
-2. **`deploy.sh`** — one-click path: if `node`, `docker`, and `kubectl` are
-   available locally, deploy.sh will build, push, render, and apply the app
-   after the platform is up.
+2. **`scripts/deploy.sh`** — one-click path: if `node`, `docker`, and `kubectl`
+   are available locally, `scripts/deploy.sh` will build, push, render, and
+   apply the app after the platform is up.
 
 Neither path depends on the other — the app manifests are fully reproducible
 from Terraform state in either case.

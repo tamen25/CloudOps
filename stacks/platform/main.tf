@@ -250,6 +250,10 @@ module "observability" {
 
   metrics_long_term_storage = var.metrics_long_term_storage
 
+  # Backlog #61
+  publish_otel_ssm_config = var.publish_otel_ssm_config
+  ssm_kms_key_id          = var.ssm_kms_key_id
+
   tags = local.common_tags
 }
 

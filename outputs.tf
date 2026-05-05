@@ -99,6 +99,16 @@ output "otel_api_key" {
   sensitive   = true
 }
 
+output "otel_ssm_parameter_names" {
+  description = "SSM Parameter Store names for OTel SDK/client configuration"
+  value       = var.enable_observability ? module.observability[0].otel_ssm_parameter_names : {}
+}
+
+output "otel_ssm_parameter_arns" {
+  description = "SSM Parameter Store ARNs for OTel SDK/client configuration"
+  value       = var.enable_observability ? module.observability[0].otel_ssm_parameter_arns : {}
+}
+
 output "grafana_api_key_secret_arn" {
   description = "Secrets Manager ARN for the Grafana Viewer service account token (used by the SLO Lambda)"
   value       = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : null

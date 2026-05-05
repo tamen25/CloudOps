@@ -31,9 +31,18 @@ receivers: [otlp]  →  processors: [memory_limiter, resource, batch]  →  expo
 
 The `resource` processor injects `cluster` and `environment` as resource attributes on every span, metric, and log line in flight, without any service needing to know about these attributes. This is the "enrichment without code change" argument for a gateway: a new environment label propagates by updating the collector config, not by redeploying every service.
 
-**Bearer auth:** The collector mounts a Kubernetes Secret (`otel-auth`) as a file at `/etc/otel/auth/api-key` and uses the `bearertokenauth` extension on both the gRPC (4317) and HTTP (4318) receivers. This means every SDK client must present a bearer token to send telemetry. Falcosidekick injects the same token via the `FALCOSIDEKICK_WEBHOOK_CUSTOMHEADERS` environment variable read from a local secret copy in the `falco` namespace. The token never appears in Helm values or Terraform state (only in the Kubernetes Secret, which Terraform creates from a generated random string in `modules/observability/secrets.tf`).
+**Bearer auth:** The collector mounts a Kubernetes Secret (`otel-auth`) as a file at `/etc/otel/auth/api-key` and uses the `bearertokenauth` extension on both the gRPC (4317) and HTTP (4318) receivers. This means every SDK client must present a bearer token to send telemetry. Falcosidekick injects the same token via the `FALCOSIDEKICK_WEBHOOK_CUSTOMHEADERS` environment variable read from a local secret copy in the `falco` namespace. The token is generated once by Terraform in `modules/observability/secrets.tf`, then distributed to Kubernetes Secrets, Secrets Manager, and, when enabled, SSM Parameter Store for SDK/client discovery.
 
 The OTel Collector is exposed externally at `otel.example.com` via two Ingress resources — one for HTTP/OTLP (`backend-protocol=HTTP`) and one for gRPC/OTLP (`backend-protocol=GRPC`). External SDK clients (e.g., an application running outside the cluster) can send telemetry over HTTPS without knowing which specific backend stores which signal type.
+
+When `publish_otel_ssm_config=true`, producer accounts can read the base
+endpoint and OTLP/HTTP signal-specific URLs from SSM:
+`/cloudops/<env>/otel/endpoint`,
+`/cloudops/<env>/otel/endpoint/metrics`,
+`/cloudops/<env>/otel/endpoint/traces`,
+`/cloudops/<env>/otel/endpoint/logs`, and the SecureString token at
+`/cloudops/<env>/otel/api-key`. This is only a configuration distribution
+contract; SDK wrappers and custom telemetry libraries remain application-side.
 
 The "backend agnosticism" argument proved its value when we added Tempo: the order-api tracing module only needed the collector endpoint, not the Tempo endpoint. If we replace Tempo with Jaeger tomorrow, only the collector exporter config changes.
 

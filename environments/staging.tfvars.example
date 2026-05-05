@@ -27,8 +27,8 @@
 #   terraform apply -var-file=environments/staging.tfvars
 #
 # Tear down:
-#   ./destroy.sh           # preserves OIDC + Route 53
-#   ./destroy.sh --nuke-bootstrap   # wipes everything
+#   ./scripts/destroy.sh           # preserves OIDC + Route 53
+#   ./scripts/destroy.sh --nuke-bootstrap   # wipes everything
 
 environment  = "staging"
 project_name = "cloudops"

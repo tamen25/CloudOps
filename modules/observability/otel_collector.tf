@@ -146,21 +146,6 @@ resource "helm_release" "otel_collector" {
   depends_on = [kubernetes_secret.otel_auth, helm_release.prometheus, helm_release.loki, helm_release.tempo]
 }
 
-# A record for otel.${var.domain} — created after first deploy once ALB DNS is known
-resource "aws_route53_record" "otel" {
-  count = var.alb_dns_name != "" ? 1 : 0
-
-  zone_id = var.zone_id
-  name    = "otel.${var.domain}"
-  type    = "A"
-
-  alias {
-    name                   = var.alb_dns_name
-    zone_id                = var.alb_zone_id
-    evaluate_target_health = true
-  }
-}
-
 # Ingress for OTel Collector HTTP endpoint (OTLP/HTTP, port 4318)
 # TLS is terminated at the ALB; backend is plain HTTP.
 resource "kubernetes_ingress_v1" "otel_http" {

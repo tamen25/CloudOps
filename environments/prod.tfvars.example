@@ -167,3 +167,8 @@ otel_ingestion_internal  = true
 otel_allowed_cidrs       = []                # ignored when internal=true
 otel_rate_limit_per_5min = 60000             # 200 req/s per IP — adjust per fleet size
 otel_token_rotation_days = 30
+
+# Publish OTel endpoint URLs and bearer token to SSM Parameter Store for
+# cross-account SDK clients. Empty KMS key = AWS-managed alias/aws/ssm.
+publish_otel_ssm_config = false
+ssm_kms_key_id          = ""

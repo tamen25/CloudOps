@@ -79,6 +79,7 @@ Status: `todo` / `in-progress` / `done` / `blocked`. Priority `P1`–`P4`.
 | O-5 | todo   | P3 | Tempo ingester replicas → 3, metrics-generator on for RED metrics |
 | O-6 | todo   | P2 | All observability buckets: versioning ON, lifecycle expiration 365d, force_destroy=false, KMS CMK |
 | O-7 | todo   | P3 | Cross-region replication for observability buckets to a DR region |
+| O-8 | todo   | P2 | Publish OTel base endpoint, `/v1/metrics`, `/v1/traces`, `/v1/logs`, and bearer token to SSM Parameter Store for SDK clients; custom libraries out of scope |
 
 ### 2. Data layer
 
@@ -159,6 +160,7 @@ Alternative: Istio ambient mode if Cilium doesn't fit. Decide via ADR.
 | C-7 | todo   | P3 | CodeQL on the app |
 | C-8 | todo   | P3 | Trivy + Grype + SBOM diff between releases |
 | C-9 | todo   | P4 | Chaos Mesh weekly run in staging, verifies SLO holds under faults |
+| C-10 | todo | P3 | Root folder cleanup: move operational scripts under `scripts/`, update references, and keep Terraform entrypoints stable until layered-state migration is complete |
 
 ### 9. Secrets & key management
 

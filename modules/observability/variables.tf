@@ -46,24 +46,19 @@ variable "acm_cert_arn" {
 }
 
 variable "domain" {
-  description = "Root domain for DNS records (e.g. example.com)"
+  description = "Root domain for observability ingress hostnames (e.g. example.com)"
   type        = string
 }
 
-variable "alb_dns_name" {
-  description = "ALB DNS name for Route 53 alias records — set after first deploy"
-  type        = string
-  default     = ""
+# Backlog #61 — opt-in publication of OTel ingestion config to SSM.
+variable "publish_otel_ssm_config" {
+  description = "When true, publish OTel endpoint URLs and bearer token to SSM Parameter Store under /<name_prefix>/<environment>/otel/* for SDK/client discovery."
+  type        = bool
+  default     = false
 }
 
-variable "alb_zone_id" {
-  description = "ALB hosted zone ID for Route 53 alias records — set after first deploy"
-  type        = string
-  default     = ""
-}
-
-variable "zone_id" {
-  description = "Route53 hosted zone ID for the domain (from dns module)"
+variable "ssm_kms_key_id" {
+  description = "Optional KMS key ID/alias/ARN for SecureString SSM parameters. Empty (default) uses alias/aws/ssm."
   type        = string
   default     = ""
 }

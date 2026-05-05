@@ -20,6 +20,28 @@ output "otel_api_key" {
   sensitive   = true
 }
 
+output "otel_ssm_parameter_names" {
+  description = "SSM Parameter Store names for OTel SDK/client configuration. Empty when publish_otel_ssm_config=false."
+  value = var.publish_otel_ssm_config ? {
+    endpoint         = aws_ssm_parameter.otel_endpoint[0].name
+    metrics_endpoint = aws_ssm_parameter.otel_endpoint_metrics[0].name
+    traces_endpoint  = aws_ssm_parameter.otel_endpoint_traces[0].name
+    logs_endpoint    = aws_ssm_parameter.otel_endpoint_logs[0].name
+    api_key          = aws_ssm_parameter.otel_api_key[0].name
+  } : {}
+}
+
+output "otel_ssm_parameter_arns" {
+  description = "SSM Parameter Store ARNs for OTel SDK/client configuration. Empty when publish_otel_ssm_config=false."
+  value = var.publish_otel_ssm_config ? {
+    endpoint         = aws_ssm_parameter.otel_endpoint[0].arn
+    metrics_endpoint = aws_ssm_parameter.otel_endpoint_metrics[0].arn
+    traces_endpoint  = aws_ssm_parameter.otel_endpoint_traces[0].arn
+    logs_endpoint    = aws_ssm_parameter.otel_endpoint_logs[0].arn
+    api_key          = aws_ssm_parameter.otel_api_key[0].arn
+  } : {}
+}
+
 output "prometheus_url" {
   description = "Prometheus URL (cluster-internal)"
   value       = "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090"

@@ -116,6 +116,36 @@ terraform output -raw otel_api_key
 kubectl get secret otel-auth -n monitoring -o jsonpath='{.data.api-key}' | base64 --decode
 ```
 
+When `publish_otel_ssm_config=true`, SDK clients can discover the same
+configuration from SSM Parameter Store:
+
+```bash
+# Base endpoint for OTLP/gRPC clients, and for SDKs that append signal paths.
+aws ssm get-parameter \
+  --name /cloudops/<env>/otel/endpoint \
+  --query Parameter.Value \
+  --output text
+
+# OTLP/HTTP signal-specific endpoints.
+aws ssm get-parameters \
+  --names \
+    /cloudops/<env>/otel/endpoint/metrics \
+    /cloudops/<env>/otel/endpoint/traces \
+    /cloudops/<env>/otel/endpoint/logs \
+  --query 'Parameters[].{Name:Name,Value:Value}' \
+  --output table
+
+# Bearer token for Authorization: Bearer <value>.
+aws ssm get-parameter \
+  --name /cloudops/<env>/otel/api-key \
+  --with-decryption \
+  --query Parameter.Value \
+  --output text
+```
+
+Producer roles need `ssm:GetParameter` / `ssm:GetParameters` on the OTel
+parameter path, plus `kms:Decrypt` when the SecureString uses a CMK.
+
 ### 3.4 RDS database access
 
 The RDS instance is in a private subnet. To connect:
@@ -699,7 +729,7 @@ aws rds restore-db-instance-from-db-snapshot \
 
 ### 8.3 Full Environment Rebuild
 
-In a complete infrastructure loss scenario (accidental `destroy_all=true` or account compromise), rebuild using `deploy.sh`:
+In a complete infrastructure loss scenario (accidental `destroy_all=true` or account compromise), rebuild using `scripts/deploy.sh`:
 
 ```bash
 # 1. Ensure terraform.tfvars is present (check git history or CI secrets)
@@ -707,7 +737,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with correct values
 
 # 2. Run the deployment script
-./deploy.sh
+./scripts/deploy.sh
 ```
 
 **Estimated rebuild time by stage:**
@@ -725,7 +755,7 @@ cp terraform.tfvars.example terraform.tfvars
 | 9 | Final sync + SLO/FinOps | ~3 min |
 | **Total** | | **~50 min** |
 
-> After `deploy.sh`, set `alb_dns_name` and `alb_zone_id` from the provisioned ALB, then re-run `terraform apply` for Route 53 records. Application images will need to be redeployed from ECR.
+> After `scripts/deploy.sh`, set `alb_dns_name` and `alb_zone_id` from the provisioned ALB, then re-run `terraform apply` for Route 53 records. Application images will need to be redeployed from ECR.
 
 ### 8.4 Data Recovery Priority Order
 

@@ -327,11 +327,7 @@ module "observability" {
 
   acm_cert_arn          = var.enable_ingress ? module.ingress[0].certificate_arn : ""
   domain                = var.domain_name
-  zone_id               = !var.destroy_all ? module.dns[0].zone_id : ""
   application_namespace = var.order_api_namespace
-
-  alb_dns_name = var.alb_dns_name
-  alb_zone_id  = var.alb_zone_id
 
   # Grafana unified alerting — contact points + notification policies.
   # Leave all three empty to run without any Grafana alert notifications.
@@ -369,6 +365,10 @@ module "observability" {
 
   # Long-term metrics storage backend (none|mimir|thanos)
   metrics_long_term_storage = var.metrics_long_term_storage
+
+  # Backlog #61 — opt-in OTel SSM publishing.
+  publish_otel_ssm_config = var.publish_otel_ssm_config
+  ssm_kms_key_id          = var.ssm_kms_key_id
 
   tags = local.common_tags
 }

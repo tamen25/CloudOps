@@ -14,7 +14,7 @@
 #     flow logs, CloudTrail, Config) emptied + deleted explicitly
 #
 # Use `--nuke-bootstrap` to also wipe OIDC + state bucket (rare; you'll need
-# to re-run ./oidc.sh before the next deploy).
+# to re-run ./scripts/oidc.sh before the next deploy).
 
 set -e
 
@@ -31,7 +31,7 @@ for arg in "$@"; do
         --help|-h)
             echo "Usage: $0 [--nuke-bootstrap]"
             echo "  Default: keeps Route 53 + OIDC + state bucket."
-            echo "  --nuke-bootstrap: wipes everything including OIDC. You'll re-run ./oidc.sh."
+            echo "  --nuke-bootstrap: wipes everything including OIDC. You'll re-run ./scripts/oidc.sh."
             exit 0 ;;
     esac
 done
@@ -52,7 +52,10 @@ command -v aws       >/dev/null || { echo "Error: aws CLI not found"; exit 1; }
 command -v terraform >/dev/null || { echo "Error: terraform not found"; exit 1; }
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+# Backlog #62 — script moved from repo root to scripts/. cd up one level so
+# `terraform.tfvars` and the Terraform working directory resolve as before.
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
 
 get_tfvar() {
     grep "^$1" terraform.tfvars 2>/dev/null | sed 's/.*=\s*"\(.*\)"/\1/' | tr -d ' "'
@@ -265,8 +268,7 @@ if $NUKE_BOOTSTRAP; then
 
     rm -f terraform.tfstate terraform.tfstate.backup tfplan
     rm -rf .terraform
-    rm -f .terraform.lock.hcl
-    echo -e "${GREEN}  ✓ Bootstrap + state wiped — re-run ./oidc.sh and ./scripts/tf-init.sh before next deploy${NC}"
+    echo -e "${GREEN}  ✓ Bootstrap + state wiped — re-run ./scripts/oidc.sh and ./scripts/tf-init.sh before next deploy${NC}"
 else
     echo ""
     echo -e "${GREEN}Step 6: Bootstrap + DNS preserved — next deploy reuses OIDC and Route 53${NC}"
@@ -280,9 +282,9 @@ echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}   Teardown complete${NC}"
 echo -e "${GREEN}================================================${NC}"
 if $NUKE_BOOTSTRAP; then
-    echo "Everything destroyed. Re-run ./oidc.sh + ./deploy.sh for a fresh start."
+    echo "Everything destroyed. Re-run ./scripts/oidc.sh + ./scripts/deploy.sh for a fresh start."
 else
     echo "Workload destroyed. Route 53 + OIDC preserved."
-    echo "Run ./deploy.sh to rebuild."
+    echo "Run ./scripts/deploy.sh to rebuild."
 fi
 echo ""

@@ -530,6 +530,19 @@ variable "otel_token_rotation_days" {
   default     = 0
 }
 
+# Backlog #61 — publish OTel ingestion config to SSM Parameter Store.
+variable "publish_otel_ssm_config" {
+  description = "When true, publish OTel endpoint URLs and bearer token to SSM under /<project>/<env>/otel/* for SDK/client discovery."
+  type        = bool
+  default     = false
+}
+
+variable "ssm_kms_key_id" {
+  description = "Optional KMS key ID/alias/ARN for SecureString SSM parameters. Empty = AWS-managed alias/aws/ssm."
+  type        = string
+  default     = ""
+}
+
 variable "destroy_all" {
   description = "DANGER: Set to true to destroy ALL infrastructure including bootstrap. Set networking and eks to false first!"
   type        = bool

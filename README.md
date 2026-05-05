@@ -192,7 +192,7 @@ CloudOps/
 ├── variables.tf                     # All variable definitions with validation
 ├── outputs.tf                       # Root outputs (cluster name, ALB DNS, ECR URL, etc.)
 ├── terraform.tfvars.example         # Template — copy to terraform.tfvars
-├── deploy.sh                        # Staged deployment script
+├── scripts/deploy.sh                # Staged deployment script
 │
 ├── .github/workflows/
 │   ├── app.yml                      # App CI/CD: build → scan → deploy → test → rollback

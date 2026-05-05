@@ -531,7 +531,7 @@ jobs:
         run: echo "Waiting for ${{ env.TARGET_ENVIRONMENT }} approval via GitHub environment protection"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 8: Terraform apply — staged to match deploy.sh order
+  # Job 8: Terraform apply — staged to match scripts/deploy.sh order
   # Runs fresh targeted applies (saved plan files are incompatible with -target).
   # After final apply, key outputs are posted to the step summary.
   # ─────────────────────────────────────────────────────────────────────────────
@@ -601,7 +601,7 @@ jobs:
           fi
 
       # Import OIDC provider and GitHub Actions IAM role if they were pre-created
-      # by oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
+      # by scripts/oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
       # a live EKS cluster) stays unconfigured during import of IAM resources.
       # Checks state first — skips import if resource is already tracked.
       - name: Import pre-existing OIDC bootstrap resources
@@ -671,7 +671,7 @@ jobs:
             echo "DB subnet group does not exist in AWS — skipping import"
           fi
 
-      # Staged applies match deploy.sh ordering.
+      # Staged applies match scripts/deploy.sh ordering.
       # Each stage runs a fresh plan+apply for the targeted modules.
       # terraform apply -target cannot be combined with a saved plan file.
       - name: Apply bootstrap + networking + dns

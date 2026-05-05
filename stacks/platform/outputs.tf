@@ -24,6 +24,14 @@ output "otel_api_key" {
   sensitive = true
 }
 
+output "otel_ssm_parameter_names" {
+  value = var.enable_observability ? module.observability[0].otel_ssm_parameter_names : {}
+}
+
+output "otel_ssm_parameter_arns" {
+  value = var.enable_observability ? module.observability[0].otel_ssm_parameter_arns : {}
+}
+
 output "grafana_api_key_secret_arn" {
   value = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : null
 }

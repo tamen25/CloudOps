@@ -2,3 +2,18 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: "${ORDER_API_NAMESPACE}"
+  # Backlog #71 — Pod Security Standards restricted profile, enforced by
+  # the in-tree PSA admission controller (no Gatekeeper required). The
+  # order-api Deployment + migration Job already satisfy `restricted`:
+  # runAsNonRoot, non-zero UID/GID, allowPrivilegeEscalation=false,
+  # capabilities drop ALL, readOnlyRootFilesystem, seccompProfile
+  # RuntimeDefault. `audit` + `warn` mirror `enforce` so any non-compliant
+  # pod (e.g. a hand-crafted debug pod) is logged and surfaced in kubectl
+  # output even when enforcement bypass is configured.
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

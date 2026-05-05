@@ -4,6 +4,13 @@
 
 set -e
 
+# Backlog #62 — script moved from repo root to scripts/. Resolve repo root
+# from this script's location so the bare `terraform` and `terraform.tfvars`
+# references below behave the same regardless of caller cwd.
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
