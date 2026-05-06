@@ -1,14 +1,14 @@
-# Wildcard certificate for *.tamendutta.com (also covers root domain via SAN)
+# Wildcard certificate for *.${var.domain_name} (also covers root domain via SAN)
 resource "aws_acm_certificate" "main" {
-  domain_name               = "*.tamendutta.com"
-  subject_alternative_names = ["tamendutta.com"]
+  domain_name               = "*.${var.domain_name}"
+  subject_alternative_names = [var.domain_name]
   validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
   }
 
-  tags = merge(local.common_tags, { Name = "tamendutta-wildcard-cert" })
+  tags = merge(local.common_tags, { Name = "${var.name_prefix}-wildcard-cert" })
 }
 
 # DNS validation records in the existing Route 53 hosted zone
@@ -22,7 +22,7 @@ resource "aws_route53_record" "cert_validation" {
   }
 
   allow_overwrite = true
-  zone_id         = data.aws_route53_zone.main.zone_id
+  zone_id         = local.zone_id
   name            = each.value.name
   type            = each.value.type
   records         = [each.value.record]

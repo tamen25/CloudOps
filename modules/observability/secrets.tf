@@ -8,13 +8,38 @@ resource "kubernetes_namespace" "monitoring" {
   }
 }
 
-# OTel API key — 32-char alphanumeric token used by bearertokenauth extension
+resource "kubernetes_namespace" "application" {
+  metadata {
+    name = var.application_namespace
+    labels = {
+      name = var.application_namespace
+    }
+  }
+}
+
+# OTel API key — 32-char alphanumeric token used by bearertokenauth extension.
+# Closes part of backlog #38: when var.otel_token_rotation_days > 0, the
+# `keepers` map binds the token to a rotating value derived from current
+# date floor-divided by the rotation window. Each window boundary forces a
+# new random_password, which propagates through the SM secret + the k8s
+# `otel-auth` Secret. Pods that mount the secret pick up the new token after
+# the kubelet's standard projection refresh (60s default).
 resource "random_password" "otel_api_key" {
   length  = 32
   special = false
+
+  keepers = var.otel_token_rotation_days > 0 ? {
+    # Day-bucketed rotation marker. `floor(unix_seconds / day_seconds /
+    # rotation_days)` increments once per rotation window. timestamp() is
+    # only used during plan; once the keeper changes Terraform replaces the
+    # password and propagates downstream.
+    rotation_window = floor(parseint(formatdate("YYYY", timestamp()), 10) * 366 + parseint(formatdate("DDD", timestamp()), 10)) / var.otel_token_rotation_days
+  } : null
 }
 
 resource "aws_secretsmanager_secret" "otel_api_key" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops-otel-api-key"
   description             = "Bearer token for OTel Collector authentication"
   recovery_window_in_days = 0
@@ -42,17 +67,19 @@ resource "kubernetes_secret" "otel_auth" {
   depends_on = [kubernetes_namespace.monitoring]
 }
 
-# otel-auth in cloudops namespace — injected as OTEL_API_KEY env var into order-api pods
+# otel-auth in the application namespace — injected as OTEL_API_KEY env var into order-api pods
 # Kubernetes secretKeyRef cannot reference secrets across namespaces, so we maintain a copy here.
-resource "kubernetes_secret" "otel_auth_cloudops" {
+resource "kubernetes_secret" "otel_auth_application" {
   metadata {
     name      = "otel-auth"
-    namespace = "cloudops"
+    namespace = var.application_namespace
   }
 
   data = {
     api-key = random_password.otel_api_key.result
   }
+
+  depends_on = [kubernetes_namespace.application]
 }
 
 # Grafana admin password — stored in AWS Secrets Manager and as a k8s secret
@@ -62,6 +89,8 @@ resource "random_password" "grafana_admin" {
 }
 
 resource "aws_secretsmanager_secret" "grafana_admin" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops-grafana-admin-password"
   description             = "Grafana admin password"
   recovery_window_in_days = 0

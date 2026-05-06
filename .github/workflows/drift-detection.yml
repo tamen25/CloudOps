@@ -1,7 +1,13 @@
+# Drift detection — runs `terraform plan` against each layered stack of
+# each active environment, separately. Backlog #59 — replaces the previous
+# single-env / legacy-root pass.
+#
 # Required GitHub Actions secrets:
-#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN
 #   AWS_REGION                   — AWS region (e.g. us-east-1)
-#   TF_VARS                      — Full contents of your terraform.tfvars file
+#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#                                — Full contents of each environment's terraform.tfvars
+#   TF_VARS                      — Optional fallback when scoped per GitHub environment
 #
 # GitHub label required:
 #   drift  — created automatically on first run if absent
@@ -12,6 +18,16 @@ on:
   schedule:
     - cron: '0 2 * * *'   # 02:00 UTC daily
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (dispatch only — schedule fans out across all envs)'
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
 
 permissions:
   id-token: write
@@ -20,249 +36,196 @@ permissions:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  TF_VERSION: 1.7.0
+  TF_VERSION: 1.11.0
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  detect-drift:
+  # Build the env list at runtime: schedule fan-outs across all envs;
+  # workflow_dispatch narrows to the operator-selected env.
+  plan-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.build.outputs.envs }}
     steps:
+      - id: build
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'envs=["${{ inputs.environment }}"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'envs=["dev","staging","prod"]' >> "$GITHUB_OUTPUT"
+          fi
 
-      # ── 1. Checkout ─────────────────────────────────────────────────────────
-      - uses: actions/checkout@v4
+  detect-drift:
+    needs: plan-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.plan-matrix.outputs.envs) }}
+        stack: [foundation, cluster, platform]
+    environment: ${{ matrix.environment == 'prod' && 'production' || matrix.environment }}
+    steps:
+      - uses: actions/checkout@v5
 
-      # ── 2. AWS credentials via OIDC ─────────────────────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-          role-session-name: github-actions-drift-detection
+          role-session-name: drift-${{ matrix.environment }}-${{ matrix.stack }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ── 3. Terraform setup ──────────────────────────────────────────────────
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false   # disable wrapper so PIPESTATUS[0] captures terraform's exit code
+          terraform_wrapper: false
 
-      # ── 4. Write tfvars and init ─────────────────────────────────────────────
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          # write-ci-tfvars.sh reads TARGET_ENVIRONMENT — set from the matrix
+          # value so the scheduled fan-out works without inputs.
+          TARGET_ENVIRONMENT: ${{ matrix.environment }}
+          TF_VARS: ${{ secrets.TF_VARS }}
+          TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+          TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+          TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+        run: bash scripts/write-ci-tfvars.sh
 
-      - name: terraform init
-        run: terraform init
+      - name: terraform init (${{ matrix.stack }})
+        run: STACK=${{ matrix.stack }} ./scripts/tf-init.sh
 
-      # ── 5. Run plan and capture exit code ───────────────────────────────────
-      # -detailed-exitcode: 0 = no changes, 1 = error, 2 = changes (drift)
-      # Not using set -o pipefail here — tee's exit code (0) must be the step
-      # exit code so the step succeeds; terraform's real exit code is captured
-      # via PIPESTATUS[0] and written to step outputs for downstream steps.
-      - name: Run terraform plan
+      - name: Run terraform plan (${{ matrix.environment }} / ${{ matrix.stack }})
         id: plan
         run: |
-          terraform plan -detailed-exitcode -no-color 2>&1 | tee drift-output.txt
+          terraform -chdir=stacks/${{ matrix.stack }} plan -detailed-exitcode -no-color 2>&1 | tee drift-output.txt
           PLAN_EXIT=${PIPESTATUS[0]}
           echo "exit_code=$PLAN_EXIT" >> "$GITHUB_OUTPUT"
           echo "Plan exit code: $PLAN_EXIT  (0=no-drift, 1=error, 2=drift)"
 
-      # ── 6. Manage GitHub issue ───────────────────────────────────────────────
-      # Skip if plan returned exit code 1 (terraform error) — nothing to report yet.
-      # Exit 0 → close open drift issue if one exists.
-      # Exit 2 → open new issue or comment on the existing one.
-      - name: Manage drift issue
+      - name: Manage drift issue (per env+stack)
         if: steps.plan.outputs.exit_code != '1'
         uses: actions/github-script@v7
+        env:
+          ENV_NAME: ${{ matrix.environment }}
+          STACK_NAME: ${{ matrix.stack }}
         with:
           script: |
+            const fs = require('fs');
             const exitCode = parseInt('${{ steps.plan.outputs.exit_code }}');
-            const fs     = require('fs');
-            const today  = new Date().toISOString().split('T')[0];
+            const env = process.env.ENV_NAME;
+            const stack = process.env.STACK_NAME;
+            const today = new Date().toISOString().split('T')[0];
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
 
-            // Ensure the 'drift' label exists (idempotent — error if already present is swallowed)
-            try {
-              await github.rest.issues.createLabel({
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
-                name:  'drift',
-                color: 'e11d48',
-                description: 'Infrastructure drift detected by automated scan',
-              });
-            } catch (_) { /* label already exists */ }
+            const labels = ['drift', `drift-${env}`, `drift-${stack}`];
+            for (const name of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  name, color: 'e11d48',
+                  description: `Infrastructure drift (${name})`,
+                });
+              } catch (_) { /* exists */ }
+            }
 
-            // Find the most recent open drift issue (if any)
+            // Find an open drift issue for this env+stack only — labels are
+            // ANDed, so {drift, drift-<env>, drift-<stack>} narrows to one.
             const { data: openIssues } = await github.rest.issues.listForRepo({
-              owner:  context.repo.owner,
-              repo:   context.repo.repo,
-              labels: 'drift',
-              state:  'open',
-              per_page: 1,
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: labels.join(','),
+              state: 'open', per_page: 1,
             });
             const existing = openIssues[0] || null;
 
             if (exitCode === 2) {
-              // ── Drift detected ─────────────────────────────────────────────
               let planOutput = fs.readFileSync('drift-output.txt', 'utf8');
-              const maxLen   = 65000;
+              const maxLen = 60000;
               const truncated = planOutput.length > maxLen;
-              if (truncated) {
-                planOutput = planOutput.substring(0, maxLen);
-              }
+              if (truncated) planOutput = planOutput.substring(0, maxLen);
 
               const planBlock = [
-                '<details>',
-                '<summary>Full plan output</summary>',
-                '',
-                '```hcl',
-                planOutput,
-                truncated ? '\n... (truncated — see full run log for complete output)' : '',
-                '```',
-                '</details>',
+                '<details>', '<summary>Full plan output</summary>', '',
+                '```hcl', planOutput,
+                truncated ? '\n... (truncated — see full run log)' : '',
+                '```', '</details>',
               ].join('\n');
 
               if (existing) {
-                // Comment on the existing open issue
-                const commentBody = [
-                  `## Drift still present — ${today}`,
-                  '',
-                  `\`terraform plan\` detected infrastructure drift in the nightly scan.`,
-                  '',
-                  `**Run:** [${context.runNumber}](${runUrl})`,
-                  '',
-                  planBlock,
-                ].join('\n');
-
                 await github.rest.issues.createComment({
-                  owner:        context.repo.owner,
-                  repo:         context.repo.repo,
-                  issue_number: existing.number,
-                  body:         commentBody,
-                });
-                core.info(`Commented on existing drift issue #${existing.number}`);
-
-              } else {
-                // Create a new issue
-                const issueBody = [
-                  `\`terraform plan\` detected that live AWS infrastructure has diverged from the Terraform state.`,
-                  '',
-                  '## Details',
-                  '',
-                  `| | |`,
-                  `|---|---|`,
-                  `| **Date** | ${today} |`,
-                  `| **Triggered by** | Nightly drift-detection schedule |`,
-                  `| **Run** | [${context.runNumber}](${runUrl}) |`,
-                  '',
-                  '## Remediation',
-                  '',
-                  '1. Review the plan output below to identify unexpected changes.',
-                  '2. If the drift is intentional, run `terraform apply` to reconcile state.',
-                  '3. If the drift is unintentional (manual change outside Terraform), revert the change or import it.',
-                  '',
-                  planBlock,
-                ].join('\n');
-
-                const { data: newIssue } = await github.rest.issues.create({
-                  owner:  context.repo.owner,
-                  repo:   context.repo.repo,
-                  title:  `Infrastructure drift detected ${today}`,
-                  body:   issueBody,
-                  labels: ['drift'],
-                });
-                core.info(`Created drift issue #${newIssue.number}: ${newIssue.html_url}`);
-              }
-
-            } else if (exitCode === 0) {
-              // ── No drift ───────────────────────────────────────────────────
-              if (existing) {
-                await github.rest.issues.createComment({
-                  owner:        context.repo.owner,
-                  repo:         context.repo.repo,
+                  owner: context.repo.owner, repo: context.repo.repo,
                   issue_number: existing.number,
                   body: [
-                    `## Drift resolved — ${today}`,
-                    '',
-                    `\`terraform plan\` returned **no changes** in the nightly scan. Infrastructure is back in sync with state.`,
-                    '',
-                    `**Run:** [${context.runNumber}](${runUrl})`,
+                    `## Drift still present — ${today} — ${env}/${stack}`, '',
+                    `**Run:** [${context.runNumber}](${runUrl})`, '',
+                    planBlock,
                   ].join('\n'),
                 });
-                await github.rest.issues.update({
-                  owner:        context.repo.owner,
-                  repo:         context.repo.repo,
-                  issue_number: existing.number,
-                  state:        'closed',
-                  state_reason: 'completed',
-                });
-                core.info(`Closed drift issue #${existing.number} — drift resolved`);
               } else {
-                core.info('No drift detected and no open drift issue — nothing to do');
+                await github.rest.issues.create({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  title: `Infrastructure drift detected ${today} — ${env}/${stack}`,
+                  body: [
+                    `\`terraform plan\` detected drift in **${env}** stack **${stack}**.`, '',
+                    `| | |`, `|---|---|`,
+                    `| **Date** | ${today} |`,
+                    `| **Run** | [${context.runNumber}](${runUrl}) |`, '',
+                    '## Remediation',
+                    '1. Review the plan output below.',
+                    '2. If intentional, run `terraform apply` for that env+stack to reconcile.',
+                    '3. If unintentional, revert the manual change or import it.', '',
+                    planBlock,
+                  ].join('\n'),
+                  labels,
+                });
               }
+            } else if (exitCode === 0 && existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  `## Drift resolved — ${today} — ${env}/${stack}`, '',
+                  `\`terraform plan\` returned **no changes** in this scan.`, '',
+                  `**Run:** [${context.runNumber}](${runUrl})`,
+                ].join('\n'),
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed', state_reason: 'completed',
+              });
             }
 
-      # ── 7. Write step summary ────────────────────────────────────────────────
       - name: Write step summary
         if: always()
         run: |
           EXIT_CODE="${{ steps.plan.outputs.exit_code }}"
-
           case "$EXIT_CODE" in
-            0)
-              ICON="✅"
-              STATUS="No drift — infrastructure matches state"
-              ;;
-            2)
-              ICON="⚠️"
-              STATUS="Drift detected — live infrastructure differs from Terraform state"
-              ;;
-            1)
-              ICON="❌"
-              STATUS="Error — terraform plan failed (exit code 1)"
-              ;;
-            *)
-              ICON="❓"
-              STATUS="Unknown exit code: $EXIT_CODE"
-              ;;
+            0) ICON="✅"; STATUS="No drift" ;;
+            2) ICON="⚠️"; STATUS="Drift detected" ;;
+            1) ICON="❌"; STATUS="Plan error" ;;
+            *) ICON="❓"; STATUS="Unknown ($EXIT_CODE)" ;;
           esac
 
-          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          ## ${ICON} Drift Detection — ${STATUS}
+          {
+            echo "## ${ICON} Drift — ${{ matrix.environment }} / ${{ matrix.stack }} — ${STATUS}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Date | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+            echo "| Trigger | \`${{ github.event_name }}\` |"
+            echo "| Exit | \`${EXIT_CODE}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          | | |
-          |---|---|
-          | **Date** | $(date -u '+%Y-%m-%d %H:%M UTC') |
-          | **Triggered by** | \`${{ github.event_name }}\` |
-          | **Actor** | @${{ github.actor }} |
-          | **Terraform exit code** | \`${EXIT_CODE}\` |
-
-          EOF
-
-          if [ "$EXIT_CODE" = "2" ]; then
-            echo "### Plan output" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            head -c 10000 drift-output.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "> See the GitHub issue created/updated above for the full plan output." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EXIT_CODE" = "2" ] || [ "$EXIT_CODE" = "1" ]; then
+            {
+              echo
+              echo '```'
+              head -c 8000 drift-output.txt
+              echo
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          if [ "$EXIT_CODE" = "1" ]; then
-            echo "### Error output" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            head -c 10000 drift-output.txt >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # ── 8. Fail the job on plan error ────────────────────────────────────────
-      # Exit code 2 (drift) intentionally does NOT fail the job — drift is
-      # reported as a GitHub issue. Exit code 1 (terraform error) fails the job
-      # so the run appears red and triggers normal failure notifications.
       - name: Fail on plan error
         if: steps.plan.outputs.exit_code == '1'
-        run: |
-          echo "::error::terraform plan returned exit code 1 — check output above for errors"
-          exit 1
+        run: exit 1

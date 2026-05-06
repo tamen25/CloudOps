@@ -33,10 +33,20 @@ output "order_api_irsa_role_arn" {
   value       = var.enable_eks ? module.eks[0].order_api_irsa_role_arn : null
 }
 
+output "order_api_api_key_secret_arn" {
+  description = "Secrets Manager ARN that the order-api Pod reads via API_KEY_SECRET_ARN. Source of truth for the app deploy assertion (closes backlog #37). Empty = unauthenticated dev mode (NODE_ENV must be dev/test/local)."
+  value       = var.order_api_api_key_secret_arn
+}
+
 # Ingress
 output "acm_certificate_arn" {
   description = "ACM wildcard certificate ARN"
   value       = var.enable_ingress ? module.ingress[0].certificate_arn : null
+}
+
+output "route53_name_servers" {
+  description = "Route 53 name servers for the project domain — point your registrar's NS records at these after the first dns apply"
+  value       = !var.destroy_all ? module.dns[0].name_servers : null
 }
 
 # Database
@@ -58,7 +68,7 @@ output "database_connection_info" {
 # Application
 output "order_api_url" {
   description = "Order API public URL"
-  value       = "https://api.tamendutta.com"
+  value       = "https://api.${var.domain_name}"
 }
 
 # Observability (only populated when enable_observability = true)
@@ -78,13 +88,39 @@ output "otel_endpoint" {
   value       = var.enable_observability ? module.observability[0].otel_endpoint : null
 }
 
+output "otel_url" {
+  description = "Public URL for the OTel Collector (otel.<domain>) — populated once otel_alb_dns_name is set. Closes backlog #17."
+  value       = var.enable_observability && var.otel_alb_dns_name != "" ? "https://otel.${var.domain_name}" : null
+}
+
 output "otel_api_key" {
   description = "OTel Collector bearer token (sensitive)"
   value       = var.enable_observability ? module.observability[0].otel_api_key : null
   sensitive   = true
 }
 
+output "otel_ssm_parameter_names" {
+  description = "SSM Parameter Store names for OTel SDK/client configuration"
+  value       = var.enable_observability ? module.observability[0].otel_ssm_parameter_names : {}
+}
+
+output "otel_ssm_parameter_arns" {
+  description = "SSM Parameter Store ARNs for OTel SDK/client configuration"
+  value       = var.enable_observability ? module.observability[0].otel_ssm_parameter_arns : {}
+}
+
 output "grafana_api_key_secret_arn" {
   description = "Secrets Manager ARN for the Grafana Viewer service account token (used by the SLO Lambda)"
   value       = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : null
+}
+
+# Self-Healing
+output "self_healing_sns_topic_arn" {
+  description = "Self-healing triggers SNS topic ARN"
+  value       = var.enable_self_healing ? module.self_healing[0].sns_topic_arn : null
+}
+
+output "self_healing_dashboard_url" {
+  description = "CloudWatch Logs Insights URL for self-healing controller logs"
+  value       = var.enable_self_healing ? module.self_healing[0].healing_dashboard_url : null
 }

@@ -106,7 +106,7 @@ The Deployment controller will reschedule a clean pod. Verify the replacement co
    ```
 
 4. **Check auto-remediation** — the compliance Lambda may have already created a GitHub issue:
-   Open the [CloudOps repo issues](https://github.com/tamen25/CloudOps/issues) and filter by label `security`.
+   Open the [CloudOps repo issues](https://github.com/your-org/your-repo/issues) and filter by label `security`.
 
 ---
 
@@ -131,6 +131,6 @@ The Deployment controller will reschedule a clean pod. Verify the replacement co
 
 ## References
 
-- [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture)
+- [Security Posture dashboard](https://grafana.example.com/d/security-posture)
 - [Falco rules reference](https://falco.org/docs/rules/)
 - [EKS security best practices](https://aws.github.io/aws-eks-best-practices/security/docs/)

@@ -30,11 +30,6 @@ variable "kubernetes_version" {
 
 # Networking
 
-variable "vpc_id" {
-  description = "VPC ID where the cluster will be created"
-  type        = string
-}
-
 variable "private_subnet_ids" {
   description = "Private subnet IDs for EKS nodes (from networking module)"
   type        = list(string)
@@ -76,6 +71,17 @@ variable "node_desired_size" {
   default     = 2
 }
 
+variable "node_capacity_type" {
+  description = "EKS managed node group capacity type — ON_DEMAND or SPOT. SPOT can cut node cost 40-70% for stateless dev workloads but nodes can be interrupted with a 2-minute warning."
+  type        = string
+  default     = "ON_DEMAND"
+
+  validation {
+    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
+    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
+  }
+}
+
 # IRSA — order-api
 
 variable "order_api_namespace" {
@@ -88,6 +94,39 @@ variable "order_api_service_account" {
   description = "Kubernetes service account name for order-api IRSA"
   type        = string
   default     = "order-api"
+}
+
+variable "order_api_secret_arns" {
+  description = "Secrets Manager ARNs (or ARN wildcards) the order-api IRSA may read. Empty list falls back to the legacy `Resource = \"*\"` policy — only use during initial bootstrap."
+  type        = list(string)
+  default     = []
+}
+
+# ── Control-plane endpoint exposure (closes backlog #42) ─────────────────────
+
+variable "endpoint_private_access" {
+  description = "Enable EKS control plane access from inside the VPC."
+  type        = bool
+  default     = true
+}
+
+variable "endpoint_public_access" {
+  description = "Enable EKS control plane access from the internet. Production should set this `false` and reach the cluster via private runners / VPN / bastion. Keep `true` only when GitHub-hosted runners with dynamic IPs need direct access."
+  type        = bool
+  default     = true
+}
+
+variable "endpoint_public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the public EKS endpoint. Defaults to `0.0.0.0/0` for the dev flow with GitHub-hosted runners. Production: tighten to admin/VPN egress IPs and document the emergency-access path."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition = alltrue([
+      for cidr in var.endpoint_public_access_cidrs : can(cidrhost(cidr, 0))
+    ])
+    error_message = "All endpoint_public_access_cidrs entries must be valid IPv4 CIDR blocks."
+  }
 }
 
 # Tagging

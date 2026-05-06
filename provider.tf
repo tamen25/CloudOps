@@ -24,9 +24,15 @@ terraform {
     }
   }
 
+  # Partial S3 backend. Bucket AND key are intentionally NOT set here so the
+  # same code works for any fork and any environment. Pass both at init time:
+  #   terraform init \
+  #     -backend-config="bucket=<your bucket>" \
+  #     -backend-config="key=<env>/terraform.tfstate"
+  # scripts/tf-init.sh does this automatically: bucket from
+  # bootstrap_bucket_name, key derived from `environment` in terraform.tfvars
+  # (e.g. environment=dev → dev/terraform.tfstate). Override with STATE_KEY=...
   backend "s3" {
-    bucket       = "cloudops-tfstate-bucket-tamen"
-    key          = "main/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
@@ -48,25 +54,25 @@ provider "aws" {
 # Helm and Kubernetes providers require the EKS cluster to exist.
 # Deploy order: enable_eks=true first, then enable_ingress=true on a second apply.
 data "aws_eks_cluster" "this" {
-  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  count = var.enable_eks && (var.enable_ingress || var.enable_observability) ? 1 : 0
   name  = local.eks_cluster_name
 }
 
 data "aws_eks_cluster_auth" "this" {
-  count = var.enable_ingress || var.enable_observability ? 1 : 0
+  count = var.enable_eks && (var.enable_ingress || var.enable_observability) ? 1 : 0
   name  = local.eks_cluster_name
 }
 
 provider "helm" {
   kubernetes {
-    host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
-    cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
-    token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
+    host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+    cluster_ca_certificate = var.enable_eks && (var.enable_ingress || var.enable_observability) ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+    token                  = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster_auth.this[0].token : ""
   }
 }
 
 provider "kubernetes" {
-  host                   = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
-  cluster_ca_certificate = var.enable_ingress || var.enable_observability ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
-  token                  = var.enable_ingress || var.enable_observability ? data.aws_eks_cluster_auth.this[0].token : ""
+  host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
+  cluster_ca_certificate = var.enable_eks && (var.enable_ingress || var.enable_observability) ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""
+  token                  = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster_auth.this[0].token : ""
 }

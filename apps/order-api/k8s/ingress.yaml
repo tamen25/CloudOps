@@ -2,17 +2,22 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: order-api
-  namespace: cloudops
+  namespace: "${ORDER_API_NAMESPACE}"
   annotations:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    # Populate with: terraform output -raw certificate_arn  (from module.ingress)
-    alb.ingress.kubernetes.io/certificate-arn: "<REPLACE_WITH_module.ingress.certificate_arn>"
+    alb.ingress.kubernetes.io/certificate-arn: "${ACM_CERT_ARN}"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    # Closes backlog #17 — order-api joins the shared `cloudops` ALB group so
+    # it lands on the same ALB as Grafana. WAF + DNS expect a single public
+    # ALB tagged ingress.k8s.aws/stack=cloudops.
+    alb.ingress.kubernetes.io/group.name: cloudops
+    alb.ingress.kubernetes.io/group.order: "30"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
 spec:
   rules:
-    - host: api.tamendutta.com
+    - host: "${ORDER_API_HOST}"
       http:
         paths:
           - path: /

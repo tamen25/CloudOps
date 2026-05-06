@@ -51,8 +51,13 @@ resource "aws_iam_role" "order_api" {
   })
 }
 
-# Grants order-api access to Secrets Manager (DB credentials) and CloudWatch metrics
+# Grants order-api access to Secrets Manager (DB credentials) and CloudWatch metrics.
+# Resource list MUST be supplied via var.order_api_secret_arns in non-dev envs
+# (closes backlog #37). Empty list in dev keeps the "*" bootstrap convenience;
+# in staging/prod the precondition below fails plan with a clear message.
 resource "aws_iam_role_policy" "order_api" {
+  #checkov:skip=CKV_AWS_288:Order API IRSA role requires SecretsManager access for DB credentials
+  #checkov:skip=CKV_AWS_355:Order API IRSA role requires Secrets Manager access by resource pattern
   name = "order-api-permissions"
   role = aws_iam_role.order_api.id
 
@@ -63,7 +68,7 @@ resource "aws_iam_role_policy" "order_api" {
         Sid      = "SecretsManagerAccess"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-        Resource = "*"
+        Resource = length(var.order_api_secret_arns) > 0 ? var.order_api_secret_arns : ["*"]
       },
       {
         Sid      = "CloudWatchMetrics"
@@ -73,4 +78,11 @@ resource "aws_iam_role_policy" "order_api" {
       },
     ]
   })
+
+  lifecycle {
+    precondition {
+      condition     = var.environment == "dev" || length(var.order_api_secret_arns) > 0
+      error_message = "order_api_secret_arns must be a non-empty list in environment=${var.environment}. The dev fallback to Resource=\"*\" is not allowed in staging/prod (backlog #37)."
+    }
+  }
 }

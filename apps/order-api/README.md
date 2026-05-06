@@ -1,262 +1,122 @@
 # Order API
 
-Production-ready Node.js REST API for order processing with CloudWatch metrics integration.
+Node.js REST API used as the sample workload for the CloudOps platform. Runs
+on EKS, exports Prometheus metrics on an internal port, and emits OpenTelemetry
+traces/metrics/logs to an OTel Collector. Persists orders to RDS PostgreSQL.
 
-## Features
+## Endpoints
 
-- **Health Check Endpoint** (`GET /health`) - Used by ALB target group health checks
-- **Order Creation** (`POST /order`) - Creates orders and publishes CloudWatch metrics
-- **Order Statistics** (`GET /orders`) - Returns order processing statistics
-- **CloudWatch Integration** - Custom metrics published to `CloudOps/OrderAPI` namespace
-- **Container Health Checks** - Built-in Docker health check
-- **Graceful Shutdown** - Handles SIGTERM/SIGINT signals
+Public (behind the ALB Ingress at `https://api.<domain_name>`):
 
-## API Endpoints
+| Method | Path      | Purpose                                          |
+|--------|-----------|--------------------------------------------------|
+| GET    | `/`       | Service banner                                   |
+| GET    | `/health` | Liveness probe — process is alive (no DB touch)  |
+| GET    | `/ready`  | Readiness probe — DB reachable                   |
+| POST   | `/order`  | Create an order, persist to Postgres             |
+| GET    | `/orders` | Return last 100 orders as `{orders, count}`      |
 
-### GET /health
-Health check endpoint for load balancer.
+Internal only (separate port, not routed through the Ingress):
 
-**Response:**
-```json
-{
-  "status": "ok",
-  "region": "us-east-1",
-  "environment": "dev",
-  "timestamp": "2025-12-31T15:30:00.000Z",
-  "uptime": 3600.5,
-  "orderCount": 42
-}
-```
+| Method | Path       | Port | Purpose                               |
+|--------|------------|------|---------------------------------------|
+| GET    | `/metrics` | 9090 | Prometheus scrape endpoint            |
 
-### POST /order
-Create a new order.
+`/metrics` is deliberately bound on a second HTTP server so the Ingress cannot
+expose it. A Kubernetes `ServiceMonitor` points Prometheus at the `metrics`
+Service port.
 
-**Request:**
-```json
-{
-  "items": [
-    { "id": "item-1", "quantity": 2 }
-  ],
-  "total": 199.99
-}
-```
+## Environment variables
 
-**Response:**
-```json
-{
-  "success": true,
-  "order": {
-    "orderId": "ORD-1735659000000-abc123xyz",
-    "timestamp": "2025-12-31T15:30:00.000Z",
-    "environment": "dev",
-    "region": "us-east-1",
-    "items": [...],
-    "total": 199.99
-  },
-  "message": "Order created successfully"
-}
-```
+| Variable                        | Default           | Purpose                                        |
+|---------------------------------|-------------------|------------------------------------------------|
+| `PORT`                          | `3000`            | Main HTTP port                                 |
+| `METRICS_PORT`                  | `9090`            | Internal Prometheus port                       |
+| `NODE_ENV`                      | `dev`             | Used for metric labels and resource attributes |
+| `AWS_REGION`                    | `us-east-1`       | AWS region                                     |
+| `DB_NAME`                       | `cloudops`        | Postgres database name                         |
+| `DB_SECRET_ARN`                 | *required*        | Secrets Manager ARN for DB credentials         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`   | *recommended*     | OTel Collector HTTPS endpoint                  |
+| `OTEL_API_KEY`                  | *required if OTel*| Bearer token for OTel Collector                |
+| `OTEL_SERVICE_NAME`             | `order-api`       | Service name attribute                         |
+| `OTEL_RESOURCE_ATTRIBUTES`      | *see manifests*   | Extra resource attrs (`deployment.environment=…`) |
 
-### GET /orders
-Get order processing statistics.
+## Local development
 
-**Response:**
-```json
-{
-  "totalOrders": 42,
-  "environment": "dev",
-  "region": "us-east-1",
-  "timestamp": "2025-12-31T15:30:00.000Z"
-}
-```
-
-## Local Development
-
-### Prerequisites
-- Node.js 20+
-- Docker (for containerized testing)
-
-### Install Dependencies
 ```bash
 cd apps/order-api
 npm install
+npm test          # unit tests via node --test (no AWS needed)
+npm start         # starts the server; requires DB_SECRET_ARN + AWS creds
 ```
 
-### Run Locally
-```bash
-npm start
-```
+Unit tests use `node:test` and inject a mock pool — they don't require a real
+database or network.
 
-The API will be available at `http://localhost:3000`
+## Kubernetes manifests
 
-### Test Health Endpoint
-```bash
-curl http://localhost:3000/health
-```
-
-### Create Test Order
-```bash
-curl -X POST http://localhost:3000/order \
-  -H "Content-Type: application/json" \
-  -d '{"items":[{"id":"test","quantity":1}],"total":99.99}'
-```
-
-## Docker Build and Run
-
-### Build Image
-```bash
-cd apps/order-api
-docker build -t order-api:latest .
-```
-
-### Run Container Locally
-```bash
-docker run -p 3000:3000 \
-  -e NODE_ENV=dev \
-  -e AWS_REGION=us-east-1 \
-  -e PORT=3000 \
-  order-api:latest
-```
-
-### Test Container
-```bash
-curl http://localhost:3000/health
-```
-
-## Deploy to ECS
-
-### 1. Get ECR Repository URL
-```bash
-terraform output -raw ecr_repo_url
-# Example output: 123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app
-```
-
-### 2. Login to ECR
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
-```
-
-### 3. Build and Tag Image
-```bash
-cd apps/order-api
-docker build -t order-api:v1.0.0 .
-docker tag order-api:v1.0.0 123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.0.0
-```
-
-### 4. Push to ECR
-```bash
-docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.0.0
-```
-
-### 5. Update Terraform Configuration
-Edit `terraform.tfvars`:
-```hcl
-container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.0.0"
-container_port  = 3000
-```
-
-### 6. Deploy with Terraform
-```bash
-terraform apply
-```
-
-The ECS service will perform a rolling deployment with the new image.
-
-## Updating the Image (Rolling Deployment)
-
-To deploy a new version:
-
-1. **Build new version:**
-   ```bash
-   docker build -t order-api:v1.1.0 .
-   docker tag order-api:v1.1.0 123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.1.0
-   docker push 123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.1.0
-   ```
-
-2. **Update terraform.tfvars:**
-   ```hcl
-   container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/cloudops-dev-app:v1.1.0"
-   ```
-
-3. **Apply changes:**
-   ```bash
-   terraform apply
-   ```
-
-ECS will automatically:
-- Start new tasks with v1.1.0
-- Wait for health checks to pass
-- Drain connections from old tasks
-- Stop old tasks
-- Zero-downtime deployment!
-
-## Load Testing
-
-Use the load generation script to test autoscaling:
+All manifests in `k8s/` use `${VAR}` placeholders so values come from Terraform
+outputs instead of hardcodes. Render them with:
 
 ```bash
-# Get ALB DNS name
-ALB_DNS=$(terraform output -raw alb_dns_name)
+# Export the variables (see scripts/render-k8s.js for the full list)
+export ORDER_API_NAMESPACE=cloudops
+export ORDER_API_IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/order-api:latest
+# … etc
 
-# Run load test (default: 10 workers, 20 QPS, 60 seconds)
-node scripts/generate-load.js http://$ALB_DNS
-
-# Custom load test
-node scripts/generate-load.js http://$ALB_DNS --concurrency 20 --qps 100 --duration 300
-
-# Test only health endpoint
-node scripts/generate-load.js http://$ALB_DNS --endpoint health
-
-# Test only order endpoint
-node scripts/generate-load.js http://$ALB_DNS --endpoint order
+node scripts/render-k8s.js k8s /tmp/order-api-k8s
+kubectl apply -f /tmp/order-api-k8s/
 ```
 
-Monitor autoscaling:
-- ECS Service in AWS Console will show task count increasing
-- CloudWatch Metrics: `CloudOps/OrderAPI` namespace
-- Application logs: CloudWatch Logs `/ecs/cloudops-dev`
+The app workflow (`.github/workflows/app.yml`) does this automatically using
+`terraform output` for the concrete values.
 
-## Environment Variables
+## Observability
 
-Set in ECS task definition (see `modules/compute/main.tf` lines 172-186):
+- **Metrics**: exported on `:9090/metrics` in Prometheus text format. Counters:
+  `http_requests_total`, `http_request_duration_seconds` (histogram), both
+  labeled by method/route/status.
+- **Traces**: OTel auto-instrumentation in `src/tracing.js` wraps `http`, `pg`,
+  and `express` and ships spans to `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Logs**: structured JSON via `pino` at `info` level by default.
 
-- `PORT` - HTTP server port (default: 3000)
-- `NODE_ENV` - Environment name (dev/staging/prod)
-- `AWS_REGION` - AWS region for CloudWatch metrics
+CloudWatch custom metrics are NOT used — all telemetry goes through the LGTM
+stack (Loki/Grafana/Tempo/Prometheus) installed by the observability module.
 
-## CloudWatch Metrics
+## Deployment
 
-Published to `CloudOps/OrderAPI` namespace:
+The sample app is wired into two deployment paths:
 
-**Metric:** `OrdersCreated`
-- **Unit:** Count
-- **Value:** 1 (per order)
-- **Dimensions:**
-  - Environment: dev/staging/prod
-  - Region: us-east-1
+1. **`.github/workflows/app.yml`** — full CI: tests, Trivy scan, Cosign keyless
+   signing, SBOM attestation, rollout with automatic rollback on failure.
+2. **`scripts/deploy.sh`** — one-click path: if `node`, `docker`, and `kubectl`
+   are available locally, `scripts/deploy.sh` will build, push, render, and
+   apply the app after the platform is up.
 
-View in CloudWatch Console → Metrics → CloudOps/OrderAPI
-
-## IAM Permissions Required
-
-The ECS task role needs:
-- `cloudwatch:PutMetricData` - To publish custom metrics
-
-Configured in `modules/compute/main.tf` lines 133-146.
+Neither path depends on the other — the app manifests are fully reproducible
+from Terraform state in either case.
 
 ## Troubleshooting
 
-### Container won't start
-1. Check CloudWatch Logs: `/ecs/cloudops-dev`
-2. Verify ECR image exists: `aws ecr describe-images --repository-name cloudops-dev-app`
-3. Check ECS task execution role has ECR pull permissions
+### Pod CrashLoopBackOff at startup
+Usually `DB_SECRET_ARN` unreachable or the IRSA role lacks
+`secretsmanager:GetSecretValue`. Check:
+```bash
+kubectl logs -n <ns> -l app=order-api
+kubectl describe pod -n <ns> -l app=order-api
+```
 
-### Health checks failing
-1. Ensure container port (3000) matches `container_port` in terraform.tfvars
-2. Verify security group allows ALB → ECS traffic
-3. Check container logs for startup errors
+### Readiness failing, liveness passing
+The process is alive but the DB query in `/ready` is failing. Kubernetes will
+remove the pod from the Service endpoints but won't restart it. Check RDS
+connectivity (security group, secret contents).
 
-### No CloudWatch metrics
-1. Verify ECS task role has `cloudwatch:PutMetricData` permission
-2. Check application logs for metric publishing errors
-3. Metrics may take 1-2 minutes to appear in console
+### No traces in Tempo
+- Confirm `OTEL_EXPORTER_OTLP_ENDPOINT` is set and reachable from the pod.
+- Confirm `OTEL_API_KEY` matches the `otel-auth` secret in the app namespace.
+- Check `kubectl logs -n monitoring -l app.kubernetes.io/name=opentelemetry-collector`.
+
+### Metrics missing from Grafana
+- The `ServiceMonitor` must have `release: prometheus` as a label — this is
+  what the Prometheus operator's `serviceMonitorSelector` matches by default.
+- `/metrics` is on the `metrics` Service port (9090), NOT `http` (3000).

@@ -166,7 +166,7 @@ resource "kubernetes_manifest" "c_required_resources" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops", "monitoring"]
+        namespaces = [var.application_namespace, "monitoring"]
       }
     }
   }
@@ -302,7 +302,7 @@ resource "kubernetes_manifest" "c_required_probes" {
       enforcementAction = "warn"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
     }
   }
@@ -379,7 +379,7 @@ resource "kubernetes_manifest" "c_no_latest_tag" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
     }
   }
@@ -462,7 +462,7 @@ resource "kubernetes_manifest" "c_allowed_repos" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
       parameters = {
         repos = [
@@ -501,6 +501,7 @@ resource "kubernetes_manifest" "c_allowed_repos" {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_require_image_signature" {
+  count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {
     apiVersion = "templates.gatekeeper.sh/v1"
     kind       = "ConstraintTemplate"
@@ -590,6 +591,7 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
 }
 
 resource "kubernetes_manifest" "c_require_image_signature" {
+  count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
     kind       = "K8sRequireImageSignature"
@@ -598,12 +600,12 @@ resource "kubernetes_manifest" "c_require_image_signature" {
       enforcementAction = "deny"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
-        namespaces = ["cloudops"]
+        namespaces = [var.application_namespace]
       }
       parameters = {
         # Matches the identity used by the build-and-push job in app.yml.
         # Scoped to this repository's workflow file so forks cannot sign with the same identity.
-        certificateIdentityRegexp = "https://github\\.com/tamen25/CloudOps/\\.github/workflows/app\\.yml@refs/heads/.*"
+        certificateIdentityRegexp = "https://github\\.com/${var.github_repo}/\\.github/workflows/app\\.yml@refs/heads/.*"
         certificateOidcIssuer     = "https://token.actions.githubusercontent.com"
       }
     }

@@ -1,4 +1,9 @@
-# IRSA role for Loki — scoped to service account loki/loki
+# IRSA roles for the observability data planes.
+# When buckets_kms_cmk is on, each role gets kms:Encrypt/Decrypt scoped to its
+# domain CMK so the helm chart can read/write encrypted objects.
+
+# ── Loki IRSA ────────────────────────────────────────────────────────────────
+
 resource "aws_iam_role" "loki" {
   name = "${local.name}-loki-irsa"
 
@@ -26,24 +31,32 @@ resource "aws_iam_role_policy" "loki" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-      ]
-      Resource = [
-        aws_s3_bucket.loki.arn,
-        "${aws_s3_bucket.loki.arn}/*",
-      ]
-    }]
+    Statement = concat(
+      [{
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ]
+        Resource = [
+          aws_s3_bucket.loki.arn,
+          "${aws_s3_bucket.loki.arn}/*",
+        ]
+      }],
+      var.buckets_kms_cmk ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
+        Resource = aws_kms_key.loki[0].arn
+      }] : []
+    )
   })
 }
 
-# IRSA role for Tempo — scoped to service account tempo/tempo
+# ── Tempo IRSA ───────────────────────────────────────────────────────────────
+
 resource "aws_iam_role" "tempo" {
   name = "${local.name}-tempo-irsa"
 
@@ -71,19 +84,26 @@ resource "aws_iam_role_policy" "tempo" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-      ]
-      Resource = [
-        aws_s3_bucket.tempo.arn,
-        "${aws_s3_bucket.tempo.arn}/*",
-      ]
-    }]
+    Statement = concat(
+      [{
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ]
+        Resource = [
+          aws_s3_bucket.tempo.arn,
+          "${aws_s3_bucket.tempo.arn}/*",
+        ]
+      }],
+      var.buckets_kms_cmk ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
+        Resource = aws_kms_key.tempo[0].arn
+      }] : []
+    )
   })
 }

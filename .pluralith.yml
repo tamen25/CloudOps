@@ -1,0 +1,32 @@
+title: CloudOps Infrastructure
+version: 1.0
+show_costs: true
+show_sensitivity: true
+
+modules:
+  - path: modules/bootstrap
+    label: Bootstrap
+  - path: modules/networking
+    label: Networking
+  - path: modules/eks
+    label: EKS
+  - path: modules/ingress
+    label: Ingress
+  - path: modules/observability
+    label: Observability
+  - path: modules/security
+    label: Security
+  - path: modules/database
+    label: Database
+  - path: modules/slo
+    label: SLO
+  - path: modules/finops
+    label: FinOps
+  - path: modules/self_healing
+    label: Self Healing
+
+excluded_resource_types:
+  - aws_iam_role_policy_attachment
+  - aws_iam_policy_document
+  - random_password
+  - random_id

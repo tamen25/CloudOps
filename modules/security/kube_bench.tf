@@ -258,29 +258,20 @@ resource "kubernetes_config_map" "kube_bench_script" {
 
 # ── kube_bench_processor Lambda ───────────────────────────────────────────────
 
-resource "null_resource" "kube_bench_processor_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/kube_bench_processor/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/kube_bench_processor/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function/kube_bench_processor ${path.module}/lambda_function/kube_bench_processor"
-    working_dir = path.module
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "kube_bench_processor" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/kube_bench_processor"
   output_path = "${path.module}/lambda_function/kube_bench_processor.zip"
-
-  depends_on = [null_resource.kube_bench_processor_build]
 }
 
 resource "aws_cloudwatch_log_group" "kube_bench_processor" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-kube-bench-processor"
-  retention_in_days = 30
+  retention_in_days = 365
 
   tags = var.tags
 }
@@ -347,6 +338,10 @@ resource "aws_iam_role_policy" "kube_bench_processor_permissions" {
 }
 
 resource "aws_lambda_function" "kube_bench_processor" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-kube-bench-processor"
   description   = "Processes kube-bench CIS benchmark output and stores findings in DynamoDB"
 
@@ -359,10 +354,16 @@ resource "aws_lambda_function" "kube_bench_processor" {
   timeout     = 120
   memory_size = 256
 
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
-      FINDINGS_TABLE = aws_dynamodb_table.security_findings.name
-      ENVIRONMENT    = var.environment
+      FINDINGS_TABLE                      = aws_dynamodb_table.security_findings.name
+      ENVIRONMENT                         = var.environment
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }
@@ -372,6 +373,13 @@ resource "aws_lambda_function" "kube_bench_processor" {
     aws_cloudwatch_log_group.kube_bench_processor,
     data.archive_file.kube_bench_processor,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/kube_bench_processor/node_modules/.package-lock.json")
+      error_message = "modules/security/lambda_function/kube_bench_processor/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-kube-bench-processor" })
 }

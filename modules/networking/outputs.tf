@@ -26,6 +26,21 @@ output "db_subnet_group_name" {
   value       = aws_db_subnet_group.main.name
 }
 
+output "db_subnet_cidrs" {
+  description = "Effective database subnet CIDRs (caller's input or auto-generated from vpc_cidr). Closes backlog #32 — security NetworkPolicy needs the real CIDR list to allow order-api egress to RDS on TCP 5432."
+  value       = local.db_subnet_cidrs
+}
+
+output "public_subnet_cidrs" {
+  description = "Effective public subnet CIDRs (used by NetworkPolicies that need to allow ALB ENI source IPs)."
+  value       = local.public_subnet_cidrs
+}
+
+output "private_subnet_cidrs" {
+  description = "Effective private subnet CIDRs."
+  value       = local.private_subnet_cidrs
+}
+
 output "alb_sg_id" {
   description = "ALB security group ID"
   value       = aws_security_group.alb.id

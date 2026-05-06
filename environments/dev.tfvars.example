@@ -1,0 +1,122 @@
+# dev.tfvars.example — cheap, prod-shaped dev profile.
+#
+# Closes backlog #49. Dev is the cheapest persistent path; it must still
+# exercise the same product behavior as prod (auth, security, migrations,
+# rollout, integration test, rollback, drift, observability) so prod-only
+# bugs cannot hide. See docs/environment-contract.md.
+#
+# Allowed cost-saving differences vs prod (per the contract):
+#   - smallest compute, no NAT, single replicas, short retention
+#   - destroy locks off (deletion_protection, object_lock, vault_lock, force_destroy)
+#   - audit/compliance services off (CloudTrail / GuardDuty / Config / Backup vault)
+#   - Mimir/Thanos off (Prometheus local storage with short retention)
+#
+# Required parity (must NOT be flipped off in dev):
+#   - module behavior paths (eks, ingress, observability, security, slo,
+#     self_healing, finops, external_secrets) — they exercise the deploy path
+#   - same auth/secret-scoping wiring (just dev-relaxed values where needed)
+#
+# Apply:
+#   ./scripts/tf-init.sh
+#   terraform apply -var-file=environments/dev.tfvars
+
+environment  = "dev"
+project_name = "cloudops"
+
+# ── Module toggles — prod-shaped behavior surface ────────────────────────────
+enable_networking       = true
+enable_eks              = true
+enable_database         = true
+enable_ingress          = true
+enable_observability    = true
+enable_security         = true
+enable_self_healing     = true
+enable_slo              = true
+enable_finops           = true
+enable_external_secrets = true
+
+# Cost-saving: heavy compliance/backup services stay OFF in dev. Their
+# behavior is already covered in CI scanners; AWS-side audit capture is a
+# prod-only concern.
+enable_backup     = false
+enable_compliance = false
+enable_waf        = false   # WAF + ALB log subscription = ~$8/mo; off in dev
+enable_alertmanager = false # Saves ~50m CPU / 100Mi RAM
+enable_yace         = false # CloudWatch -> Prom exporter; off in dev
+
+destroy_all          = false
+self_healing_dry_run = true
+
+# ── EKS — cheapest floor ─────────────────────────────────────────────────────
+az_count                = 2
+eks_node_instance_types = ["t3.large"]
+eks_node_min_size       = 2
+eks_node_max_size       = 4
+eks_node_desired_size   = 2
+eks_node_capacity_type  = "ON_DEMAND"
+enable_nat_gateway      = false
+
+# Public endpoint stays ON in dev — GitHub-hosted runners need to reach the
+# API server, and dev does not warrant a private runner / VPN setup yet.
+# Backlog #52 tracks the prod-side fix.
+eks_endpoint_private_access      = true
+eks_endpoint_public_access       = true
+eks_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+# ── RDS — burstable, no guardrails ───────────────────────────────────────────
+database_instance_class               = "db.t3.micro"
+database_multi_az                     = false
+database_create_read_replica          = false
+database_backup_retention_period      = 7
+database_performance_insights_enabled = false
+database_deletion_protection          = false   # destroy-safe
+database_skip_final_snapshot          = true    # destroy-safe
+database_secret_recovery_window_days  = 0       # destroy-safe
+database_rotation_enabled             = false
+
+# Dev policy: log everything for debugging. Prod policy in
+# environments/prod.tfvars.example tightens this.
+database_log_connections                  = true
+database_log_disconnections               = true
+database_log_duration                     = true
+database_log_statement                    = "all"
+database_log_min_duration_statement_ms    = -1
+
+# ── Observability — single replicas, short retention ─────────────────────────
+metrics_long_term_storage       = ""    # no Mimir / Thanos in dev
+loki_replication_factor         = 1
+loki_write_replicas             = 1
+loki_read_replicas              = 1
+prometheus_replicas             = 1
+prometheus_retention            = "24h"
+tempo_ingester_replicas         = 1
+tempo_metrics_generator_enabled = false
+
+# Bucket hardening — destroy-safe in dev
+buckets_versioning              = false
+buckets_kms_cmk                 = false
+buckets_glacier_transition_days = 0
+buckets_expiration_days         = 30
+buckets_force_destroy           = true
+
+# Flow logs — short retention if turned on
+enable_flow_logs         = false
+flow_logs_destination    = "cloudwatch"
+flow_logs_retention_days = 7
+
+# ── Self-healing ─────────────────────────────────────────────────────────────
+self_healing_min_healthy_pods       = 1
+self_healing_max_scale_out_pods     = 4
+self_healing_rollback_on_error_rate = 5
+
+# ── FinOps ──────────────────────────────────────────────────────────────────
+cost_budget_monthly_usd        = 50
+cost_anomaly_threshold_percent = 25
+cost_alert_email               = ""
+
+# ── Secrets scoping — dev fallback ───────────────────────────────────────────
+# Dev is the only env where wildcard ESO + order-api IRSA scoping is allowed
+# (per modules/security/external_secrets.tf and modules/eks/irsa.tf
+# preconditions). Staging/prod must list explicit ARNs (backlog #37).
+external_secrets_allowed_arns = []
+order_api_api_key_secret_arn  = ""

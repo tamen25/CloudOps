@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build and push Order API to ECR
-# Called by deploy.sh before terraform apply when compute module is enabled
+# Called by scripts/deploy.sh before terraform apply when compute module is enabled
 
 set -e
 

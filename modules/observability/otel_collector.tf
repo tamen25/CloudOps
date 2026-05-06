@@ -77,8 +77,8 @@ resource "helm_release" "otel_collector" {
         # Inject cluster and environment as resource attributes on all telemetry
         resource = {
           attributes = [
-            { key = "cluster",     value = var.eks_cluster_name, action = "upsert" },
-            { key = "environment", value = var.environment,      action = "upsert" },
+            { key = "cluster", value = var.eks_cluster_name, action = "upsert" },
+            { key = "environment", value = var.environment, action = "upsert" },
           ]
         }
 
@@ -146,27 +146,6 @@ resource "helm_release" "otel_collector" {
   depends_on = [kubernetes_secret.otel_auth, helm_release.prometheus, helm_release.loki, helm_release.tempo]
 }
 
-# Route 53 hosted zone lookup for otel DNS record
-data "aws_route53_zone" "main" {
-  name         = var.domain
-  private_zone = false
-}
-
-# A record for otel.tamendutta.com — created after first deploy once ALB DNS is known
-resource "aws_route53_record" "otel" {
-  count = var.alb_dns_name != "" ? 1 : 0
-
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = "otel.${var.domain}"
-  type    = "A"
-
-  alias {
-    name                   = var.alb_dns_name
-    zone_id                = var.alb_zone_id
-    evaluate_target_health = true
-  }
-}
-
 # Ingress for OTel Collector HTTP endpoint (OTLP/HTTP, port 4318)
 # TLS is terminated at the ALB; backend is plain HTTP.
 resource "kubernetes_ingress_v1" "otel_http" {
@@ -174,16 +153,16 @@ resource "kubernetes_ingress_v1" "otel_http" {
     name      = "otel-collector-http"
     namespace = "monitoring"
     annotations = {
-      "kubernetes.io/ingress.class"                         = "alb"
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"           = var.acm_cert_arn
-      "alb.ingress.kubernetes.io/listen-ports"              = jsonencode([{ HTTPS = 443 }])
-      "alb.ingress.kubernetes.io/group.name"                = "cloudops-otel"
-      "alb.ingress.kubernetes.io/group.order"               = "10"
-      "alb.ingress.kubernetes.io/backend-protocol"          = "HTTP"
-      "alb.ingress.kubernetes.io/healthcheck-path"          = "/"
-      "alb.ingress.kubernetes.io/healthcheck-protocol"      = "HTTP"
+      "kubernetes.io/ingress.class"                    = "alb"
+      "alb.ingress.kubernetes.io/scheme"               = var.otel_ingestion_internal ? "internal" : "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"          = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
+      "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
+      "alb.ingress.kubernetes.io/group.name"           = "cloudops-otel"
+      "alb.ingress.kubernetes.io/group.order"          = "10"
+      "alb.ingress.kubernetes.io/backend-protocol"     = "HTTP"
+      "alb.ingress.kubernetes.io/healthcheck-path"     = "/"
+      "alb.ingress.kubernetes.io/healthcheck-protocol" = "HTTP"
     }
   }
 
@@ -216,15 +195,15 @@ resource "kubernetes_ingress_v1" "otel_grpc" {
     name      = "otel-collector-grpc"
     namespace = "monitoring"
     annotations = {
-      "kubernetes.io/ingress.class"                         = "alb"
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"           = var.acm_cert_arn
-      "alb.ingress.kubernetes.io/listen-ports"              = jsonencode([{ HTTPS = 443 }])
-      "alb.ingress.kubernetes.io/group.name"                = "cloudops-otel"
-      "alb.ingress.kubernetes.io/group.order"               = "20"
-      "alb.ingress.kubernetes.io/backend-protocol"          = "GRPC"
-      "alb.ingress.kubernetes.io/conditions.otel-grpc"      = jsonencode([{ field = "http-request-method", httpRequestMethodConfig = { values = ["POST"] } }])
+      "kubernetes.io/ingress.class"                    = "alb"
+      "alb.ingress.kubernetes.io/scheme"               = var.otel_ingestion_internal ? "internal" : "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"          = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
+      "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
+      "alb.ingress.kubernetes.io/group.name"           = "cloudops-otel"
+      "alb.ingress.kubernetes.io/group.order"          = "20"
+      "alb.ingress.kubernetes.io/backend-protocol"     = "GRPC"
+      "alb.ingress.kubernetes.io/conditions.otel-grpc" = jsonencode([{ field = "http-request-method", httpRequestMethodConfig = { values = ["POST"] } }])
     }
   }
 

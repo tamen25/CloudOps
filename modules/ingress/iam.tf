@@ -22,6 +22,8 @@ resource "aws_iam_role" "lb_controller" {
 
 # Full official AWS Load Balancer Controller IAM policy (v2.8)
 resource "aws_iam_policy" "lb_controller" {
+  #checkov:skip=CKV_AWS_355:ALB controller requires broad EC2/ELB permissions by AWS design
+  #checkov:skip=CKV_AWS_290:ALB controller requires write access to manage load balancers
   name        = "${local.name}-lb-controller-policy"
   description = "AWS Load Balancer Controller IAM policy"
 
@@ -114,8 +116,8 @@ resource "aws_iam_policy" "lb_controller" {
         Resource = "arn:aws:ec2:*:*:security-group/*"
         Condition = {
           Null = {
-            "aws:RequestedRegion"                    = "false"
-            "ec2:ResourceTag/elbv2.k8s.aws/cluster"  = "false"
+            "aws:RequestedRegion"                   = "false"
+            "ec2:ResourceTag/elbv2.k8s.aws/cluster" = "false"
           }
         }
       },
@@ -155,8 +157,8 @@ resource "aws_iam_policy" "lb_controller" {
         ]
         Condition = {
           Null = {
-            "aws:RequestedRegion"                        = "false"
-            "aws:ResourceTag/elbv2.k8s.aws/cluster"      = "true"
+            "aws:RequestedRegion"                   = "false"
+            "aws:ResourceTag/elbv2.k8s.aws/cluster" = "true"
           }
         }
       },

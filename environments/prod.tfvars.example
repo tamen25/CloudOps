@@ -1,0 +1,174 @@
+# prod.tfvars.example — production launch profile.
+#
+# Closes backlog #40. Every WAF / audit / detection / backup / retention
+# control that staging leaves togglable is ON by default here, and every
+# destroy-safety shortcut from staging is flipped back to its
+# safe-for-customers value. The diff vs staging is intentional and
+# load-bearing — never copy staging into a prod env without applying these
+# overrides, or you will lose the ability to recover deleted state.
+#
+# Apply with:
+#   ./scripts/tf-init.sh
+#   terraform apply -var-file=environments/prod.tfvars
+#
+# Tear-down for production is INTENTIONALLY HARD. Removing prod requires:
+#   - flipping `database_deletion_protection = false` and taking a final snapshot
+#   - emptying versioned S3 buckets manually (force_destroy is OFF)
+#   - waiting out CloudTrail object-lock + Backup vault-lock retention windows
+# If you genuinely need to tear down, document the reason, follow the
+# operations runbook, and apply the destroy-safety overrides individually
+# with full review.
+
+environment  = "prod"
+project_name = "cloudops"
+
+# ── Module toggles — full set ────────────────────────────────────────────────
+enable_networking    = true
+enable_eks           = true
+enable_database      = true
+enable_ingress       = true
+enable_observability = true
+enable_slo           = true
+enable_security      = true
+enable_finops        = true
+enable_self_healing  = true
+enable_backup        = true
+enable_compliance    = true
+destroy_all          = false
+
+# ── EKS — 3-AZ on-demand ─────────────────────────────────────────────────────
+az_count                = 3
+eks_node_instance_types = ["m7i.large", "m6i.large", "m5.large"]
+eks_node_min_size       = 3
+eks_node_max_size       = 12
+eks_node_desired_size   = 3
+eks_node_capacity_type  = "ON_DEMAND"
+enable_nat_gateway      = true
+
+# Closes backlog #42 — public control plane OFF. Reach the API server via
+# private runners / VPN / bastion. To open a one-shot emergency window, flip
+# `eks_endpoint_public_access = true` AND replace the CIDR list with admin
+# egress IPs in the same change.
+eks_endpoint_private_access      = true
+eks_endpoint_public_access       = false
+eks_endpoint_public_access_cidrs = ["0.0.0.0/0"]   # honored only when public_access = true
+
+# ── ALB / WAF ────────────────────────────────────────────────────────────────
+# Lock the ALB down. Replace with your egress CIDR or a CDN-only list.
+allowed_cidr_blocks      = ["REPLACE_WITH_YOUR_ALLOWED_CIDRS"]
+enable_waf               = true
+waf_rate_limit_per_5min  = 2000
+waf_logging_enabled      = true
+
+# ── VPC flow logs to S3 ──────────────────────────────────────────────────────
+enable_flow_logs         = true
+flow_logs_destination    = "s3"
+flow_logs_retention_days = 365
+
+# ── RDS — multi-AZ, read replica, deletion-protected, rotation on ────────────
+database_instance_class               = "db.r6g.large"
+database_multi_az                     = true
+database_create_read_replica          = true
+database_backup_retention_period      = 35      # max
+database_performance_insights_enabled = true
+
+# Production destroy-safety: NEVER flip these off without a documented teardown plan.
+database_deletion_protection         = true
+database_skip_final_snapshot         = false
+database_secret_recovery_window_days = 30
+
+database_rotation_enabled            = true
+database_rotation_lambda_auto_deploy = true
+database_rotation_days               = 30
+
+# Closes backlog #41 — slow-query + DDL audit only. Never log_statement=all.
+database_log_connections               = true
+database_log_disconnections            = true
+database_log_duration                  = false
+database_log_statement                 = "ddl"
+database_log_min_duration_statement_ms = 500
+
+# ── Observability — HA + Mimir + KMS CMKs ────────────────────────────────────
+metrics_long_term_storage         = "mimir"
+loki_replication_factor           = 3
+loki_write_replicas               = 3
+loki_read_replicas                = 3
+prometheus_replicas               = 2
+prometheus_retention              = "6h"        # Mimir owns long-term
+tempo_ingester_replicas           = 3
+tempo_metrics_generator_enabled   = true
+enable_alertmanager               = true
+
+# Bucket hardening — production retains everything.
+buckets_versioning              = true
+buckets_kms_cmk                 = true
+buckets_glacier_transition_days = 30
+buckets_expiration_days         = 0           # 0 = never expire (compliance)
+buckets_force_destroy           = false
+
+# Cross-region replication — set ARNs once the destination bucket exists.
+buckets_replication_destination_arn = ""
+buckets_replication_role_arn        = ""
+
+# ── AWS Backup — vault-locked in compliance mode ─────────────────────────────
+backup_daily_retention_days   = 35
+backup_weekly_retention_days  = 90
+backup_monthly_retention_days = 2555          # ~7 years for SOX/SOC 2
+
+# Vault lock makes the vault undeletable until min_retention_days expires.
+# NEVER flip back to false on a vault that already has objects under lock.
+backup_vault_lock_enabled            = true
+backup_vault_lock_min_retention_days = 35
+backup_vault_lock_max_retention_days = 2555
+
+# ── Compliance — full audit/detection on, CloudTrail object-locked ──────────
+enable_cloudtrail                     = true
+enable_guardduty                      = true
+guardduty_eks_protection              = true
+guardduty_s3_protection               = true
+guardduty_malware_protection          = true
+enable_config                         = true
+enable_security_hub                   = true
+config_conformance_packs              = []     # paste CIS/NIST/PCI pack S3 URIs
+cloudtrail_object_lock_enabled        = true
+cloudtrail_object_lock_retention_days = 365
+
+# ── Self-healing — live remediation, tighter rollback threshold ──────────────
+self_healing_dry_run                 = false
+self_healing_min_healthy_pods        = 3
+self_healing_max_scale_out_pods      = 20
+self_healing_rollback_on_error_rate  = 2
+
+# ── Secrets / app integration (backlog #37 enforces non-empty in prod) ───────
+enable_external_secrets   = true
+grafana_alert_webhook_url = ""                # MUST be set before launch
+
+external_secrets_allowed_arns = [
+  # "arn:aws:secretsmanager:us-east-1:<account>:secret:cloudops-db-credentials-*",
+  # "arn:aws:secretsmanager:us-east-1:<account>:secret:cloudops-order-api-key-*",
+]
+order_api_api_key_secret_arn = ""             # MUST be set before launch — see backlog #37
+
+# ── FinOps ──────────────────────────────────────────────────────────────────
+cost_budget_monthly_usd        = 5000
+cost_alert_email               = ""
+cost_anomaly_threshold_percent = 10
+
+# ── Alert routing ───────────────────────────────────────────────────────────
+security_alert_email    = ""    # warning + above
+security_critical_email = ""    # CRITICAL only — page oncall
+
+# ── OTel ingestion hardening (backlog #38) ───────────────────────────────────
+# Production should keep ingestion private. Customer apps reach the collector
+# via VPC peering / Transit Gateway / Direct Connect, never via public DNS.
+# If you must keep public ingestion, populate `otel_allowed_cidrs` with the
+# customer egress ranges and tune the rate limit.
+otel_ingestion_internal  = true
+otel_allowed_cidrs       = []                # ignored when internal=true
+otel_rate_limit_per_5min = 60000             # 200 req/s per IP — adjust per fleet size
+otel_token_rotation_days = 30
+
+# Publish OTel endpoint URLs and bearer token to SSM Parameter Store for
+# cross-account SDK clients. Empty KMS key = AWS-managed alias/aws/ssm.
+publish_otel_ssm_config = false
+ssm_kms_key_id          = ""

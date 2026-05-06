@@ -1,0 +1,11 @@
+{
+  "name": "cloudops",
+  "private": true,
+  "description": "Root delegator — the app lives at apps/order-api/. These scripts forward to that package so `npm test` / `npm run lint` work from the repo root.",
+  "scripts": {
+    "test": "npm test --prefix apps/order-api",
+    "lint": "npm run lint --prefix apps/order-api",
+    "audit": "npm run audit --prefix apps/order-api",
+    "contract-check": "npm run contract-check --prefix apps/order-api"
+  }
+}

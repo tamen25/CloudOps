@@ -23,17 +23,6 @@ variable "name_prefix" {
   }
 }
 
-variable "primary_region" {
-  description = "AWS region where networking resources will be created"
-  type        = string
-  default     = "us-east-1"
-
-  validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-\\d{1}$", var.primary_region))
-    error_message = "Primary region must be a valid AWS region (e.g., us-east-1)."
-  }
-}
-
 # EKS Configuration
 
 variable "eks_cluster_name" {
@@ -73,8 +62,8 @@ variable "public_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.public_subnet_cidrs == null || alltrue([
-      for cidr in var.public_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.public_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All public subnet CIDRs must be valid IPv4 CIDR blocks."
   }
@@ -86,8 +75,8 @@ variable "private_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.private_subnet_cidrs == null || alltrue([
-      for cidr in var.private_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.private_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All private subnet CIDRs must be valid IPv4 CIDR blocks."
   }
@@ -99,8 +88,8 @@ variable "db_subnet_cidrs" {
   default     = null
 
   validation {
-    condition = var.db_subnet_cidrs == null || alltrue([
-      for cidr in var.db_subnet_cidrs : can(cidrhost(cidr, 0))
+    condition = alltrue([
+      for cidr in coalesce(var.db_subnet_cidrs, []) : can(cidrhost(cidr, 0))
     ])
     error_message = "All database subnet CIDRs must be valid IPv4 CIDR blocks."
   }
@@ -124,6 +113,29 @@ variable "enable_flow_logs" {
   description = "Enable VPC Flow Logs for network monitoring and troubleshooting"
   type        = bool
   default     = false
+}
+
+variable "flow_logs_destination" {
+  description = "Where to send VPC flow logs. \"cloudwatch\" = quick + queryable, more expensive at scale. \"s3\" = cheaper, parquet + Athena partitioning."
+  type        = string
+  default     = "cloudwatch"
+
+  validation {
+    condition     = contains(["cloudwatch", "s3"], var.flow_logs_destination)
+    error_message = "flow_logs_destination must be one of: cloudwatch, s3."
+  }
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID — used for globally unique flow-logs S3 bucket name."
+  type        = string
+  default     = ""
+}
+
+variable "buckets_force_destroy" {
+  description = "Allow `terraform destroy` to nuke flow-logs S3 bucket even if it contains objects. Set true in test envs only."
+  type        = bool
+  default     = true
 }
 
 variable "flow_logs_retention_days" {

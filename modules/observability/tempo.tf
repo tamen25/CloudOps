@@ -20,14 +20,23 @@ resource "helm_release" "tempo" {
 
     tempo = {
       storage = {
-        trace = {
-          backend = "s3"
-          s3 = {
-            bucket   = aws_s3_bucket.tempo.id
-            region   = var.region
-            endpoint = "s3.${var.region}.amazonaws.com"
-          }
-        }
+        trace = merge(
+          {
+            backend = "s3"
+            s3 = merge(
+              {
+                bucket   = aws_s3_bucket.tempo.id
+                region   = var.region
+                endpoint = "s3.${var.region}.amazonaws.com"
+              },
+              var.buckets_kms_cmk ? {
+                sse_encryption = true
+                sse_kms_key_id = aws_kms_key.tempo[0].arn
+              } : {}
+            )
+          },
+          {}
+        )
       }
 
       # OTLP receivers for both gRPC and HTTP
@@ -48,6 +57,17 @@ resource "helm_release" "tempo" {
       server = {
         http_listen_port = 3100
       }
+
+      # Metrics generator derives RED metrics (rate/errors/duration) from spans
+      # and remote-writes them to Prometheus. Useful for service maps in Grafana.
+      metricsGenerator = var.tempo_metrics_generator_enabled ? {
+        enabled        = true
+        remoteWriteUrl = "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/write"
+      } : { enabled = false }
+    }
+
+    ingester = {
+      replicas = var.tempo_ingester_replicas
     }
 
     persistence = {

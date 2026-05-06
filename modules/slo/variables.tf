@@ -15,11 +15,6 @@ variable "environment" {
   }
 }
 
-variable "eks_cluster_name" {
-  description = "EKS cluster name — informational; used for tagging and log context"
-  type        = string
-}
-
 variable "prometheus_url" {
   description = <<-EOT
     Base URL for Prometheus HTTP API queries (no trailing slash).
@@ -31,7 +26,7 @@ variable "prometheus_url" {
 }
 
 variable "grafana_url" {
-  description = "Grafana base URL (e.g. https://grafana.tamendutta.com). Used for future Grafana API calls."
+  description = "Grafana base URL (e.g. https://grafana.example.com). Used for future Grafana API calls."
   type        = string
   default     = ""
 }

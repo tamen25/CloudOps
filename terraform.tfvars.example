@@ -19,8 +19,11 @@ enable_database      = false  # Enable after networking is deployed
 enable_ingress       = false  # Enable after eks is deployed
 enable_observability = false  # Enable after ingress is deployed
 enable_slo           = false  # Enable after observability is deployed
+enable_security      = false  # Enable after eks + observability are deployed
+enable_finops        = false  # Standalone — can be enabled alongside bootstrap
+enable_self_healing  = false  # Enable after eks + observability are deployed
 
-# DANGER ZONE: set to true ONLY when running destroy.sh
+# DANGER ZONE: set to true ONLY when running scripts/destroy.sh
 destroy_all = false
 
 # ─────────────────────────────────────────────────────────────
@@ -93,6 +96,10 @@ eks_node_min_size     = 2  # Always keep ≥2 for HA
 eks_node_max_size     = 6
 eks_node_desired_size = 2
 
+# ON_DEMAND (default) or SPOT. SPOT cuts node cost 40-70% for dev workloads at
+# the cost of 2-minute interruption notices. Keep ON_DEMAND for prod.
+eks_node_capacity_type = "ON_DEMAND"
+
 # Kubernetes namespace and service account for the order-api IRSA role
 order_api_namespace       = "cloudops"
 order_api_service_account = "order-api"
@@ -148,3 +155,50 @@ database_deletion_protection     = false # Dev: false | Prod: true
 # Monitoring
 database_performance_insights_enabled = true
 database_monitoring_interval          = 60  # Seconds: 0 | 1 | 5 | 10 | 15 | 30 | 60
+
+# ─────────────────────────────────────────────────────────────
+# Self-Healing Configuration
+# ─────────────────────────────────────────────────────────────
+# ALB ARN suffix — set after enable_ingress deploy:
+#   aws elbv2 describe-load-balancers --query 'LoadBalancers[0].LoadBalancerArn'
+#   Extract the last two path segments: app/<name>/<id>
+self_healing_alb_arn_suffix          = ""  # e.g. "app/cloudops-dev-alb/1234567890abcdef"
+self_healing_target_group_arn_suffix = ""  # e.g. "targetgroup/cloudops-dev-tg/abcdef1234567890"
+
+self_healing_min_healthy_pods       = 2
+self_healing_max_scale_out_pods     = 10
+self_healing_rollback_on_error_rate = 5    # % of 5xx requests that triggers rollback
+self_healing_dry_run                = true  # Set false in prod when you're confident
+
+# ─────────────────────────────────────────────────────────────
+# FinOps Configuration
+# ─────────────────────────────────────────────────────────────
+# Monthly budget in USD — WARNING at 80%, CRITICAL at 100%
+cost_budget_monthly_usd = 50
+
+# Email for cost alerts (budget threshold breaches + anomaly notifications)
+# Leave empty to disable email; SNS topic is always created
+cost_alert_email = ""  # e.g. "ops-team@example.com"
+
+# Percentage spike over 7-day average that triggers an anomaly alert per service
+cost_anomaly_threshold_percent = 20
+
+# ─────────────────────────────────────────────────────────────
+# Grafana Unified Alerting  (all optional)
+# ─────────────────────────────────────────────────────────────
+# When security_alert_email is set above, Grafana provisions an email contact
+# point automatically (uses the same address — no extra variable). To deliver
+# alerts via Slack/PagerDuty/SNS, set a webhook URL below. Empty = alerts still
+# fire but are only visible in the Grafana Alerting UI.
+grafana_alert_webhook_url = ""
+
+# Run the kube-prometheus-stack Alertmanager pod. Required for SLO
+# PrometheusRule alerts to show up in the Grafana unified Alerts UI.
+# Adds ~50m CPU / ~100Mi RAM. Cheap.
+enable_alertmanager = true
+
+# OTel SDK/client discovery via SSM Parameter Store (optional).
+# Creates /<project>/<env>/otel/endpoint, /endpoint/{metrics,traces,logs},
+# and /api-key (SecureString). Empty KMS key = AWS-managed alias/aws/ssm.
+publish_otel_ssm_config = false
+ssm_kms_key_id          = ""

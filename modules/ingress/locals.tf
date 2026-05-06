@@ -1,7 +1,6 @@
-data "aws_region" "current" {}
-
 locals {
-  name = "${var.name_prefix}-${var.environment}"
+  name    = "${var.name_prefix}-${var.environment}"
+  zone_id = var.zone_id
 
   common_tags = merge(
     var.tags,

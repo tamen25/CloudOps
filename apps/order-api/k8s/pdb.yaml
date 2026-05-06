@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: order-api
+  namespace: "${ORDER_API_NAMESPACE}"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: order-api

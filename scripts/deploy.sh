@@ -4,6 +4,13 @@
 
 set -e
 
+# Backlog #62 — script moved from repo root to scripts/. Resolve repo root
+# from this script's location so the bare `terraform` and `terraform.tfvars`
+# references below behave the same regardless of caller cwd.
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$REPO_ROOT"
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -159,13 +166,105 @@ echo -e "${GREEN}✓ All resources in sync${NC}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 10: SLO status (only when slo module is enabled)
+# Step 10: Deploy sample app (order-api)
+# order-api is treated as a smoke-test / demo workload, not the primary product.
+# If local prerequisites for app deployment are missing, warn and continue so the
+# platform itself can still come up in one run.
+# ---------------------------------------------------------------------------
+if [ "$ENABLE_EKS" = "true" ] && [ "$ENABLE_INGRESS" = "true" ] && [ "$ENABLE_OBSERVABILITY" = "true" ] && [ "$ENABLE_DATABASE" = "true" ]; then
+    echo "Step 10: Deploying sample app (order-api)"
+    echo "========================================="
+
+    if ! command -v node &> /dev/null; then
+        echo -e "${YELLOW}Warning: node is not installed â€” skipping sample app deployment.${NC}"
+        echo ""
+    elif ! command -v docker &> /dev/null; then
+        echo -e "${YELLOW}Warning: docker is not installed â€” skipping sample app deployment.${NC}"
+        echo ""
+    elif ! command -v kubectl &> /dev/null; then
+        echo -e "${YELLOW}Warning: kubectl is not installed â€” skipping sample app deployment.${NC}"
+        echo ""
+    else
+        PROJECT_NAME=$(get_tfvar_string "project_name")
+        ENVIRONMENT=$(get_tfvar_string "environment")
+        DB_NAME=$(get_tfvar_string "database_name")
+        ORDER_API_NAMESPACE=$(get_tfvar_string "order_api_namespace")
+        ORDER_API_SERVICE_ACCOUNT=$(get_tfvar_string "order_api_service_account")
+
+        PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+        ENVIRONMENT="${ENVIRONMENT:-dev}"
+        DB_NAME="${DB_NAME:-cloudops}"
+        ORDER_API_NAMESPACE="${ORDER_API_NAMESPACE:-cloudops}"
+        ORDER_API_SERVICE_ACCOUNT="${ORDER_API_SERVICE_ACCOUNT:-order-api}"
+
+        SAMPLE_APP_ECR_URI="${ECR_REPOSITORY_URL:-}"
+        if [ -z "$SAMPLE_APP_ECR_URI" ]; then
+            SAMPLE_APP_REPO_NAME="${PROJECT_NAME}-${ENVIRONMENT}-app"
+            echo "Resolving sample app ECR repository: ${SAMPLE_APP_REPO_NAME}"
+
+            if ! aws ecr describe-repositories --repository-names "$SAMPLE_APP_REPO_NAME" --region "$REGION" >/dev/null 2>&1; then
+                echo "ECR repository does not exist yet â€” creating ${SAMPLE_APP_REPO_NAME}"
+                aws ecr create-repository \
+                    --repository-name "$SAMPLE_APP_REPO_NAME" \
+                    --region "$REGION" \
+                    --image-scanning-configuration scanOnPush=true >/dev/null
+            fi
+
+            SAMPLE_APP_ECR_URI=$(aws ecr describe-repositories \
+                --repository-names "$SAMPLE_APP_REPO_NAME" \
+                --region "$REGION" \
+                --query 'repositories[0].repositoryUri' \
+                --output text)
+        fi
+
+        echo "Building sample app image: ${SAMPLE_APP_ECR_URI}:latest"
+        SAMPLE_APP_ECR_REGISTRY="${SAMPLE_APP_ECR_URI%%/*}"
+        aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$SAMPLE_APP_ECR_REGISTRY" >/dev/null 2>&1
+        docker build -t "${SAMPLE_APP_ECR_URI}:latest" ./apps/order-api
+        docker push "${SAMPLE_APP_ECR_URI}:latest"
+
+        CLUSTER_NAME=$(terraform output -raw eks_cluster_name)
+        ACM_CERT_ARN=$(terraform output -raw acm_certificate_arn)
+        DB_SECRET_ARN=$(terraform output -raw database_secret_arn)
+        OTEL_ENDPOINT=$(terraform output -raw otel_endpoint)
+        ORDER_API_IRSA_ROLE_ARN=$(terraform output -raw order_api_irsa_role_arn)
+        ORDER_API_URL=$(terraform output -raw order_api_url)
+        ORDER_API_HOST="${ORDER_API_URL#https://}"
+        ORDER_API_HOST="${ORDER_API_HOST#http://}"
+        OTEL_RESOURCE_ATTRIBUTES="deployment.environment=${ENVIRONMENT},k8s.cluster.name=${CLUSTER_NAME}"
+
+        export ORDER_API_NAMESPACE
+        export ORDER_API_SERVICE_ACCOUNT
+        export ORDER_API_ENVIRONMENT="${ENVIRONMENT}"
+        export AWS_REGION="${REGION}"
+        export DB_NAME
+        export DB_SECRET_ARN
+        export OTEL_ENDPOINT
+        export OTEL_RESOURCE_ATTRIBUTES
+        export ACM_CERT_ARN
+        export ORDER_API_HOST
+        export ORDER_API_IRSA_ROLE_ARN
+        export ORDER_API_IMAGE="${SAMPLE_APP_ECR_URI}:latest"
+        export API_KEY_SECRET_ARN="${ORDER_API_KEY_SECRET_ARN:-}"
+
+        aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" >/dev/null
+        node ./apps/order-api/scripts/render-k8s.js ./apps/order-api/k8s /tmp/order-api-k8s
+        kubectl apply -f /tmp/order-api-k8s/
+        kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s
+
+        echo -e "${GREEN}âœ“ Sample app deployed${NC}"
+        echo ""
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 11: SLO status (only when slo module is enabled)
 # Invokes the error budget Lambda once to force a fresh calculation,
 # waits 10 seconds for CloudWatch metrics to propagate, then prints a
 # formatted summary of the current SLO health.
 # ---------------------------------------------------------------------------
 if [ "$ENABLE_SLO" = "true" ]; then
-    echo "Step 10: SLO Status Check"
+    echo "Step 11: SLO Status Check"
     echo "========================="
 
     PROJECT_NAME=$(get_tfvar_string "project_name")
@@ -408,7 +507,7 @@ except Exception as e:
 " 2>/dev/null
         echo ""
         echo -e "  Runbook : docs/runbooks/security/compliance-critical-finding.md"
-        GRAFANA_URL=$(terraform output -raw grafana_url 2>/dev/null || echo "https://grafana.tamendutta.com")
+        GRAFANA_URL=$(terraform output -raw grafana_url 2>/dev/null || echo "")
         echo -e "  Grafana : ${GRAFANA_URL}/d/security-posture"
         echo ""
     fi
@@ -428,7 +527,7 @@ echo -e "${BOLD}${CYAN}╔══════════════════
 echo -e "${BOLD}${CYAN}║              CloudOps Deployment Summary                     ║${NC}"
 echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${NC}"
 
-ORDER_API_URL="https://api.tamendutta.com"
+ORDER_API_URL=$(terraform output -raw order_api_url 2>/dev/null || echo "(pending)")
 printf "${BOLD}${CYAN}║${NC}  %-24s %s\n" "Order API:" "$ORDER_API_URL"
 
 if [ "$ENABLE_INGRESS" = "true" ]; then

@@ -5,40 +5,29 @@
 # DynamoDB, new HIGH/CRITICAL findings trigger SNS, and metrics are published to
 # CloudWatch under the CloudOps/Security namespace.
 #
-# IMPORTANT — install Lambda dependencies before terraform apply:
-#   cd modules/security/lambda_function/compliance_scanner && npm install --omit=dev && cd -
-# The node_modules directory must be present for archive_file to include them.
-# AWS SDK v3 is NOT bundled with the Node.js 20.x Lambda runtime.
-
-# Re-install and re-zip when package.json or source changes.
-resource "null_resource" "compliance_scanner_build" {
-  triggers = {
-    package_hash = filemd5("${path.module}/lambda_function/compliance_scanner/package.json")
-    source_hash  = filemd5("${path.module}/lambda_function/compliance_scanner/index.js")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm install --omit=dev --prefix ${path.module}/lambda_function/compliance_scanner ${path.module}/lambda_function/compliance_scanner"
-    working_dir = path.module
-  }
-}
+# Install Lambda dependencies BEFORE terraform apply via:
+#   ./scripts/build-lambdas.sh
+# Closes backlog #20.
 
 data "archive_file" "compliance_scanner" {
   type        = "zip"
   source_dir  = "${path.module}/lambda_function/compliance_scanner"
   output_path = "${path.module}/lambda_function/compliance_scanner.zip"
-
-  depends_on = [null_resource.compliance_scanner_build]
 }
 
 resource "aws_cloudwatch_log_group" "compliance_scanner" {
+  #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-compliance-scanner"
-  retention_in_days = 30
+  retention_in_days = 365
 
   tags = var.tags
 }
 
 resource "aws_lambda_function" "compliance_scanner" {
+  #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
+  #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
+  #checkov:skip=CKV_AWS_272:Code signing not implemented - out of scope for this project
+  #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name = "${var.project_name}-compliance-scanner"
   description   = "Scans AWS resources against a security baseline every 6 hours"
 
@@ -51,18 +40,24 @@ resource "aws_lambda_function" "compliance_scanner" {
   timeout     = 300
   memory_size = 512
 
+  reserved_concurrent_executions = 10
+
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
-      ENVIRONMENT      = var.environment
-      PROJECT_NAME     = var.project_name
-      VPC_ID           = var.vpc_id
-      RDS_INSTANCE_ID  = var.rds_instance_id
-      EKS_CLUSTER_NAME = var.eks_cluster_name
-      STATE_BUCKET_NAME = var.state_bucket_name
-      LOKI_BUCKET_NAME  = var.loki_bucket_name
-      TEMPO_BUCKET_NAME = var.tempo_bucket_name
-      FINDINGS_TABLE   = aws_dynamodb_table.security_findings.name
-      SNS_TOPIC_ARN    = aws_sns_topic.security_alerts.arn
+      ENVIRONMENT                         = var.environment
+      PROJECT_NAME                        = var.project_name
+      VPC_ID                              = var.vpc_id
+      RDS_INSTANCE_ID                     = var.rds_instance_id
+      EKS_CLUSTER_NAME                    = var.eks_cluster_name
+      STATE_BUCKET_NAME                   = var.state_bucket_name
+      LOKI_BUCKET_NAME                    = var.loki_bucket_name
+      TEMPO_BUCKET_NAME                   = var.tempo_bucket_name
+      FINDINGS_TABLE                      = aws_dynamodb_table.security_findings.name
+      SNS_TOPIC_ARN                       = aws_sns_topic.security_alerts.arn
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }
@@ -72,6 +67,13 @@ resource "aws_lambda_function" "compliance_scanner" {
     aws_cloudwatch_log_group.compliance_scanner,
     data.archive_file.compliance_scanner,
   ]
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/lambda_function/compliance_scanner/node_modules/.package-lock.json")
+      error_message = "modules/security/lambda_function/compliance_scanner/node_modules is missing — run ./scripts/build-lambdas.sh before terraform apply."
+    }
+  }
 
   tags = merge(var.tags, { Name = "${var.project_name}-compliance-scanner" })
 }
@@ -126,6 +128,7 @@ resource "aws_iam_role_policy_attachment" "compliance_scanner_basic_execution" {
 }
 
 data "aws_iam_policy_document" "compliance_scanner_permissions" {
+  #checkov:skip=CKV_AWS_356:Compliance scanner requires read access across multiple AWS services
   # EC2 — describe security groups in the project VPC
   statement {
     sid    = "EC2DescribeSecurityGroups"

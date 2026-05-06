@@ -102,7 +102,7 @@ resource "kubernetes_manifest" "slo_availability" {
               annotations = {
                 summary     = "order-api availability SLO fast burn (>14.4x)"
                 description = "order-api is consuming its availability error budget at more than 14.4x the allowed rate. At this rate the entire 30-day budget will be exhausted in ~2 hours. 1h burn rate: {{ $value | humanizePercentage }}."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-availability-fast-burn.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-availability-fast-burn.md"
               }
             },
 
@@ -122,7 +122,7 @@ resource "kubernetes_manifest" "slo_availability" {
               annotations = {
                 summary     = "order-api availability SLO slow burn (>6x)"
                 description = "order-api is consuming its availability error budget at more than 6x the allowed rate. At this rate the entire 30-day budget will be exhausted in ~5 days. 6h burn rate: {{ $value | humanizePercentage }}."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-availability-slow-burn.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-availability-slow-burn.md"
               }
             },
 
@@ -140,7 +140,7 @@ resource "kubernetes_manifest" "slo_availability" {
               annotations = {
                 summary     = "order-api availability error budget critically low (<10%)"
                 description = "Less than 10% of the 30-day availability error budget remains. Remaining: {{ $value | humanizePercentage }}. Immediate action required to avoid breaching the ${local.availability_target_str} SLO."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-error-budget-low.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-error-budget-low.md"
               }
             },
 
@@ -158,7 +158,7 @@ resource "kubernetes_manifest" "slo_availability" {
               annotations = {
                 summary     = "order-api availability error budget low (<50%)"
                 description = "Less than 50% of the 30-day availability error budget remains. Remaining: {{ $value | humanizePercentage }}. Review recent error rates before the budget is critically depleted."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-error-budget-low.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-error-budget-low.md"
               }
             },
           ]
@@ -250,7 +250,7 @@ resource "kubernetes_manifest" "slo_latency" {
               annotations = {
                 summary     = "order-api latency SLO fast burn (>14.4x)"
                 description = "order-api is consuming its latency error budget at more than 14.4x the allowed rate. Fewer than expected requests are completing in <300ms. 1h burn rate: {{ $value | humanizePercentage }}."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-latency-fast-burn.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-latency-fast-burn.md"
               }
             },
 
@@ -268,7 +268,7 @@ resource "kubernetes_manifest" "slo_latency" {
               annotations = {
                 summary     = "order-api latency SLO slow burn (>6x)"
                 description = "order-api is consuming its latency error budget at more than 6x the allowed rate. 6h burn rate: {{ $value | humanizePercentage }}."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-latency-slow-burn.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-latency-slow-burn.md"
               }
             },
 
@@ -286,7 +286,7 @@ resource "kubernetes_manifest" "slo_latency" {
               annotations = {
                 summary     = "order-api latency error budget critically low (<10%)"
                 description = "Less than 10% of the 30-day latency error budget remains. Remaining: {{ $value | humanizePercentage }}. Immediate action required to avoid breaching the ${local.latency_target_str} SLO."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-error-budget-low.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-error-budget-low.md"
               }
             },
 
@@ -304,7 +304,7 @@ resource "kubernetes_manifest" "slo_latency" {
               annotations = {
                 summary     = "order-api latency error budget low (<50%)"
                 description = "Less than 50% of the 30-day latency error budget remains. Remaining: {{ $value | humanizePercentage }}."
-                runbook_url = "https://github.com/tamen25/CloudOps/blob/main/docs/runbooks/slo-error-budget-low.md"
+                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-error-budget-low.md"
               }
             },
           ]

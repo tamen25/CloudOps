@@ -1,3 +1,12 @@
+# Personal interview-prep explainer — local only, never committed.
+# Agents (including Claude) must NOT read this file for context.
+# It is human-maintained narrative documentation, not part of the codebase.
+PROJECT_EXPLAINER.md
+
+# Personal docs — case studies, rate cards, outreach drafts, freelance/job-hunt
+# material. Local only, never committed.
+private/
+
 # Local .terraform directories
 .terraform/
 
@@ -9,10 +18,9 @@
 crash.log
 crash.*.log
 
-# Exclude all .tfvars files, which are likely to contain sensitive data, such as
-# password, private keys, and other secrets. These should not be part of version 
-# control as they are data points which are potentially sensitive and subject 
-# to change depending on the environment.
+# Exclude all .tfvars files — they likely contain sensitive data (passwords,
+# private keys, account IDs). Never commit them. Use terraform.tfvars.example
+# as the documented template instead.
 *.tfvars
 *.tfvars.json
 
@@ -26,8 +34,9 @@ override.tf.json
 # Ignore transient lock info files created by terraform apply
 .terraform.tfstate.lock.info
 
-# Terraform provider lock file (auto-generated on init)
-.terraform.lock.hcl
+# Terraform provider lock file (.terraform.lock.hcl) is committed deliberately
+# — pins provider versions + checksums so plans are reproducible across
+# machines and CI. Regenerate only via `terraform init -upgrade`.
 
 # Include override files you do wish to add to version control using negated pattern
 # !example_override.tf
@@ -41,3 +50,19 @@ terraform.rc
 
 # Claude Code local settings (contains personal configuration)
 .claude/
+CLAUDE.md
+
+# Pluralith local output
+.pluralith/
+
+# Lambda build artifacts — rebuilt by scripts/build-lambdas.sh before
+# `terraform apply`. Closes backlog #20: applies no longer run npm install.
+modules/**/lambda_function/*.zip
+modules/**/lambda_function_*/*.zip
+modules/slo/lambda_function.zip
+modules/**/lambda_function/**/node_modules/
+modules/**/lambda_function_*/node_modules/
+modules/slo/lambda_function/node_modules/
+
+# Local tool downloads (kubeconform, etc) — closes backlog #35.
+.tools/

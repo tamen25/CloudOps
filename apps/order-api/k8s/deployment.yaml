@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: order-api
-  namespace: cloudops
+  namespace: "${ORDER_API_NAMESPACE}"
 spec:
   replicas: 2
   selector:
@@ -13,13 +13,67 @@ spec:
       labels:
         app: order-api
     spec:
-      serviceAccountName: order-api
+      serviceAccountName: "${ORDER_API_SERVICE_ACCOUNT}"
+      # Closes backlog #36 — Gatekeeper K8sNoRootContainers requires
+      # runAsNonRoot=true or runAsUser>0. UID 1001 matches the `nodejs` user
+      # created in the Dockerfile.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: rds-ca
+          emptyDir: {}
+        # Backlog #56 — readOnlyRootFilesystem requires a writable tmp dir
+        # for any libraries that write scratch files (pino transports,
+        # tempfiles in the AWS SDK).
+        - name: tmp
+          emptyDir: {}
+      # Backlog #57 — fetch the RDS global CA bundle once per pod start. The
+      # bundle is published at a stable URL by AWS; no IAM required. The
+      # main container reads `/etc/rds/global-bundle.pem` via DB_SSL_CA_BUNDLE.
+      initContainers:
+        - name: fetch-rds-ca
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - >-
+              curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+              -o /etc/rds/global-bundle.pem
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: order-api
-          # Populate with your ECR repo URI, e.g. <account>.dkr.ecr.us-east-1.amazonaws.com/order-api:latest
-          image: "<REPLACE_WITH_ECR_REPO_URI>:latest"
+          image: "${ORDER_API_IMAGE}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Backlog #56 — read-only root filesystem; writable scratch via
+            # the `tmp` emptyDir mount.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: rds-ca
+              mountPath: /etc/rds
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
+            - name: metrics
+              containerPort: 9090
           resources:
             requests:
               cpu: "256m"
@@ -29,23 +83,24 @@ spec:
               memory: "512Mi"
           env:
             - name: NODE_ENV
-              value: "dev"
+              value: "${ORDER_API_ENVIRONMENT}"
             - name: PORT
               value: "3000"
             - name: AWS_REGION
-              value: "us-east-1"
+              value: "${AWS_REGION}"
             - name: DB_NAME
-              value: "cloudops"
-            # Populate with the Secrets Manager ARN from the database module output
+              value: "${DB_NAME}"
             - name: DB_SECRET_ARN
-              value: "<REPLACE_WITH_database_secret_arn>"
-            # OTel Collector external HTTPS endpoint
+              value: "${DB_SECRET_ARN}"
+            # Backlog #57 — TLS to RDS. Bundle is fetched by the
+            # `fetch-rds-ca` initContainer; pg.Pool is configured with
+            # rejectUnauthorized=true.
+            - name: DB_SSL_CA_BUNDLE
+              value: "/etc/rds/global-bundle.pem"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "https://otel.tamendutta.com"
+              value: "${OTEL_ENDPOINT}"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
-            # Bearer token injected from the otel-auth secret (managed by the observability module)
-            # NOTE: otel-auth must exist in the cloudops namespace — see modules/observability/secrets.tf
             - name: OTEL_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -54,18 +109,35 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "order-api"
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "deployment.environment=dev,k8s.cluster.name=cloudops-dev-cluster"
+              value: "${OTEL_RESOURCE_ATTRIBUTES}"
+            - name: METRICS_PORT
+              value: "9090"
+            # Optional: set to a Secrets Manager ARN to enforce X-Api-Key on
+            # /order and /orders. Leave empty to run unauthenticated.
+            - name: API_KEY_SECRET_ARN
+              value: "${API_KEY_SECRET_ARN}"
+            # OIDC / JWKS bearer-token auth (closes backlog #7). Set all
+            # three to enable JWT validation in addition to (or instead of)
+            # the X-Api-Key path. Leave empty to disable.
+            - name: OIDC_ISSUER
+              value: "${OIDC_ISSUER}"
+            - name: OIDC_AUDIENCE
+              value: "${OIDC_AUDIENCE}"
+            - name: OIDC_JWKS_URL
+              value: "${OIDC_JWKS_URL}"
+            - name: OIDC_REQUIRED_SCOPES
+              value: "${OIDC_REQUIRED_SCOPES}"
           livenessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: http
             initialDelaySeconds: 15
             periodSeconds: 20
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
-              port: 3000
+              path: /ready
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3

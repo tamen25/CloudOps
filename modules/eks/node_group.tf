@@ -1,7 +1,14 @@
 resource "aws_launch_template" "nodes" {
   name_prefix = "${local.name}-nodes-lt-"
 
-  vpc_security_group_ids = [var.node_sg_id]
+  # Include the cluster SG so nodes can reach the private API endpoint (cluster SG guards the ENI)
+  vpc_security_group_ids = [var.node_sg_id, aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
 
   tag_specifications {
     resource_type = "instance"
@@ -30,7 +37,7 @@ resource "aws_eks_node_group" "main" {
   node_role_arn   = aws_iam_role.eks_node.arn
   subnet_ids      = var.private_subnet_ids
 
-  capacity_type  = "ON_DEMAND"
+  capacity_type  = var.node_capacity_type
   instance_types = var.node_instance_types
 
   scaling_config {

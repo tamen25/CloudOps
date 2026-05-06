@@ -1,11 +1,11 @@
 output "certificate_arn" {
-  description = "ACM wildcard certificate ARN for *.tamendutta.com"
+  description = "ACM wildcard certificate ARN for the project domain"
   value       = aws_acm_certificate_validation.main.certificate_arn
 }
 
 output "hosted_zone_id" {
-  description = "Route 53 hosted zone ID for tamendutta.com"
-  value       = data.aws_route53_zone.main.zone_id
+  description = "Route 53 hosted zone ID for the project domain"
+  value       = var.zone_id
 }
 
 output "lb_controller_role_arn" {

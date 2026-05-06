@@ -66,7 +66,10 @@ resource "helm_release" "grafana" {
       }
     }
 
-    # Sidecar watches for ConfigMaps labelled grafana_dashboard=1 across all namespaces
+    # Sidecar watches for ConfigMaps across all namespaces:
+    #   grafana_dashboard=1           → dashboards (existing)
+    #   grafana_alert=1               → unified-alerting rules + contact points + policies
+    #   grafana_datasource=1          → extra datasources
     sidecar = {
       dashboards = {
         enabled         = true
@@ -78,19 +81,35 @@ resource "helm_release" "grafana" {
           foldersFromFilesStructure = true
         }
       }
+      alerts = {
+        enabled         = true
+        searchNamespace = "ALL"
+        label           = "grafana_alert"
+        labelValue      = "1"
+        folder          = "/etc/grafana/provisioning/alerting"
+        # Restart the Grafana pod whenever provisioning files change, since
+        # Grafana does not hot-reload alerting provisioning on all versions.
+        watchMethod = "WATCH"
+      }
+      datasources = {
+        enabled         = true
+        searchNamespace = "ALL"
+        label           = "grafana_datasource"
+        labelValue      = "1"
+      }
     }
 
     # Ingress — ALB terminates TLS; Grafana runs plain HTTP inside the cluster
     ingress = {
       enabled = true
       annotations = {
-        "kubernetes.io/ingress.class"                    = "alb"
-        "alb.ingress.kubernetes.io/scheme"               = "internet-facing"
-        "alb.ingress.kubernetes.io/target-type"          = "ip"
-        "alb.ingress.kubernetes.io/certificate-arn"      = var.acm_cert_arn
-        "alb.ingress.kubernetes.io/listen-ports"         = jsonencode([{ HTTPS = 443 }])
-        "alb.ingress.kubernetes.io/group.name"           = "cloudops"
-        "alb.ingress.kubernetes.io/ssl-redirect"         = "443"
+        "kubernetes.io/ingress.class"               = "alb"
+        "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"     = "ip"
+        "alb.ingress.kubernetes.io/certificate-arn" = var.acm_cert_arn
+        "alb.ingress.kubernetes.io/listen-ports"    = jsonencode([{ HTTPS = 443 }])
+        "alb.ingress.kubernetes.io/group.name"      = "cloudops"
+        "alb.ingress.kubernetes.io/ssl-redirect"    = "443"
       }
       hosts    = ["grafana.${var.domain}"]
       path     = "/"
@@ -104,6 +123,15 @@ resource "helm_release" "grafana" {
         }
         auth = {
           disable_login_form = false
+        }
+        # Unified Alerting is on by default in Grafana >= 9 — spelled out here
+        # so the behaviour is obvious and can't drift on future upgrades.
+        unified_alerting = {
+          enabled = true
+        }
+        # Disable legacy alerting explicitly so both systems don't run side by side.
+        alerting = {
+          enabled = false
         }
       }
     }
@@ -139,6 +167,8 @@ resource "helm_release" "grafana" {
 # ─────────────────────────────────────────────────────────────────────────────
 
 resource "aws_secretsmanager_secret" "grafana_api_key" {
+  #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
+  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
   name                    = "cloudops/grafana-api-key"
   description             = "Grafana Viewer service account token — used by the SLO Lambda to query Prometheus via the Grafana datasource proxy"
   recovery_window_in_days = 7
@@ -170,13 +200,18 @@ resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
 #   - python3 (stdlib only)
 #   - aws CLI authenticated with secretsmanager:PutSecretValue on the secret ARN
 #
-# The provisioner is idempotent: if a service account named
-# cloudops-lambda-reader already exists, it reuses it rather than creating a
-# duplicate. Each run creates a new token; this is intentional (rotation).
+# Idempotency + cleanup (closes part of backlog #20):
+#   - Service account named cloudops-lambda-reader is reused if it exists.
+#   - BEFORE creating a new token the script deletes every existing token on
+#     the same service account, so applies do not silently accumulate stale
+#     tokens in Grafana.
+#   - The trigger is now a fixed string ("v1") so re-applies do NOT rotate the
+#     token by default. To force rotation: `terraform apply
+#     -replace=module.observability.null_resource.grafana_service_account`.
 resource "null_resource" "grafana_service_account" {
   triggers = {
-    grafana_url = "https://grafana.${var.domain}"
-    secret_arn  = aws_secretsmanager_secret.grafana_api_key.arn
+    # Bump this string to force a token rotation on the next apply.
+    rotation_marker = "v1"
   }
 
   provisioner "local-exec" {
@@ -241,7 +276,28 @@ except Exception:
         echo "Service account cloudops-lambda-reader already exists (ID $SA_ID) — reusing."
       fi
 
-      # ── Create a new token (rotates on each trigger change) ─────────────────
+      # ── Delete existing tokens on this SA to avoid silent accumulation ─────
+      echo "Listing existing tokens on service account $SA_ID..."
+      EXISTING=$(curl -sf -u "admin:$ADMIN_PASSWORD" \
+        -H "Accept: application/json" \
+        "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" 2>/dev/null || echo '[]')
+
+      echo "$EXISTING" | python3 -c "
+import sys, json
+try:
+    for t in json.load(sys.stdin) or []:
+        if t.get('id') is not None:
+            print(t['id'])
+except Exception:
+    pass
+" 2>/dev/null | while read -r OLD_ID; do
+        [ -z "$OLD_ID" ] && continue
+        echo "  Deleting stale token id $OLD_ID"
+        curl -sf -X DELETE -u "admin:$ADMIN_PASSWORD" \
+          "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens/$OLD_ID" >/dev/null 2>&1 || true
+      done
+
+      # ── Create a new token ────────────────────────────────────────────────
       echo "Creating API token for service account $SA_ID..."
       TOKEN_NAME="cloudops-lambda-slo-$(date -u +%Y%m%d%H%M%S 2>/dev/null || date -u +%s)"
       TOKEN_RESP=$(curl -sf -X POST "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" \

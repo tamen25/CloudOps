@@ -24,7 +24,7 @@ resource "helm_release" "loki" {
       auth_enabled = false
 
       commonConfig = {
-        replication_factor = 1
+        replication_factor = var.loki_replication_factor
       }
 
       storage = {
@@ -37,6 +37,11 @@ resource "helm_release" "loki" {
         s3 = {
           region           = var.region
           s3ForcePathStyle = false
+          sse_encryption   = var.buckets_kms_cmk
+          sse = var.buckets_kms_cmk ? {
+            type       = "SSE-KMS"
+            kms_key_id = aws_kms_key.loki[0].arn
+          } : null
         }
       }
 
@@ -54,8 +59,8 @@ resource "helm_release" "loki" {
       }
 
       limits_config = {
-        retention_period      = "168h"
-        ingestion_rate_mb     = 16
+        retention_period        = "168h"
+        ingestion_rate_mb       = 16
         ingestion_burst_size_mb = 32
       }
 
@@ -64,12 +69,12 @@ resource "helm_release" "loki" {
       }
     }
 
-    # Simple scalable components — 2 write/read for HA, 1 backend
+    # Simple scalable components — replicas driven by vars so prod can flip up.
     write = {
-      replicas = 2
+      replicas = var.loki_write_replicas
     }
     read = {
-      replicas = 2
+      replicas = var.loki_read_replicas
     }
     backend = {
       replicas = 1

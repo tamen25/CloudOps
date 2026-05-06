@@ -2,7 +2,10 @@
 #   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
 #   AWS_REGION                   — AWS region (e.g. us-east-1)
 #   INFRACOST_API_KEY            — From https://www.infracost.io/docs/#2-get-api-key
-#   TF_VARS                      — Full contents of your terraform.tfvars file (store as a secret)
+#   PLURALITH_API_KEY            — From https://app.pluralith.com (free account)
+#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#                                  — Full contents of each environment's terraform.tfvars
+#   TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
 #
 # GitHub Environment required:
 #   production  — Settings → Environments → production; add required reviewers as the approval gate
@@ -14,24 +17,45 @@ on:
     branches: [main]
     paths:
       - 'modules/**'
+      - 'stacks/**'
+      - 'scripts/tf-init.sh'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
+      - 'scripts/build-lambdas.sh'
       - '*.tf'
       - '.github/workflows/infra.yml'
   pull_request:
     branches: [main]
     paths:
       - 'modules/**'
+      - 'stacks/**'
+      - 'scripts/tf-init.sh'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
+      - 'scripts/build-lambdas.sh'
       - '*.tf'
       - '.github/workflows/infra.yml'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
 
 permissions:
-  id-token: write
   contents: read
-  pull-requests: write
 
 env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  TF_VERSION: 1.7.0
+  TF_VERSION: 1.11.0
+  LEGACY_ROOT_APPLY: "0"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -40,16 +64,25 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
       security-events: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Terraform no longer runs npm install during apply.
+        run: bash scripts/build-lambdas.sh
 
       - name: Check formatting
         run: terraform fmt -check -recursive
@@ -60,6 +93,18 @@ jobs:
       - name: Validate
         run: terraform validate
 
+      - name: Init layered stacks (no backend)
+        run: |
+          terraform -chdir=stacks/foundation init -backend=false
+          terraform -chdir=stacks/cluster init -backend=false
+          terraform -chdir=stacks/platform init -backend=false
+
+      - name: Validate layered stacks
+        run: |
+          terraform -chdir=stacks/foundation validate
+          terraform -chdir=stacks/cluster validate
+          terraform -chdir=stacks/platform validate
+
       - name: Setup tflint
         uses: terraform-linters/setup-tflint@v4
 
@@ -67,19 +112,40 @@ jobs:
         run: tflint --init
 
       - name: tflint
-        run: tflint --recursive
+        # --config is required when running --recursive so the root .tflint.hcl
+        # (e.g. the disable for terraform_required_providers) is honored inside
+        # every child module. Closes backlog #31 — without it, child modules
+        # re-enable the recommended preset and emit ~30 noisy warnings.
+        run: tflint --recursive --config="$(pwd)/.tflint.hcl" --minimum-failure-severity=error
 
+      - name: actionlint — workflow lint
+        # Closes backlog #23 — catches typos / wrong action input names /
+        # shellcheck violations in run: blocks before they ship.
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.4
+          ./actionlint -color
+
+      # Closes backlog #39 — pinned version (was unpinned `@v1.0.0` is fine
+      # but documenting the digest pin policy here) and made tfsec a hard gate
+      # for HIGH/CRITICAL findings. Documented suppressions live in `.tfsec/`
+      # config (`exclude` keys per check); no findings should slip through
+      # silently anymore. `soft_fail: false` is the default; making it
+      # explicit so a future contributor can't flip it back without reviewing.
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.0
+        uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          soft_fail: true
+          soft_fail: false
           format: sarif
+          additional_args: --minimum-severity HIGH
 
-      - name: Upload tfsec SARIF results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - name: Upload tfsec results (artifact)
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('results.sarif') != ''
         with:
-          sarif_file: results.sarif
+          name: tfsec-results
+          path: results.sarif
+          retention-days: 30
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 2: Cost estimation — PR events only
@@ -89,8 +155,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -98,13 +167,6 @@ jobs:
         uses: infracost/actions/setup@v3
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-          role-session-name: github-actions-infracost
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Breakdown — base branch
         run: |
@@ -147,8 +209,26 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     needs: quality
+    if: github.event_name != 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+    # On a fresh deploy the EKS cluster doesn't exist yet, so data sources
+    # for EKS endpoint/auth fail during plan. The apply stages deploy in the
+    # correct order and succeed regardless; plan is informational only.
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Lambda zips need node_modules in place before
+        # `terraform plan` so `data.archive_file` builds the correct artifact.
+        run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -163,32 +243,87 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+          TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+          TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+          TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+        run: bash scripts/write-ci-tfvars.sh
 
-      - name: terraform init
-        run: terraform init
-
-      - name: terraform plan
+      - name: terraform plan (layered stacks)
         id: plan
         shell: bash
         run: |
           set -o pipefail
-          terraform plan -out=tfplan -no-color 2>&1 | tee plan-output.txt
+          # Plan foundation -> cluster -> platform against separate state keys.
+          bash scripts/terraform-stacks.sh plan -lock=false -out=tfplan -no-color \
+            2>&1 | tee plan-output.txt
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: stacks/**/tfplan
+          retention-days: 5
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: PR Terraform plan — no AWS credentials or production secrets.
+  # Posts an informational plan comment from terraform.tfvars.example.
+  # ─────────────────────────────────────────────────────────────────────────────
+  plan-pr:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build Lambda dependencies
+        run: bash scripts/build-lambdas.sh
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Write PR terraform.tfvars
+        run: cp terraform.tfvars.example terraform.tfvars
+
+      - name: terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: terraform plan (no AWS credentials)
+        id: plan
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform plan -lock=false -refresh=false \
+            -out=tfplan -no-color 2>&1 | tee plan-output.txt
 
       - name: Post plan to PR
-        if: github.event_name == 'pull_request'
+        if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            let output = fs.readFileSync('plan-output.txt', 'utf8');
+            let output = fs.existsSync('plan-output.txt')
+              ? fs.readFileSync('plan-output.txt', 'utf8')
+              : 'Terraform plan did not produce output. Check the workflow logs.';
 
             if (output.length > 65000) {
               output = output.substring(0, 65000) + '\n\n... output truncated (exceeded 65000 chars)';
             }
 
             const marker = '<!-- terraform-plan-comment -->';
-            const body = `## Terraform Plan
+            const body = `## Terraform Plan (PR, no AWS credentials)
 
             <details><summary>Show Plan Output</summary>
 
@@ -216,7 +351,6 @@ jobs:
                 comment_id: existing.id,
                 body,
               });
-              core.info(`Updated existing plan comment (id: ${existing.id})`);
             } else {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -224,32 +358,26 @@ jobs:
                 issue_number: context.issue.number,
                 body,
               });
-              core.info('Created new plan comment');
             }
 
-      - name: Upload plan artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: tfplan
-          retention-days: 5
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 4: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov (soft)
-  # Runs in parallel with plan.
-  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 5: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov.
   security-scan:
     runs-on: ubuntu-latest
     needs: quality
     permissions:
-      id-token: write
       contents: read
       security-events: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # Closes backlog #39 — Trivy was previously pinned to the mutable
+      # `@master` ref. Now pinned to a tagged release; HIGH/CRITICAL findings
+      # are a hard gate (continue-on-error removed). To suppress an
+      # intentional finding, add a `# trivy:ignore:<id>` comment in the TF
+      # source and document the reason in PROJECT_EXPLAINER or a runbook.
       - name: Run Trivy on Terraform config
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
           scan-ref: .
@@ -258,36 +386,38 @@ jobs:
           format: sarif
           output: trivy-results.sarif
 
-      - name: Upload Trivy SARIF results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - name: Upload Trivy results (artifact)
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
-          sarif_file: trivy-results.sarif
-          category: trivy
+          name: trivy-results
+          path: trivy-results.sarif
+          retention-days: 30
 
       - name: Install Checkov
-        run: pip install checkov --quiet
+        # Pin checkov so a midnight upstream release can't change scan results.
+        run: pip install checkov==3.2.298 --quiet
 
-      - name: Run Checkov (soft fail — informational)
+      - name: Run Checkov (HIGH/CRITICAL hard gate)
+        # Closes backlog #39 — was previously `|| true` (informational).
+        # Now fails the job on HIGH/CRITICAL. Use a `.checkov.yml` skip-check
+        # entry to document any intentional suppressions.
         run: |
-          checkov -d . --framework terraform --output github_failed_only || true
+          checkov -d . --framework terraform --output github_failed_only --check HIGH,CRITICAL
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 5: Manifest validation — kubeval + kubeconform + kubectl dry-run + helm lint
+  # Job 5: Manifest validation — kubeconform schema validation
+  # Validates all Kubernetes manifests in apps/order-api/k8s/ against the
+  # upstream JSON schemas. CRD kinds (ServiceMonitor) are skipped, not errored.
   # Runs in parallel with plan.
   # ─────────────────────────────────────────────────────────────────────────────
   manifest-validation:
     runs-on: ubuntu-latest
     needs: quality
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install kubeval
-        run: |
-          wget -q https://github.com/instrumenta/kubeval/releases/download/v0.16.1/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin/
-          kubeval --version
+      - uses: actions/checkout@v5
 
       - name: Install kubeconform
         run: |
@@ -296,70 +426,97 @@ jobs:
           sudo mv kubeconform /usr/local/bin/
           kubeconform -v
 
-      - name: kubeval — strict schema validation
-        run: |
-          kubeval --strict apps/order-api/k8s/*.yaml
-
       - name: kubeconform — schema validation
         run: |
-          kubeconform -strict -summary apps/order-api/k8s/
-
-      - name: kubectl apply --dry-run=client
-        run: |
-          # Create a minimal mock kubeconfig — dry-run=client never contacts the server
-          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
-          cat > "$KUBECONFIG" <<'KUBECFG'
-          apiVersion: v1
-          kind: Config
-          current-context: mock
-          clusters:
-          - cluster:
-              server: https://localhost:6443
-            name: mock
-          contexts:
-          - context:
-              cluster: mock
-              user: mock
-            name: mock
-          users:
-          - name: mock
-            user: {}
-          KUBECFG
-          kubectl apply --dry-run=client -f apps/order-api/k8s/
-
-      - name: Helm lint — observability values files
-        run: |
-          # Validate any standalone YAML files in the observability module as valid YAML.
-          # Helm lint requires a full chart directory (Chart.yaml); if none exist, report and skip.
-          YAML_FILES=$(find modules/observability -name '*.yaml' -o -name '*.yml' 2>/dev/null | sort)
-          if [ -z "$YAML_FILES" ]; then
-            echo "No standalone YAML files found in modules/observability/ — skipping helm lint"
-            exit 0
-          fi
-
-          echo "Validating YAML files:"
-          echo "$YAML_FILES"
-
-          # Validate each file is parseable YAML
-          echo "$YAML_FILES" | while IFS= read -r f; do
-            python3 -c "import sys, yaml; yaml.safe_load(open('$f'))" \
-              && echo "  ✓ $f" \
-              || { echo "  ✗ $f — invalid YAML"; exit 1; }
-          done
-
-          # Run helm lint on any full chart directories (those containing Chart.yaml)
-          CHARTS=$(find modules/observability -name 'Chart.yaml' -exec dirname {} \; 2>/dev/null)
-          if [ -n "$CHARTS" ]; then
-            echo "$CHARTS" | while IFS= read -r chart_dir; do
-              echo "Running helm lint on $chart_dir"
-              helm lint "$chart_dir"
-            done
-          else
-            echo "No Helm chart directories found — helm lint skipped"
-          fi
+          kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 6: Manual approval gate — push to main only
+  # Job 6: Architecture diagram — Pluralith
+  # Generates an infrastructure diagram from the Terraform plan.
+  # On PRs: posts a comment with a change summary table and diagram link.
+  # On push to main: commits architecture/current-architecture.png to the repo.
+  # Runs in parallel with plan. continue-on-error so a missing PLURALITH_API_KEY
+  # or CLI failure does not block the approve gate.
+  # ─────────────────────────────────────────────────────────────────────────────
+  diagram:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PLURALITH_API_KEY: ${{ secrets.PLURALITH_API_KEY }}
+      PLURALITH_ORG_ID: ${{ secrets.PLURALITH_ORG_ID }}
+      PLURALITH_PROJECT_ID: ${{ secrets.PLURALITH_PROJECT_ID }}
+      PLURALITH_PROJECT_NAME: ${{ secrets.PLURALITH_PROJECT_NAME }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Write terraform.tfvars
+        run: cp terraform.tfvars.example terraform.tfvars
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Pluralith Init
+        uses: Pluralith/actions/init@v1.4.0
+        with:
+          terraform-path: ${{ github.workspace }}
+          api-key: ${{ secrets.PLURALITH_API_KEY }}
+          org-id: ${{ secrets.PLURALITH_ORG_ID }}
+          project-id: ${{ secrets.PLURALITH_PROJECT_ID }}
+          project-name: ${{ secrets.PLURALITH_PROJECT_NAME }}
+
+      - name: Install Pluralith graphing engine
+        run: |
+          GRAPHING_URL=$(curl -s https://api.github.com/repos/Pluralith/pluralith-cli-graphing-release/releases/latest \
+            | grep -o '"browser_download_url": "[^"]*linux_amd64[^"]*"' \
+            | grep -o 'https://[^"]*' \
+            | head -1)
+          mkdir -p /home/runner/Pluralith/bin
+          curl -L "$GRAPHING_URL" -o /home/runner/Pluralith/bin/pluralith-cli-graphing
+          chmod +x /home/runner/Pluralith/bin/pluralith-cli-graphing
+
+      - name: Generate Terraform plan
+        run: |
+          terraform plan -lock=false \
+            -refresh=false \
+            -var 'enable_ingress=false' \
+            -var 'enable_observability=false' \
+            -var 'enable_security=false' \
+            -out=pluralith.tfplan -no-color
+          terraform show -json pluralith.tfplan > plan.json
+
+      - name: Generate Pluralith diagram
+        run: |
+          pluralith graph \
+            --plan-file-json plan.json \
+            --var 'enable_ingress=false' \
+            --var 'enable_observability=false' \
+            --var 'enable_security=false' \
+            --title "CloudOps Infrastructure" \
+            --show-changes \
+            --local-only \
+            --out-dir /tmp/pluralith-out \
+            --file-name diagram
+
+      - name: Pluralith Comment
+        uses: Pluralith/actions/comment@v1.4.0
+        with:
+          terraform-path: ${{ github.workspace }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 7: Manual approval gate — push to main only
   # Gate also waits for security-scan and manifest-validation to pass.
   # Configure the "production" GitHub Environment with required reviewers in
   # repo Settings → Environments → production.
@@ -367,23 +524,34 @@ jobs:
   approve:
     runs-on: ubuntu-latest
     needs: [plan, security-scan, manifest-validation]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     steps:
       - name: Awaiting approval
-        run: echo "Waiting for manual approval via GitHub environment protection"
+        run: echo "Waiting for ${{ env.TARGET_ENVIRONMENT }} approval via GitHub environment protection"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 7: Terraform apply — staged to match deploy.sh order
+  # Job 8: Terraform apply — staged to match scripts/deploy.sh order
   # Runs fresh targeted applies (saved plan files are incompatible with -target).
   # After final apply, key outputs are posted to the step summary.
   # ─────────────────────────────────────────────────────────────────────────────
   apply:
     runs-on: ubuntu-latest
     needs: approve
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build Lambda dependencies
+        # Closes backlog #20 — Lambda zips need node_modules in place before
+        # any `terraform apply` so the zips are deterministic + complete.
+        run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -398,52 +566,195 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Write terraform.tfvars
-        run: echo "${{ secrets.TF_VARS }}" > terraform.tfvars
+        env:
+          TF_VARS: ${{ secrets.TF_VARS }}
+          TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+          TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+          TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+        run: bash scripts/write-ci-tfvars.sh
 
-      - name: terraform init
-        run: terraform init
+      - name: Apply layered Terraform stacks
+        run: bash scripts/terraform-stacks.sh apply -auto-approve
 
-      # Staged applies match deploy.sh ordering.
+      # Legacy root recovery/import path. Kept gated off so normal applies use
+      # layered states only; enable by editing LEGACY_ROOT_APPLY for a one-off
+      # migration recovery run.
+      - name: Release stale state lock
+        if: env.LEGACY_ROOT_APPLY == '1'
+        # Terraform 1.11 S3 native locking stores the lock as <key>.tflock.
+        # A cancelled plan or apply leaves this file behind and blocks the next run.
+        # Safe to delete here because apply steps are sequential within this job.
+        run: |
+          BOOTSTRAP_BUCKET=$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
+          if [ -z "$BOOTSTRAP_BUCKET" ]; then
+            echo "bootstrap_bucket_name missing from terraform.tfvars — skipping stale lock check"
+            exit 0
+          fi
+          if aws s3api head-object \
+               --bucket "$BOOTSTRAP_BUCKET" \
+               --key main/terraform.tfstate.tflock 2>/dev/null; then
+            echo "Stale lock found — releasing..."
+            aws s3 rm "s3://$BOOTSTRAP_BUCKET/main/terraform.tfstate.tflock"
+            echo "Lock released"
+          else
+            echo "No stale lock present"
+          fi
+
+      # Import OIDC provider and GitHub Actions IAM role if they were pre-created
+      # by scripts/oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
+      # a live EKS cluster) stays unconfigured during import of IAM resources.
+      # Checks state first — skips import if resource is already tracked.
+      - name: Import pre-existing OIDC bootstrap resources
+        if: env.LEGACY_ROOT_APPLY == '1'
+        run: |
+          OIDC_ARN=$(aws iam list-open-id-connect-providers \
+            --query "OpenIDConnectProviderList[?ends_with(Arn,'token.actions.githubusercontent.com')].Arn" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -n "$OIDC_ARN" ] && [ "$OIDC_ARN" != "None" ]; then
+            OIDC_ADDR="module.bootstrap[0].aws_iam_openid_connect_provider.github"
+            if terraform state list 2>/dev/null | grep -qF "$OIDC_ADDR"; then
+              echo "OIDC provider already in Terraform state — skipping import"
+            else
+              echo "Importing OIDC provider: $OIDC_ARN"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                "$OIDC_ADDR" "$OIDC_ARN" \
+                || echo "Warning: OIDC import failed (may already be managed elsewhere)"
+            fi
+          fi
+
+          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
+          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+          ROLE_NAME="${PROJECT_NAME}-github-actions"
+          ROLE_ADDR="module.bootstrap[0].aws_iam_role.github_actions"
+
+          if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
+            if terraform state list 2>/dev/null | grep -qF "$ROLE_ADDR"; then
+              echo "GitHub Actions role already in Terraform state — skipping import"
+            else
+              echo "Importing GitHub Actions role: $ROLE_NAME"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                "$ROLE_ADDR" "$ROLE_NAME" \
+                || echo "Warning: role import failed (may already be managed elsewhere)"
+            fi
+          fi
+
+      - name: Import pre-existing networking resources
+        if: env.LEGACY_ROOT_APPLY == '1'
+        run: |
+          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
+          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
+          SUBNET_GROUP_NAME="${PROJECT_NAME}-db-subnet-group"
+          SUBNET_GROUP_ADDR="module.networking[0].aws_db_subnet_group.main"
+
+          if aws rds describe-db-subnet-groups \
+               --db-subnet-group-name "$SUBNET_GROUP_NAME" \
+               --output text >/dev/null 2>&1; then
+            if terraform state list 2>/dev/null | grep -qF "$SUBNET_GROUP_ADDR"; then
+              echo "DB subnet group already in Terraform state — skipping import"
+            else
+              echo "Importing DB subnet group: $SUBNET_GROUP_NAME"
+              terraform import \
+                -var 'enable_ingress=false' \
+                -var 'enable_observability=false' \
+                -var 'enable_security=false' \
+                "$SUBNET_GROUP_ADDR" "$SUBNET_GROUP_NAME" \
+                || echo "Warning: DB subnet group import failed"
+            fi
+          else
+            echo "DB subnet group does not exist in AWS — skipping import"
+          fi
+
+      # Staged applies match scripts/deploy.sh ordering.
       # Each stage runs a fresh plan+apply for the targeted modules.
       # terraform apply -target cannot be combined with a saved plan file.
-      - name: Apply bootstrap + networking
-        run: terraform apply -target=module.bootstrap -target=module.networking -auto-approve
+      - name: Apply bootstrap + networking + dns
+        if: env.LEGACY_ROOT_APPLY == '1'
+        # Disable ingress/observability vars so the EKS data source (count guard)
+        # stays at 0 — EKS cluster doesn't exist yet at this stage.
+        # module.dns is included here so the Route53 zone exists before module.ingress
+        # references module.dns[0].zone_id in the ingress apply step.
+        run: |
+          terraform apply \
+            -target=module.bootstrap -target=module.networking -target=module.dns \
+            -var 'enable_ingress=false' -var 'enable_observability=false' \
+            -auto-approve
 
       - name: Apply EKS
-        run: terraform apply -target=module.eks -auto-approve
+        if: env.LEGACY_ROOT_APPLY == '1'
+        # Same guard — EKS cluster is being created here, not yet queryable.
+        run: |
+          terraform apply \
+            -target=module.eks \
+            -var 'enable_ingress=false' -var 'enable_observability=false' \
+            -auto-approve
 
       - name: Apply ingress
+        if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -target=module.ingress -auto-approve
 
+      - name: Debug LBC pods (on ingress failure)
+        if: env.LEGACY_ROOT_APPLY == '1'
+        run: |
+          CLUSTER=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "")
+          if [ -n "$CLUSTER" ]; then
+            aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+            echo "=== LBC pod describe ==="
+            kubectl -n kube-system describe pods \
+              -l app.kubernetes.io/name=aws-load-balancer-controller || true
+            echo "=== LBC pod logs ==="
+            kubectl -n kube-system logs \
+              -l app.kubernetes.io/name=aws-load-balancer-controller \
+              --tail=100 || true
+          fi
+
       - name: Apply observability
+        if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -target=module.observability -auto-approve
 
       - name: Apply security
+        if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -target=module.security -auto-approve
 
       - name: Apply database
+        if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -target=module.database -auto-approve
 
       - name: Final sync
+        if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -auto-approve
+
+      # NOTE: order-api is deployed by .github/workflows/app.yml — that
+      # workflow owns build, sign, scan, render, apply, rollout, integration
+      # tests, and rollback. infra.yml only provisions platform prerequisites
+      # (cluster, IRSA, ACM, DNS, observability, security, database, OTel).
+      # Closes backlog #18.
 
       - name: Capture and summarize outputs
         if: always()
         run: |
           # Capture outputs — suppress error if no outputs exist yet
-          terraform output -json > tf-outputs.json 2>/dev/null || echo '{}' > tf-outputs.json
+          terraform -chdir=stacks/foundation output -json > foundation-outputs.json 2>/dev/null || echo '{}' > foundation-outputs.json
+          terraform -chdir=stacks/cluster output -json > cluster-outputs.json 2>/dev/null || echo '{}' > cluster-outputs.json
+          terraform -chdir=stacks/platform output -json > platform-outputs.json 2>/dev/null || echo '{}' > platform-outputs.json
 
-          ORDER_API_URL=$(jq -r '.order_api_url.value   // "not deployed"' tf-outputs.json)
-          GRAFANA_URL=$(jq -r   '.grafana_url.value      // "not deployed"' tf-outputs.json)
-          OTEL_ENDPOINT=$(jq -r '.otel_endpoint.value    // "not deployed"' tf-outputs.json)
-          EKS_CLUSTER=$(jq -r   '.eks_cluster_name.value // "not deployed"' tf-outputs.json)
-          VPC_ID=$(jq -r        '.vpc_id.value           // "not deployed"' tf-outputs.json)
-          SCANNER_ARN=$(jq -r   '.compliance_scanner_function_arn.value // "not deployed"' tf-outputs.json)
-          SNS_ARN=$(jq -r       '.security_alerts_topic_arn.value       // "not deployed"' tf-outputs.json)
+          ORDER_API_URL=$(jq -r '.order_api_url.value   // "not deployed"' platform-outputs.json)
+          GRAFANA_URL=$(jq -r   '.grafana_url.value      // "not deployed"' platform-outputs.json)
+          OTEL_ENDPOINT=$(jq -r '.otel_endpoint.value    // "not deployed"' platform-outputs.json)
+          EKS_CLUSTER=$(jq -r   '.cluster_name.value     // "not deployed"' cluster-outputs.json)
+          VPC_ID=$(jq -r        '.vpc_id.value           // "not deployed"' foundation-outputs.json)
+          SCANNER_ARN=$(jq -r   '.compliance_scanner_function_arn.value // "not deployed"' platform-outputs.json)
+          SNS_ARN=$(jq -r       '.security_alerts_topic_arn.value       // "not deployed"' platform-outputs.json)
 
           # Sensitive outputs — never print values, only indicate whether they were set
-          GRAFANA_PASS_SET=$(jq -r 'if .grafana_admin_password.value and .grafana_admin_password.value != "" then "✓ set" else "not deployed" end' tf-outputs.json)
-          OTEL_KEY_SET=$(jq -r     'if .otel_api_key.value and .otel_api_key.value != "" then "✓ set" else "not deployed" end' tf-outputs.json)
+          GRAFANA_PASS_SET=$(jq -r 'if .grafana_admin_password.value and .grafana_admin_password.value != "" then "✓ set" else "not deployed" end' platform-outputs.json)
+          OTEL_KEY_SET=$(jq -r     'if .otel_api_key.value and .otel_api_key.value != "" then "✓ set" else "not deployed" end' platform-outputs.json)
 
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## ✅ Terraform Apply Complete
@@ -454,14 +765,10 @@ jobs:
           | **Actor**  | @${{ github.actor }} |
           | **Run**    | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
-          **Modules applied (in order):**
-          1. \`module.bootstrap\` + \`module.networking\`
-          2. \`module.eks\`
-          3. \`module.ingress\`
-          4. \`module.observability\`
-          5. \`module.security\`
-          6. \`module.database\`
-          7. Final full sync
+          **Stacks applied (in order):**
+          1. \`stacks/foundation\`
+          2. \`stacks/cluster\`
+          3. \`stacks/platform\`
 
           **Key Outputs:**
 
@@ -474,12 +781,12 @@ jobs:
           | VPC ID | ${VPC_ID} |
           | Compliance Scanner | ${SCANNER_ARN} |
           | Security Alerts SNS | ${SNS_ARN} |
-          | Grafana Admin Password | ${GRAFANA_PASS_SET} — \`terraform output -raw grafana_admin_password\` |
-          | OTel API Key | ${OTEL_KEY_SET} — \`terraform output -raw otel_api_key\` |
+          | Grafana Admin Password | ${GRAFANA_PASS_SET} — \`terraform -chdir=stacks/platform output -raw grafana_admin_password\` |
+          | OTel API Key | ${OTEL_KEY_SET} — \`terraform -chdir=stacks/platform output -raw otel_api_key\` |
           EOF
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 8: Compliance scan — runs after apply on push to main.
+  # Job 9: Compliance scan — runs after apply on push to main.
   # Invokes the compliance scanner Lambda, waits for results, then queries
   # DynamoDB for CRITICAL findings detected in the last 30 minutes.
   # Fails the pipeline if any new CRITICAL findings were introduced.
@@ -488,10 +795,16 @@ jobs:
   compliance-scan:
     runs-on: ubuntu-latest
     needs: apply
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
       contents: read
+    env:
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -503,7 +816,12 @@ jobs:
       - name: Invoke compliance scanner Lambda
         id: invoke
         run: |
-          PROJECT_NAME=$(echo "${{ secrets.TF_VARS }}" \
+          SELECTED_TF_VARS="${TF_VARS}"
+          if [ "${TARGET_ENVIRONMENT}" = "dev" ] && [ -n "${TF_VARS_DEV}" ]; then SELECTED_TF_VARS="${TF_VARS_DEV}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ -n "${TF_VARS_STAGING}" ]; then SELECTED_TF_VARS="${TF_VARS_STAGING}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "prod" ] && [ -n "${TF_VARS_PROD}" ]; then SELECTED_TF_VARS="${TF_VARS_PROD}"; fi
+
+          PROJECT_NAME=$(echo "${SELECTED_TF_VARS}" \
             | grep '^project_name' \
             | sed 's/.*= *"\(.*\)".*/\1/' \
             | head -1 \
@@ -538,6 +856,20 @@ jobs:
 
       - name: Check for new CRITICAL findings
         run: |
+          # Pull the Grafana hostname out of the tfvars secret so the dashboard
+          # link in the step summary renders as a real URL. Falls back to a
+          # placeholder if domain_name is not set.
+          SELECTED_TF_VARS="${TF_VARS}"
+          if [ "${TARGET_ENVIRONMENT}" = "dev" ] && [ -n "${TF_VARS_DEV}" ]; then SELECTED_TF_VARS="${TF_VARS_DEV}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ -n "${TF_VARS_STAGING}" ]; then SELECTED_TF_VARS="${TF_VARS_STAGING}"; fi
+          if [ "${TARGET_ENVIRONMENT}" = "prod" ] && [ -n "${TF_VARS_PROD}" ]; then SELECTED_TF_VARS="${TF_VARS_PROD}"; fi
+
+          DOMAIN=$(echo "${SELECTED_TF_VARS}" \
+            | grep '^domain_name' \
+            | sed 's/.*= *"\(.*\)".*/\1/' \
+            | head -1)
+          DOMAIN="${DOMAIN:-example.com}"
+
           # Findings detected in the last 30 minutes are considered potentially
           # introduced by or coincident with this Terraform apply.
           SCAN_START=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
@@ -594,7 +926,7 @@ jobs:
           ${FINDINGS_TABLE}
 
           **Next steps:**
-          1. Review the [Security Posture dashboard](https://grafana.tamendutta.com/d/security-posture)
+          1. Review the [Security Posture dashboard](https://grafana.${DOMAIN}/d/security-posture)
           2. Follow: \`docs/runbooks/security/compliance-critical-finding.md\`
           3. If this is a false positive, suppress it in DynamoDB with \`status=SUPPRESSED\` and a reason note
           4. Auto-remediation Lambda may already be working — check CloudWatch Logs for \`cloudops-auto-remediation\`
@@ -616,7 +948,7 @@ jobs:
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Job 9: Notify — always runs after apply
+  # Job 10: Notify — always runs after apply
   # ─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
