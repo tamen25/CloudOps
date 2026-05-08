@@ -248,7 +248,7 @@ if [ "$ENABLE_EKS" = "true" ] && [ "$ENABLE_INGRESS" = "true" ] && [ "$ENABLE_OB
         export API_KEY_SECRET_ARN="${ORDER_API_KEY_SECRET_ARN:-}"
 
         aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" >/dev/null
-        node ./apps/order-api/scripts/render-k8s.js ./apps/order-api/k8s /tmp/order-api-k8s
+        ./apps/order-api/node_modules/.bin/tsx ./apps/order-api/scripts/render-k8s.ts ./apps/order-api/k8s /tmp/order-api-k8s
         kubectl apply -f /tmp/order-api-k8s/
         kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s
 

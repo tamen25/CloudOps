@@ -203,6 +203,17 @@ module "dns" {
   tags        = local.common_tags
 }
 
+module "codeartifact" {
+  count  = var.enable_codeartifact ? 1 : 0
+  source = "./modules/codeartifact"
+
+  domain_name      = var.codeartifact_domain_name != "" ? var.codeartifact_domain_name : lower("${var.project_name}-${var.environment}")
+  repository_names = var.codeartifact_repository_names
+  kms_key_arn      = var.codeartifact_kms_key_arn
+
+  tags = local.common_tags
+}
+
 # Networking Module
 
 module "networking" {

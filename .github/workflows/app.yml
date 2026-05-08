@@ -78,10 +78,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: apps/order-api/package-lock.json
 
@@ -101,8 +101,8 @@ jobs:
         run: npm run contract-check
         working-directory: apps/order-api
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with 100% line coverage
+        run: npm run test:coverage
         working-directory: apps/order-api
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -114,10 +114,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/order-api/package-lock.json
+
+      # Install order-api deps so apps/order-api/node_modules/.bin/tsx is
+      # available for the TS render script (closes backlog #64).
+      - name: Install order-api deps
+        run: npm ci
+        working-directory: apps/order-api
 
       - name: Render Kubernetes manifests
         env:
@@ -144,7 +152,7 @@ jobs:
           OIDC_AUDIENCE: ""
           OIDC_JWKS_URL: ""
           OIDC_REQUIRED_SCOPES: ""
-        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+        run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
       # kubeval is unmaintained; switched to the actively maintained
       # kubeconform fork (closes backlog #35 + #39 — version pinned, no
@@ -692,6 +700,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # tsx is required to run the TS render-k8s script (closes backlog #64).
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/order-api/package-lock.json
+
+      - name: Install order-api deps
+        run: npm ci
+        working-directory: apps/order-api
+
       - name: Validate promotion input
         # Closes backlog #54 — when promoting, the digest must be a real
         # sha256 to prevent a typo from selecting an unintended image.
@@ -835,7 +855,7 @@ jobs:
       - name: Render Kubernetes manifests
         env:
           ORDER_API_IMAGE: ${{ env.IMAGE_REF }}
-        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+        run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
       - name: Run DB migration Job
         run: |

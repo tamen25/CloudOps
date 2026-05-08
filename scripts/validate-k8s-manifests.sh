@@ -83,7 +83,7 @@ OIDC_ISSUER= \
 OIDC_AUDIENCE= \
 OIDC_JWKS_URL= \
 OIDC_REQUIRED_SCOPES= \
-  node apps/order-api/scripts/render-k8s.js apps/order-api/k8s "$RENDER_OUT"
+  apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$RENDER_OUT"
 
 # ── 3. Validate ──────────────────────────────────────────────────────────────
 echo "Running kubeconform (kubernetes ${KUBE_VERSION}) ..."

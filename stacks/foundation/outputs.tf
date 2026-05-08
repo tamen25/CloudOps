@@ -26,6 +26,18 @@ output "route53_name_servers" {
 }
 
 # ── Networking ───────────────────────────────────────────────────────────────
+output "codeartifact_domain_name" {
+  value = var.enable_codeartifact ? module.codeartifact[0].domain_name : ""
+}
+
+output "codeartifact_repository_names" {
+  value = var.enable_codeartifact ? module.codeartifact[0].repository_names : {}
+}
+
+output "codeartifact_repository_arns" {
+  value = var.enable_codeartifact ? module.codeartifact[0].repository_arns : {}
+}
+
 output "vpc_id" {
   value = var.enable_networking ? module.networking[0].vpc_id : null
 }

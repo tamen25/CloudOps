@@ -1,6 +1,6 @@
 # Foundation stack variables — subset of root variables.tf relevant to the
 # AWS-only resources owned by this stack (bootstrap, dns, networking,
-# database, compliance, backup). Closes backlog #16.
+# database, compliance, backup, codeartifact). Closes backlog #16.
 #
 # Most values mirror the root tfvars file; reuse the same `terraform.tfvars`
 # at the repo root so the operator only maintains one source of truth.
@@ -66,6 +66,11 @@ variable "enable_backup" {
   default = false
 }
 
+variable "enable_codeartifact" {
+  type    = bool
+  default = false
+}
+
 # ── Bootstrap ────────────────────────────────────────────────────────────────
 
 variable "bootstrap_bucket_name" {
@@ -115,6 +120,23 @@ variable "github_token" {
 }
 
 variable "security_github_repo" {
+  type    = string
+  default = ""
+}
+
+# ── CodeArtifact ────────────────────────────────────────────────────────────
+
+variable "codeartifact_domain_name" {
+  type    = string
+  default = ""
+}
+
+variable "codeartifact_repository_names" {
+  type    = list(string)
+  default = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+}
+
+variable "codeartifact_kms_key_arn" {
   type    = string
   default = ""
 }

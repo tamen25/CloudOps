@@ -2,17 +2,19 @@
   "name": "order-api",
   "version": "1.0.0",
   "description": "CloudOps Order Processing API",
-  "main": "src/server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "migrate": "node src/migrate.js",
-    "test": "node --test",
-    "lint": "eslint src test",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "migrate": "node dist/migrate.js",
+    "test": "tsx --test test/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/server.ts\" --test-coverage-exclude=\"src/migrate.ts\" --test-coverage-exclude=\"src/tracing.ts\" --test-coverage-lines=100 --test-coverage-branches=85 --test-coverage-functions=90 test/*.test.ts",
+    "lint": "eslint src test scripts",
     "audit": "npm audit --audit-level=high",
-    "contract-check": "node scripts/contract-check.js"
+    "contract-check": "tsx scripts/contract-check.ts"
   },
-  "keywords": ["express", "api", "eks", "kubernetes"],
+  "keywords": ["express", "api", "eks", "kubernetes", "typescript"],
   "author": "CloudOps",
   "license": "MIT",
   "dependencies": {
@@ -32,9 +34,16 @@
     "prom-client": "^15.1.0"
   },
   "devDependencies": {
-    "eslint": "^9.16.0"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@types/pg": "^8.11.6",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.16.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   }
 }

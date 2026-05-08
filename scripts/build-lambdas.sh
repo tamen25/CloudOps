@@ -34,9 +34,34 @@ needs_install() {
   awk -v a="$pkg_mtime" -v b="$nm_mtime" 'BEGIN { exit !(a > b) }'
 }
 
+login_codeartifact() {
+  if [[ -z "${CODEARTIFACT_DOMAIN:-}" || -z "${CODEARTIFACT_REPOSITORY:-}" ]]; then
+    return
+  fi
+
+  if ! command -v aws >/dev/null 2>&1; then
+    echo "aws CLI is required when CODEARTIFACT_DOMAIN is set" >&2
+    exit 1
+  fi
+
+  local owner="${CODEARTIFACT_DOMAIN_OWNER:-}"
+  if [[ -z "$owner" ]]; then
+    owner="$(aws sts get-caller-identity --query Account --output text)"
+  fi
+
+  echo "Logging npm into CodeArtifact: ${CODEARTIFACT_DOMAIN}/${CODEARTIFACT_REPOSITORY}"
+  aws codeartifact login \
+    --tool npm \
+    --domain "$CODEARTIFACT_DOMAIN" \
+    --domain-owner "$owner" \
+    --repository "$CODEARTIFACT_REPOSITORY"
+}
+
 main() {
   local force="${FORCE_REBUILD:-0}"
   local installed=0 skipped=0
+  login_codeartifact
+
   for dir in "${LAMBDA_DIRS[@]}"; do
     if [ ! -f "$dir/package.json" ]; then
       echo "- $dir (no package.json — skip)"

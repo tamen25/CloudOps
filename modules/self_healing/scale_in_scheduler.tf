@@ -148,7 +148,7 @@ resource "aws_lambda_function" "scale_in_scheduler" {
   #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-scale-in-scheduler"
   role             = aws_iam_role.scale_in_scheduler.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   timeout          = 60
   memory_size      = 128

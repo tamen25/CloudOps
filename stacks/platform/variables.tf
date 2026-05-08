@@ -76,6 +76,26 @@ variable "enable_finops" {
   default = false
 }
 
+variable "enable_codeartifact" {
+  type    = bool
+  default = false
+}
+
+variable "codeartifact_domain_name" {
+  type    = string
+  default = ""
+}
+
+variable "codeartifact_repository_names" {
+  type    = list(string)
+  default = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+}
+
+variable "codeartifact_kms_key_arn" {
+  type    = string
+  default = ""
+}
+
 variable "enable_self_healing" {
   type    = bool
   default = false

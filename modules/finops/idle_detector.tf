@@ -32,7 +32,7 @@ resource "aws_lambda_function" "idle_detector" {
 
   role        = aws_iam_role.idle_detector.arn
   handler     = "index.handler"
-  runtime     = "nodejs20.x"
+  runtime     = "nodejs22.x"
   timeout     = 120
   memory_size = 256
 

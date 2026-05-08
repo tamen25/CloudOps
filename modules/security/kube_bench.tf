@@ -185,7 +185,7 @@ resource "kubernetes_service_account" "kube_bench" {
 }
 
 # ── ConfigMap — dispatcher script for the main container ──────────────────────
-# Runs inside node:20-alpine, reads kube-bench JSON output, invokes the Lambda.
+# Runs inside node:22-alpine, reads kube-bench JSON output, invokes the Lambda.
 
 resource "kubernetes_config_map" "kube_bench_script" {
   metadata {
@@ -347,7 +347,7 @@ resource "aws_lambda_function" "kube_bench_processor" {
 
   filename         = data.archive_file.kube_bench_processor.output_path
   source_code_hash = data.archive_file.kube_bench_processor.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.kube_bench_processor.arn
 
@@ -459,7 +459,7 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
             # ── Main container — Node.js dispatcher → Lambda invoke ────────────
             container {
               name  = "processor"
-              image = "node:20-alpine"
+              image = "node:22-alpine"
 
               # Install @aws-sdk/client-lambda at runtime, then run the dispatcher
               command = ["/bin/sh", "-c"]

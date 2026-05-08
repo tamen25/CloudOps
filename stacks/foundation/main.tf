@@ -1,6 +1,6 @@
 # Foundation stack — closes backlog #16 (layer 1 of 3).
 #
-# Owns: bootstrap, dns, networking, database, compliance, backup.
+# Owns: bootstrap, dns, codeartifact, networking, database, compliance, backup.
 # Provider scope: aws + random only — no kubernetes/helm here, so this
 # stack plans cleanly against any environment without a cluster.
 
@@ -50,6 +50,17 @@ module "dns" {
   domain_name = var.domain_name
   environment = var.environment
   tags        = local.common_tags
+}
+
+module "codeartifact" {
+  count  = var.enable_codeartifact ? 1 : 0
+  source = "../../modules/codeartifact"
+
+  domain_name      = var.codeartifact_domain_name != "" ? var.codeartifact_domain_name : lower("${var.project_name}-${var.environment}")
+  repository_names = var.codeartifact_repository_names
+  kms_key_arn      = var.codeartifact_kms_key_arn
+
+  tags = local.common_tags
 }
 
 module "networking" {

@@ -49,6 +49,22 @@ output "route53_name_servers" {
   value       = !var.destroy_all ? module.dns[0].name_servers : null
 }
 
+# CodeArtifact
+output "codeartifact_domain_name" {
+  description = "CodeArtifact domain name for CloudOps client libraries."
+  value       = var.enable_codeartifact ? module.codeartifact[0].domain_name : ""
+}
+
+output "codeartifact_repository_names" {
+  description = "CodeArtifact repository names keyed by logical repository name."
+  value       = var.enable_codeartifact ? module.codeartifact[0].repository_names : {}
+}
+
+output "codeartifact_repository_arns" {
+  description = "CodeArtifact repository ARNs keyed by logical repository name."
+  value       = var.enable_codeartifact ? module.codeartifact[0].repository_arns : {}
+}
+
 # Database
 output "database_endpoint" {
   description = "Primary RDS instance endpoint (host:port)"

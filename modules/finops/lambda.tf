@@ -28,7 +28,7 @@ resource "aws_lambda_function" "cost_ingestion" {
 
   role        = aws_iam_role.cost_ingestion.arn
   handler     = "index.handler"
-  runtime     = "nodejs20.x"
+  runtime     = "nodejs22.x"
   timeout     = 300
   memory_size = 512
 

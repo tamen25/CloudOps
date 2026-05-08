@@ -38,7 +38,7 @@ resource "aws_lambda_function" "error_budget_tracker" {
 
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.lambda.arn
 

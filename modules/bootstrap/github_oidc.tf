@@ -74,6 +74,35 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
+    sid    = "CodeArtifactPublish"
+    effect = "Allow"
+    actions = [
+      "codeartifact:DescribeDomain",
+      "codeartifact:DescribeRepository",
+      "codeartifact:GetAuthorizationToken",
+      "codeartifact:GetRepositoryEndpoint",
+      "codeartifact:ListPackageVersions",
+      "codeartifact:PublishPackageVersion",
+      "codeartifact:PutPackageMetadata",
+      "codeartifact:ReadFromRepository",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "CodeArtifactServiceBearerToken"
+    effect    = "Allow"
+    actions   = ["sts:GetServiceBearerToken"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "sts:AWSServiceName"
+      values   = ["codeartifact.amazonaws.com"]
+    }
+  }
+
+  statement {
     sid    = "EKSRead"
     effect = "Allow"
     actions = [

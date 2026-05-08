@@ -33,7 +33,7 @@ resource "aws_lambda_function" "compliance_scanner" {
 
   filename         = data.archive_file.compliance_scanner.output_path
   source_code_hash = data.archive_file.compliance_scanner.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.compliance_scanner.arn
 

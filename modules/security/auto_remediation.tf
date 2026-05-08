@@ -41,7 +41,7 @@ resource "aws_lambda_function" "auto_remediation" {
 
   filename         = data.archive_file.auto_remediation.output_path
   source_code_hash = data.archive_file.auto_remediation.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.auto_remediation.arn
 

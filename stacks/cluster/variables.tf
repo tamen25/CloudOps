@@ -38,6 +38,26 @@ variable "enable_eks" {
 
 # Bring-your-own networking (used when foundation stack is not the source —
 # legacy migration only). The standard path reads from foundation outputs.
+variable "enable_codeartifact" {
+  type    = bool
+  default = false
+}
+
+variable "codeartifact_domain_name" {
+  type    = string
+  default = ""
+}
+
+variable "codeartifact_repository_names" {
+  type    = list(string)
+  default = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+}
+
+variable "codeartifact_kms_key_arn" {
+  type    = string
+  default = ""
+}
+
 variable "use_remote_state_foundation" {
   description = "When true, read VPC/subnet/SG IDs from foundation stack remote state. False = use existing_* vars."
   type        = bool

@@ -1,0 +1,27 @@
+{
+  "name": "@cloudops/otel-traces",
+  "version": "0.1.0",
+  "description": "CloudOps OpenTelemetry traces helper for Node.js.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test"
+  },
+  "keywords": [
+    "cloudops",
+    "opentelemetry",
+    "traces"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

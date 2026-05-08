@@ -33,7 +33,7 @@ resource "aws_lambda_function" "self_healing_controller" {
   #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-self-healing-controller"
   role             = aws_iam_role.self_healing.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   timeout          = 120
   memory_size      = 256

@@ -51,6 +51,12 @@ variable "enable_finops" {
   default     = false
 }
 
+variable "enable_codeartifact" {
+  description = "Enable/disable CodeArtifact domain and package repositories for CloudOps client libraries."
+  type        = bool
+  default     = false
+}
+
 variable "enable_self_healing" {
   description = "Enable/disable self-healing module (CloudWatch Alarm-driven automated remediation — requires enable_eks and enable_observability first)"
   type        = bool
@@ -898,6 +904,26 @@ variable "bootstrap_additional_policy_arns" {
   description = "Additional IAM policy ARNs for deployer role"
   type        = list(string)
   default     = []
+}
+
+# CodeArtifact package repository variables
+
+variable "codeartifact_domain_name" {
+  description = "CodeArtifact domain name for CloudOps client libraries. Empty defaults to <project_name>-<environment>."
+  type        = string
+  default     = ""
+}
+
+variable "codeartifact_repository_names" {
+  description = "CodeArtifact repository names to create for language package formats."
+  type        = list(string)
+  default     = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+}
+
+variable "codeartifact_kms_key_arn" {
+  description = "Optional KMS key ARN for CodeArtifact domain encryption. Empty uses the AWS-managed key."
+  type        = string
+  default     = ""
 }
 
 # Database Module Variables

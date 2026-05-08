@@ -21,7 +21,7 @@ The choice of runtime (Node.js vs Python vs Go) would apply uniformly across all
 
 ## Decision
 
-All Lambda functions use Node.js 20.x with AWS SDK v3.
+All Lambda functions use Node.js 22.x with AWS SDK v3.
 
 **Consistency with order-api.** The order-api is a Node.js/Express service using `@aws-sdk/client-secrets-manager` for database credentials and `prom-client` for metrics. The Lambda functions use the same AWS SDK v3 packages. When debugging an issue that crosses the application/infrastructure boundary, a single engineer can read all relevant code without a context switch between Python and JavaScript. The `package.json` dependency format, `require()` module loading, and `async/await` patterns are identical.
 
@@ -33,7 +33,7 @@ All Lambda functions use Node.js 20.x with AWS SDK v3.
 
 **npm install packaging.** All functions use `null_resource` + `archive_file` for packaging: trigger on `package.json` and `index.js` hashes, run `npm install --omit=dev`, zip the directory. This pattern is consistent across all Lambda modules. Python would use `pip install -t` instead, a different directory structure, and different exclusion patterns — additional complexity for no benefit.
 
-The notable downside: AWS SDK v3 is **not** included in the Node.js 20.x Lambda runtime (unlike Python's boto3, which is bundled). Every Lambda package must include its `node_modules`. This increases deployment package size by ~5-15MB per function depending on which SDK clients are imported. We accept this because the per-function tree-shaking benefit outweighs the size cost for our deployment frequency.
+The notable downside: AWS SDK v3 is **not** included in the Node.js 22.x Lambda runtime (unlike Python's boto3, which is bundled). Every Lambda package must include its `node_modules`. This increases deployment package size by ~5-15MB per function depending on which SDK clients are imported. We accept this because the per-function tree-shaking benefit outweighs the size cost for our deployment frequency.
 
 ## Consequences
 

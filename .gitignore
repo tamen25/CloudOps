@@ -66,3 +66,44 @@ modules/slo/lambda_function/node_modules/
 
 # Local tool downloads (kubeconform, etc) — closes backlog #35.
 .tools/
+.cache/
+
+# Library package build output
+libraries/**/node_modules/
+libraries/**/dist/
+libraries/**/target/
+libraries/**/build/
+libraries/**/bin/
+libraries/**/obj/
+libraries/**/__pycache__/
+libraries/**/*.pyc
+libraries/**/.coverage*
+libraries/**/coverage.out
+libraries/**/coverage.xml
+libraries/**/coverage.cobertura.xml
+libraries/**/htmlcov/
+libraries/**/TestResults/
+
+# Compiled TypeScript output for the order-api app (#64).
+apps/order-api/dist/
+
+# C++ build outputs (CMake/Ninja) and gcovr reports.
+libraries/cpp/logs/build/
+libraries/cpp/logs/build-*/
+libraries/cpp/logs/coverage.html*
+libraries/cpp/logs/coverage-summary.txt
+
+# Go coverage artifacts (regenerated each run).
+libraries/go/logs/coverage.out
+libraries/go/logs/coverage.html
+libraries/go/logs/coverage-summary.txt
+
+# Local Python coverage data.
+.coverage
+
+# Java / .NET build outputs.
+libraries/java/logs/target/
+libraries/dotnet/logs/bin/
+libraries/dotnet/logs/obj/
+libraries/dotnet/logs/tests/bin/
+libraries/dotnet/logs/tests/obj/

@@ -213,11 +213,7 @@ module "observability" {
 
   acm_cert_arn          = var.enable_ingress ? module.ingress[0].certificate_arn : ""
   domain                = var.domain_name
-  zone_id               = local.route53_zone_id
   application_namespace = var.order_api_namespace
-
-  alb_dns_name = var.alb_dns_name
-  alb_zone_id  = var.alb_zone_id
 
   alert_email         = var.security_alert_email
   alert_sns_topic_arn = local.grafana_alert_contact_marker
