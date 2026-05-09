@@ -1,16 +1,17 @@
-# Drift detection — runs `terraform plan` against each layered stack of
-# each active environment, separately. Backlog #59 — replaces the previous
-# single-env / legacy-root pass.
+#This manifest defines drift detection for CloudOps.
+#Drift detection — runs `terraform plan` against each layered stack of
+#each active environment, separately. Backlog #59 — replaces the previous
+#single-env / legacy-root pass.
 #
-# Required GitHub Actions secrets:
-#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN
-#   AWS_REGION                   — AWS region (e.g. us-east-1)
-#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
-#                                — Full contents of each environment's terraform.tfvars
-#   TF_VARS                      — Optional fallback when scoped per GitHub environment
+#Required GitHub Actions secrets:
+#AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN
+#AWS_REGION                   — AWS region (e.g. us-east-1)
+#TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#— Full contents of each environment's terraform.tfvars
+#TF_VARS                      — Optional fallback when scoped per GitHub environment
 #
-# GitHub label required:
-#   drift  — created automatically on first run if absent
+#GitHub label required:
+#drift  — created automatically on first run if absent
 
 name: Drift Detection
 
@@ -40,8 +41,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Build the env list at runtime: schedule fan-outs across all envs;
-  # workflow_dispatch narrows to the operator-selected env.
+  #Build the env list at runtime: schedule fan-outs across all envs;
+  #workflow_dispatch narrows to the operator-selected env.
   plan-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -82,8 +83,8 @@ jobs:
 
       - name: Write terraform.tfvars
         env:
-          # write-ci-tfvars.sh reads TARGET_ENVIRONMENT — set from the matrix
-          # value so the scheduled fan-out works without inputs.
+          #write-ci-tfvars.sh reads TARGET_ENVIRONMENT — set from the matrix
+          #value so the scheduled fan-out works without inputs.
           TARGET_ENVIRONMENT: ${{ matrix.environment }}
           TF_VARS: ${{ secrets.TF_VARS }}
           TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}

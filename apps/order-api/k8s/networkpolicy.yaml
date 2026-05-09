@@ -1,20 +1,21 @@
-# Default-deny ingress for the app namespace, then explicit allow rules.
-# Closes backlog #26.
+#This manifest defines networkpolicy for CloudOps.
+#Default-deny ingress for the app namespace, then explicit allow rules.
+#Closes backlog #26.
 #
-# - port 3000 (http):   ALB target-type=ip writes packets directly to pod IPs
-#                       sourced from the ALB ENIs in the public subnets. The
-#                       NetworkPolicy enforcer matches by source IP, so we
-#                       allow an ipBlock = ${VPC_CIDR}. That covers ALB
-#                       ENIs + every other in-VPC source. The legacy
-#                       kube-system namespaceSelector did NOT match real
-#                       traffic and silently denied requests once the AWS
-#                       VPC CNI began enforcing NetworkPolicy.
-# - port 9090 (metrics): reachable only from the monitoring namespace (Prom).
+#- port 3000 (http):   ALB target-type=ip writes packets directly to pod IPs
+#sourced from the ALB ENIs in the public subnets. The
+#NetworkPolicy enforcer matches by source IP, so we
+#allow an ipBlock = ${VPC_CIDR}. That covers ALB
+#ENIs + every other in-VPC source. The legacy
+#kube-system namespaceSelector did NOT match real
+#traffic and silently denied requests once the AWS
+#VPC CNI began enforcing NetworkPolicy.
+#- port 9090 (metrics): reachable only from the monitoring namespace (Prom).
 #
-# Backlog #58 — egress is now explicit (was unrestricted). Default-deny
-# egress + named allows for: DNS to kube-system, RDS to the DB subnets, and
-# AWS API / OTel collector via 443 + 4317/4318. Cheap envs run the same
-# rules so egress regressions surface in dev before they hit prod.
+#Backlog #58 — egress is now explicit (was unrestricted). Default-deny
+#egress + named allows for: DNS to kube-system, RDS to the DB subnets, and
+#AWS API / OTel collector via 443 + 4317/4318. Cheap envs run the same
+#rules so egress regressions surface in dev before they hit prod.
 
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -52,7 +53,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # DNS — kube-dns / CoreDNS in kube-system.
+    #DNS — kube-dns / CoreDNS in kube-system.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -62,27 +63,27 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # RDS — anywhere inside the VPC over the DB port. Tighter scoping
-    # (DB-subnet CIDRs only) lives on the security-module-managed policy
-    # `order-api-egress-rds` in modules/security/network_policies.tf when
-    # enable_security=true.
+    #RDS — anywhere inside the VPC over the DB port. Tighter scoping
+    #(DB-subnet CIDRs only) lives on the security-module-managed policy
+    #`order-api-egress-rds` in modules/security/network_policies.tf when
+    #enable_security=true.
     - to:
         - ipBlock:
             cidr: "${VPC_CIDR}"
       ports:
         - protocol: TCP
           port: 5432
-    # AWS APIs (Secrets Manager / EKS / STS) over 443 — to anywhere, since
-    # AWS service IPs are not deterministic. Replace with VPC-endpoint CIDRs
-    # when interface endpoints are provisioned.
+    #AWS APIs (Secrets Manager / EKS / STS) over 443 — to anywhere, since
+    #AWS service IPs are not deterministic. Replace with VPC-endpoint CIDRs
+    #when interface endpoints are provisioned.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
           port: 443
-    # OTel collector — gRPC 4317 / HTTP 4318. The collector lives in the
-    # `monitoring` namespace.
+    #OTel collector — gRPC 4317 / HTTP 4318. The collector lives in the
+    #`monitoring` namespace.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -106,7 +107,7 @@ spec:
     - Ingress
   ingress:
     - from:
-        # ALB ENIs (public subnets) + every other in-VPC pod.
+        #ALB ENIs (public subnets) + every other in-VPC pod.
         - ipBlock:
             cidr: "${VPC_CIDR}"
         - namespaceSelector:

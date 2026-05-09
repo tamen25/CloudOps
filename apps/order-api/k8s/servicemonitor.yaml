@@ -1,10 +1,11 @@
+#This manifest defines servicemonitor for CloudOps.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: order-api
   namespace: "${ORDER_API_NAMESPACE}"
   labels:
-    # Must match the Prometheus operator serviceMonitorSelector label
+    #Must match the Prometheus operator serviceMonitorSelector label
     release: prometheus
 spec:
   selector:

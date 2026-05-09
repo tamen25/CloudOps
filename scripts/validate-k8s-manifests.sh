@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Renders apps/order-api/k8s with placeholder values and runs schema
-# validation locally — closes backlog #35. Mirrors what
-# .github/workflows/app.yml `manifest-validation` does in CI, so app
-# manifest changes can be smoke-tested without pushing a PR.
+#This script runs validate Kubernetes manifests automation for CloudOps.
+#Renders apps/order-api/k8s with placeholder values and runs schema
+#validation locally — closes backlog #35. Mirrors what
+#.github/workflows/app.yml `manifest-validation` does in CI, so app
+#manifest changes can be smoke-tested without pushing a PR.
 #
-# Tools used (auto-installed under .tools/ on first run):
-#   - kubeconform  v0.6.7  (preferred over kubeval — actively maintained,
-#     understands CRDs from the Kubernetes JSON Schema project)
+#Tools used (auto-installed under .tools/ on first run):
+#- kubeconform  v0.6.7  (preferred over kubeval — actively maintained,
+#understands CRDs from the Kubernetes JSON Schema project)
 #
-# Usage:
-#   ./scripts/validate-k8s-manifests.sh
+#Usage:
+#./scripts/validate-k8s-manifests.sh
 #
-# Override the kubeconform version with KUBECONFORM_VERSION=…
-# Override the K8s API version with KUBE_VERSION=v1.32.0 (default).
+#Override the kubeconform version with KUBECONFORM_VERSION=…
+#Override the K8s API version with KUBE_VERSION=v1.32.0 (default).
 
 set -euo pipefail
 
@@ -27,7 +28,7 @@ trap 'rm -rf "$RENDER_OUT"' EXIT
 
 mkdir -p "$TOOLS_DIR"
 
-# ── 1. Install kubeconform if missing ────────────────────────────────────────
+#── 1. Install kubeconform if missing ────────────────────────────────────────
 KUBECONFORM_BIN="$TOOLS_DIR/kubeconform"
 if [ ! -x "$KUBECONFORM_BIN" ]; then
   case "$(uname -s)" in
@@ -62,7 +63,7 @@ if [ ! -x "$KUBECONFORM_BIN" ]; then
   )
 fi
 
-# ── 2. Render manifests with placeholder env vars ────────────────────────────
+#── 2. Render manifests with placeholder env vars ────────────────────────────
 echo "Rendering apps/order-api/k8s → $RENDER_OUT ..."
 ORDER_API_NAMESPACE=cloudops \
 ORDER_API_SERVICE_ACCOUNT=order-api \
@@ -83,9 +84,9 @@ OIDC_ISSUER= \
 OIDC_AUDIENCE= \
 OIDC_JWKS_URL= \
 OIDC_REQUIRED_SCOPES= \
-  node apps/order-api/scripts/render-k8s.js apps/order-api/k8s "$RENDER_OUT"
+  apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$RENDER_OUT"
 
-# ── 3. Validate ──────────────────────────────────────────────────────────────
+#── 3. Validate ──────────────────────────────────────────────────────────────
 echo "Running kubeconform (kubernetes ${KUBE_VERSION}) ..."
 "$KUBECONFORM_BIN" \
   -strict \

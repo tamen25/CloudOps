@@ -1,3 +1,4 @@
+<!-- This document explains master runbook for CloudOps. -->
 # CloudOps Master Operations Runbook
 
 **Last updated:** 2026-03-27
@@ -431,6 +432,33 @@ aws lambda invoke \
 
 cat /tmp/slo-out.json | jq .
 ```
+
+### 4.x Investigate `audit_events` for a tenant or order
+
+Backlog #73 wires the order-api audit trail. Every successful and failed
+`POST /order` writes a tenant-scoped row.
+
+```bash
+# Connect via the bastion / runner-in-VPC path (see docs/private-eks-access.md).
+psql "$ORDER_API_DB_URL" <<'SQL'
+-- Recent activity for tenant `acme`.
+SELECT created_at, action, result, status_code, resource_id, error_code, metadata
+FROM audit_events
+WHERE tenant_id = 'acme'
+ORDER BY created_at DESC
+LIMIT 100;
+
+-- Trace a specific order across success + failure events.
+SELECT *
+FROM audit_events
+WHERE resource_id = 'ORD-...'
+ORDER BY created_at;
+SQL
+```
+
+RLS is FORCED on `audit_events`, so the session must run `SET app.tenant_id`
+first if the role used is not the owner. Use the app's connection pool
+helper or the `withTenant` wrapper when accessing from code.
 
 ---
 

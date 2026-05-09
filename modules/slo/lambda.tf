@@ -1,17 +1,18 @@
-# Error budget tracker Lambda — queries Prometheus SLO recording rules every 5 minutes,
-# calculates error budgets and burn rates, and publishes to CloudWatch + DynamoDB.
+#This file defines lambda settings for CloudOps.
+#Error budget tracker Lambda — queries Prometheus SLO recording rules every 5 minutes,
+#calculates error budgets and burn rates, and publishes to CloudWatch + DynamoDB.
 #
-# Lambda dependencies must be installed BEFORE `terraform apply` via:
-#   ./scripts/build-lambdas.sh
-# This used to run inline as a null_resource + local-exec; that made applies
-# executor-dependent. Closes backlog #20. The precondition below fails plan
-# fast with a clear message if the build step was skipped.
+#Lambda dependencies must be installed BEFORE `terraform apply` via:
+#./scripts/build-lambdas.sh
+#This used to run inline as a null_resource + local-exec; that made applies
+#executor-dependent. Closes backlog #20. The precondition below fails plan
+#fast with a clear message if the build step was skipped.
 #
-# NOTE — Prometheus connectivity:
-# The default Prometheus URL is cluster-internal (only reachable from within the EKS VPC).
-# To use this Lambda without VPC configuration, set prometheus_url to the Grafana datasource
-# proxy endpoint: https://grafana.<domain>/api/datasources/proxy/uid/prometheus
-# and supply grafana_api_key_secret_arn so the Lambda can authenticate.
+#NOTE — Prometheus connectivity:
+#The default Prometheus URL is cluster-internal (only reachable from within the EKS VPC).
+#To use this Lambda without VPC configuration, set prometheus_url to the Grafana datasource
+#proxy endpoint: https://grafana.<domain>/api/datasources/proxy/uid/prometheus
+#and supply grafana_api_key_secret_arn so the Lambda can authenticate.
 
 data "archive_file" "lambda" {
   type        = "zip"
@@ -19,7 +20,7 @@ data "archive_file" "lambda" {
   output_path = "${path.module}/lambda_function.zip"
 }
 
-# CloudWatch log group — created explicitly so we control retention
+#CloudWatch log group — created explicitly so we control retention
 resource "aws_cloudwatch_log_group" "lambda" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-error-budget-tracker"
@@ -28,6 +29,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags = var.tags
 }
 
+#Creates the AWS lambda function resource named error budget tracker.
 resource "aws_lambda_function" "error_budget_tracker" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -38,7 +40,7 @@ resource "aws_lambda_function" "error_budget_tracker" {
 
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.lambda.arn
 
@@ -80,7 +82,7 @@ resource "aws_lambda_function" "error_budget_tracker" {
   tags = merge(var.tags, { Name = "${var.project_name}-error-budget-tracker" })
 }
 
-# EventBridge rule — fires every 5 minutes
+#EventBridge rule — fires every 5 minutes
 resource "aws_cloudwatch_event_rule" "every_five_minutes" {
   name                = "${var.project_name}-slo-tracker-schedule"
   description         = "Triggers the SLO error-budget tracker Lambda every 5 minutes"
@@ -89,13 +91,14 @@ resource "aws_cloudwatch_event_rule" "every_five_minutes" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch event target resource named lambda.
 resource "aws_cloudwatch_event_target" "lambda" {
   rule      = aws_cloudwatch_event_rule.every_five_minutes.name
   target_id = "ErrorBudgetTrackerLambda"
   arn       = aws_lambda_function.error_budget_tracker.arn
 }
 
-# Allow EventBridge to invoke the Lambda
+#Allow EventBridge to invoke the Lambda
 resource "aws_lambda_permission" "eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"

@@ -1,11 +1,13 @@
-# Foundation stack — closes backlog #16 (layer 1 of 3).
+#This file defines main settings for CloudOps.
+#Foundation stack — closes backlog #16 (layer 1 of 3).
 #
-# Owns: bootstrap, dns, networking, database, compliance, backup.
-# Provider scope: aws + random only — no kubernetes/helm here, so this
-# stack plans cleanly against any environment without a cluster.
+#Owns: bootstrap, dns, codeartifact, networking, database, compliance, backup.
+#Provider scope: aws + random only — no kubernetes/helm here, so this
+#stack plans cleanly against any environment without a cluster.
 
 data "aws_caller_identity" "current" {}
 
+#Groups local values used by this Terraform file.
 locals {
   name_prefix      = var.project_name
   eks_cluster_name = "${var.project_name}-${var.environment}-cluster"
@@ -20,6 +22,7 @@ locals {
   }
 }
 
+#Wires the bootstrap module into this stack.
 module "bootstrap" {
   count  = var.destroy_all ? 0 : 1
   source = "../../modules/bootstrap"
@@ -43,6 +46,7 @@ module "bootstrap" {
   github_repo  = var.security_github_repo
 }
 
+#Wires the DNS module into this stack.
 module "dns" {
   count  = var.destroy_all ? 0 : 1
   source = "../../modules/dns"
@@ -52,6 +56,19 @@ module "dns" {
   tags        = local.common_tags
 }
 
+#Wires the codeartifact module into this stack.
+module "codeartifact" {
+  count  = var.enable_codeartifact ? 1 : 0
+  source = "../../modules/codeartifact"
+
+  domain_name      = var.codeartifact_domain_name != "" ? var.codeartifact_domain_name : lower("${var.project_name}-${var.environment}")
+  repository_names = var.codeartifact_repository_names
+  kms_key_arn      = var.codeartifact_kms_key_arn
+
+  tags = local.common_tags
+}
+
+#Wires the networking module into this stack.
 module "networking" {
   count  = var.enable_networking ? 1 : 0
   source = "../../modules/networking"
@@ -84,6 +101,7 @@ module "networking" {
   tags = local.common_tags
 }
 
+#Wires the database module into this stack.
 module "database" {
   count  = var.enable_database ? 1 : 0
   source = "../../modules/database"
@@ -131,6 +149,7 @@ module "database" {
   tags = local.common_tags
 }
 
+#Wires the compliance module into this stack.
 module "compliance" {
   count  = var.enable_compliance ? 1 : 0
   source = "../../modules/compliance"
@@ -157,6 +176,7 @@ module "compliance" {
   tags = local.common_tags
 }
 
+#Wires the backup module into this stack.
 module "backup" {
   count  = var.enable_backup ? 1 : 0
   source = "../../modules/backup"

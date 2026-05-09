@@ -1,11 +1,13 @@
-# Platform stack - layer 3 of the split Terraform layout.
+#This file defines main settings for CloudOps.
+#Platform stack - layer 3 of the split Terraform layout.
 #
-# Owns Kubernetes-facing platform services plus adjacent AWS automation:
-# ingress, observability, security, SLO, FinOps, and self-healing.
-# Reads foundation and cluster outputs through terraform_remote_state.
+#Owns Kubernetes-facing platform services plus adjacent AWS automation:
+#ingress, observability, security, SLO, FinOps, and self-healing.
+#Reads foundation and cluster outputs through terraform_remote_state.
 
 data "aws_caller_identity" "current" {}
 
+#Creates the terraform data resource named toggle guard.
 resource "terraform_data" "toggle_guard" {
   input = {
     destroy_all                          = var.destroy_all
@@ -84,6 +86,7 @@ resource "terraform_data" "toggle_guard" {
   }
 }
 
+#Groups local values used by this Terraform file.
 locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
   cluster    = var.use_remote_state_cluster ? data.terraform_remote_state.cluster[0].outputs : null
@@ -168,6 +171,7 @@ locals {
   }
 }
 
+#Wires the ingress module into this stack.
 module "ingress" {
   count  = var.enable_ingress ? 1 : 0
   source = "../../modules/ingress"
@@ -198,6 +202,7 @@ module "ingress" {
   tags = local.common_tags
 }
 
+#Wires the observability module into this stack.
 module "observability" {
   count  = var.enable_observability ? 1 : 0
   source = "../../modules/observability"
@@ -213,11 +218,7 @@ module "observability" {
 
   acm_cert_arn          = var.enable_ingress ? module.ingress[0].certificate_arn : ""
   domain                = var.domain_name
-  zone_id               = local.route53_zone_id
   application_namespace = var.order_api_namespace
-
-  alb_dns_name = var.alb_dns_name
-  alb_zone_id  = var.alb_zone_id
 
   alert_email         = var.security_alert_email
   alert_sns_topic_arn = local.grafana_alert_contact_marker
@@ -250,13 +251,14 @@ module "observability" {
 
   metrics_long_term_storage = var.metrics_long_term_storage
 
-  # Backlog #61
+  #Backlog #61
   publish_otel_ssm_config = var.publish_otel_ssm_config
   ssm_kms_key_id          = var.ssm_kms_key_id
 
   tags = local.common_tags
 }
 
+#Wires the SLO module into this stack.
 module "slo" {
   count  = var.enable_slo ? 1 : 0
   source = "../../modules/slo"
@@ -272,6 +274,7 @@ module "slo" {
   tags = local.common_tags
 }
 
+#Wires the security module into this stack.
 module "security" {
   count  = var.enable_security ? 1 : 0
   source = "../../modules/security"
@@ -313,6 +316,7 @@ module "security" {
   depends_on = [module.observability]
 }
 
+#Wires the finops module into this stack.
 module "finops" {
   count  = var.enable_finops ? 1 : 0
   source = "../../modules/finops"
@@ -333,6 +337,7 @@ module "finops" {
   depends_on = [module.observability]
 }
 
+#Wires the self healing module into this stack.
 module "self_healing" {
   count  = var.enable_self_healing ? 1 : 0
   source = "../../modules/self_healing"

@@ -1,5 +1,6 @@
-# Security findings table
-# Stores compliance scanner findings with deduplication, TTL, and audit history.
+#This file defines dynamodb settings for CloudOps.
+#Security findings table
+#Stores compliance scanner findings with deduplication, TTL, and audit history.
 
 resource "aws_dynamodb_table" "security_findings" {
   #checkov:skip=CKV_AWS_119:AWS managed encryption is acceptable - CMK adds cost without meaningful security benefit for dev
@@ -28,7 +29,7 @@ resource "aws_dynamodb_table" "security_findings" {
     type = "S"
   }
 
-  # Query by severity + time range — e.g. all CRITICAL findings this week
+  #Query by severity + time range — e.g. all CRITICAL findings this week
   global_secondary_index {
     name            = "severity-timestamp-index"
     hash_key        = "severity"
@@ -36,7 +37,7 @@ resource "aws_dynamodb_table" "security_findings" {
     projection_type = "ALL"
   }
 
-  # Query all OPEN findings for deduplication on each scan run
+  #Query all OPEN findings for deduplication on each scan run
   global_secondary_index {
     name            = "status-index"
     hash_key        = "status"

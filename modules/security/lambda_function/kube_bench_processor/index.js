@@ -1,3 +1,4 @@
+// This file contains index logic for lambda function kube bench processor.
 'use strict';
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -122,6 +123,7 @@ async function loadOpenKubeBenchFindings(clusterName) {
   return openFindings;
 }
 
+// Handles persist finding.
 async function persistFinding(finding, isNew, existing) {
   const now = new Date().toISOString();
   const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;

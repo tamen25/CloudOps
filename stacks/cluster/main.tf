@@ -1,7 +1,8 @@
-# Cluster stack — closes backlog #16 (layer 2 of 3).
+#This file defines main settings for CloudOps.
+#Cluster stack — closes backlog #16 (layer 2 of 3).
 #
-# Owns: EKS control plane + node group + addons + IRSA roles.
-# Reads foundation outputs (VPC, subnets, SGs).
+#Owns: EKS control plane + node group + addons + IRSA roles.
+#Reads foundation outputs (VPC, subnets, SGs).
 
 locals {
   common_tags = {
@@ -12,13 +13,14 @@ locals {
     Stack       = "cluster"
   }
 
-  # Order-api Secrets Manager scoping (mirrors the legacy root logic).
+  #Order-api Secrets Manager scoping (mirrors the legacy root logic).
   order_api_secret_arns = compact([
     local.database_secret_arn_pattern,
     var.order_api_api_key_secret_arn != "" ? var.order_api_api_key_secret_arn : "",
   ])
 }
 
+#Wires the EKS module into this stack.
 module "eks" {
   source = "../../modules/eks"
 

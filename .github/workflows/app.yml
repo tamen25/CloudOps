@@ -1,16 +1,17 @@
-# Required GitHub Actions secrets:
-#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
-#   AWS_REGION                   — AWS region (e.g. us-east-1)
-#   ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
-#   EKS_CLUSTER_NAME             — EKS cluster name from: terraform output -raw eks_cluster_name
-#   GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
-#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
-#                                  — Full contents of each environment's terraform.tfvars
-#   TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
+#This manifest defines app for CloudOps.
+#Required GitHub Actions secrets:
+#AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_REGION                   — AWS region (e.g. us-east-1)
+#ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
+#EKS_CLUSTER_NAME             — EKS cluster name from: terraform output -raw eks_cluster_name
+#GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
+#TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#— Full contents of each environment's terraform.tfvars
+#TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
 #
-# Image signing (Cosign keyless — no secrets required):
-#   Signatures are stored in ECR alongside the image using Sigstore's keyless flow.
-#   Verification uses the GitHub Actions OIDC identity; no private key or secret is needed.
+#Image signing (Cosign keyless — no secrets required):
+#Signatures are stored in ECR alongside the image using Sigstore's keyless flow.
+#Verification uses the GitHub Actions OIDC identity; no private key or secret is needed.
 
 name: App Pipeline
 
@@ -23,10 +24,10 @@ on:
       - 'scripts/write-ci-tfvars.sh'
       - '.github/workflows/app.yml'
   pull_request:
-    # Closes backlog #25 — run tests/lint/manifest validation before merge.
-    # AWS-touching jobs (build-and-push, deploy, integration-test) are gated
-    # below on `github.event_name != 'pull_request'` so PRs never push images
-    # or touch the cluster.
+    #Closes backlog #25 — run tests/lint/manifest validation before merge.
+    #AWS-touching jobs (build-and-push, deploy, integration-test) are gated
+    #below on `github.event_name != 'pull_request'` so PRs never push images
+    #or touch the cluster.
     paths:
       - 'apps/order-api/**'
       - 'scripts/terraform-stacks.sh'
@@ -48,10 +49,10 @@ on:
         required: false
         type: boolean
         default: false
-      # Backlog #54 — promote an existing signed digest dev → staging → prod
-      # without rebuilding. Pass the sha256 from a prior successful run; the
-      # build-and-push, image-scan, and budget-check jobs are skipped, and
-      # the deploy job verifies + applies the same digest in the higher env.
+      #Backlog #54 — promote an existing signed digest dev → staging → prod
+      #without rebuilding. Pass the sha256 from a prior successful run; the
+      #build-and-push, image-scan, and budget-check jobs are skipped, and
+      #the deploy job verifies + applies the same digest in the higher env.
       promote_digest:
         description: 'Image digest to promote (sha256:...). When set, skip build/scan and deploy this digest.'
         required: false
@@ -64,24 +65,24 @@ env:
   ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
   EKS_CLUSTER_NAME:   ${{ secrets.EKS_CLUSTER_NAME }}
   IMAGE_TAG:          ${{ github.sha }}
-  # Opt JavaScript actions still on Node 20 into the Node 24 runtime (GitHub
-  # compatibility shim). Remove once every action listed below is on a release
-  # that targets Node 24 natively.
+  #Opt JavaScript actions still on Node 20 into the Node 24 runtime (GitHub
+  #compatibility shim). Remove once every action listed below is on a release
+  #that targets Node 24 natively.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: Unit tests and dependency audit
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 1: Unit tests and dependency audit
+  #─────────────────────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: apps/order-api/package-lock.json
 
@@ -101,23 +102,37 @@ jobs:
         run: npm run contract-check
         working-directory: apps/order-api
 
-      - name: Run tests
-        run: npm test
+      #Closes backlog #74 — OpenAPI contract is linted on every PR/push so
+      #invalid syntax or contract drift fails CI before manifest/test work.
+      - name: OpenAPI lint (Spectral)
+        run: npm run openapi:lint
         working-directory: apps/order-api
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Kubernetes manifest validation — runs in parallel with build-and-push
-  # ─────────────────────────────────────────────────────────────────────────────
+      - name: Run tests with 100% line coverage
+        run: npm run test:coverage
+        working-directory: apps/order-api
+
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 2: Kubernetes manifest validation — runs in parallel with build-and-push
+  #─────────────────────────────────────────────────────────────────────────────
   manifest-validation:
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/order-api/package-lock.json
+
+      #Install order-api deps so apps/order-api/node_modules/.bin/tsx is
+      #available for the TS render script (closes backlog #64).
+      - name: Install order-api deps
+        run: npm ci
+        working-directory: apps/order-api
 
       - name: Render Kubernetes manifests
         env:
@@ -135,21 +150,21 @@ jobs:
           ORDER_API_HOST: api.example.com
           API_KEY_SECRET_ARN: ""
           IMAGE_TAG: validate
-          # NetworkPolicy ipBlock for ALB-sourced traffic (closes backlog #26).
+          #NetworkPolicy ipBlock for ALB-sourced traffic (closes backlog #26).
           VPC_CIDR: 10.0.0.0/16
-          # OIDC / JWKS auth — empty placeholders for schema validation only
-          # (closes backlog #7). Real values come from secrets in the deploy
-          # step below.
+          #OIDC / JWKS auth — empty placeholders for schema validation only
+          #(closes backlog #7). Real values come from secrets in the deploy
+          #step below.
           OIDC_ISSUER: ""
           OIDC_AUDIENCE: ""
           OIDC_JWKS_URL: ""
           OIDC_REQUIRED_SCOPES: ""
-        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+        run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
-      # kubeval is unmaintained; switched to the actively maintained
-      # kubeconform fork (closes backlog #35 + #39 — version pinned, no
-      # mutable downloads). Mirrors what scripts/validate-k8s-manifests.sh
-      # does locally.
+      #kubeval is unmaintained; switched to the actively maintained
+      #kubeconform fork (closes backlog #35 + #39 — version pinned, no
+      #mutable downloads). Mirrors what scripts/validate-k8s-manifests.sh
+      #does locally.
       - name: Install kubeconform
         run: |
           KUBECONFORM_VERSION=0.6.7
@@ -217,23 +232,23 @@ jobs:
           fi
           echo "✓ Namespace matches deploy target"
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 3: Build, push, sign, attest, and scan Docker image
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 3: Build, push, sign, attest, and scan Docker image
   #
-  # Step order:
-  #   1. Build and push to ECR
-  #   2. Sign with Cosign keyless (Sigstore — signature stored in ECR)
-  #   3. Verify signature immediately after signing
-  #   4. Generate SPDX-JSON SBOM with Syft, attach as OCI attestation, upload artifact
-  #   5. Scan SBOM with Grype — fail on CRITICAL CVEs that have a fix available
-  # ─────────────────────────────────────────────────────────────────────────────
+  #Step order:
+  #1. Build and push to ECR
+  #2. Sign with Cosign keyless (Sigstore — signature stored in ECR)
+  #3. Verify signature immediately after signing
+  #4. Generate SPDX-JSON SBOM with Syft, attach as OCI attestation, upload artifact
+  #5. Scan SBOM with Grype — fail on CRITICAL CVEs that have a fix available
+  #─────────────────────────────────────────────────────────────────────────────
   build-and-push:
-    # Gated off on PR events — closes backlog #25. PRs run tests +
-    # manifest-validation only; image push, deploy, and integration tests
-    # require a merge to main (or workflow_dispatch).
-    # Closes backlog #54 — also gated off when promoting an existing digest
-    # so a prod approval cannot trigger a rebuild that diverges from the
-    # signed image already validated in lower envs.
+    #Gated off on PR events — closes backlog #25. PRs run tests +
+    #manifest-validation only; image push, deploy, and integration tests
+    #require a merge to main (or workflow_dispatch).
+    #Closes backlog #54 — also gated off when promoting an existing digest
+    #so a prod approval cannot trigger a rebuild that diverges from the
+    #signed image already validated in lower envs.
     if: github.event_name != 'pull_request' && inputs.promote_digest == ''
     runs-on: ubuntu-latest
     needs: test
@@ -243,9 +258,9 @@ jobs:
       contents: read
       security-events: write  # Grype SARIF upload to GitHub code scanning
     outputs:
-      # Image manifest digest — propagated to the deploy job so rollout pins
-      # on the immutable `@sha256:` reference, not the mutable `:tag`.
-      # Closes backlog #18.
+      #Image manifest digest — propagated to the deploy job so rollout pins
+      #on the immutable `@sha256:` reference, not the mutable `:tag`.
+      #Closes backlog #18.
       image_digest: ${{ steps.build.outputs.digest }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -273,25 +288,25 @@ jobs:
         with:
           context: apps/order-api
           push: true
-          # Closes backlog #18 — only the SHA tag is published. The `:latest`
-          # mutable tag is intentionally NOT pushed; the deploy step pins on
-          # the resulting `@sha256:` digest from this step's output.
+          #Closes backlog #18 — only the SHA tag is published. The `:latest`
+          #mutable tag is intentionally NOT pushed; the deploy step pins on
+          #the resulting `@sha256:` digest from this step's output.
           tags: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Cosign keyless image signing ──────────────────────────────────────────
-      # Signs the image in-toto using GitHub Actions OIDC as the identity.
-      # The signature and its certificate are stored in ECR alongside the image.
-      # No private key or secret is required — the signing identity is:
-      #   https://github.com/${{ github.repository }}/.github/workflows/app.yml@refs/heads/main
-      # ─────────────────────────────────────────────────────────────────────────
+      #── Cosign keyless image signing ──────────────────────────────────────────
+      #Signs the image in-toto using GitHub Actions OIDC as the identity.
+      #The signature and its certificate are stored in ECR alongside the image.
+      #No private key or secret is required — the signing identity is:
+      #https://github.com/${{ github.repository }}/.github/workflows/app.yml@refs/heads/main
+      #─────────────────────────────────────────────────────────────────────────
 
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
       - name: Install Cosign
-        # Pinned (closes backlog #39).
+        #Pinned (closes backlog #39).
         uses: sigstore/cosign-installer@v3.7.0
 
       - name: Sign image
@@ -309,15 +324,15 @@ jobs:
             ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
           echo "✓ Signature verified"
 
-      # ── Syft SBOM generation and attestation ──────────────────────────────────
-      # Generates an SPDX-JSON SBOM from the pushed ECR image.
-      # Attaches it as a signed OCI attestation (cosign attest) so it travels
-      # with the image and is verifiable at deploy time.
-      # ─────────────────────────────────────────────────────────────────────────
+      #── Syft SBOM generation and attestation ──────────────────────────────────
+      #Generates an SPDX-JSON SBOM from the pushed ECR image.
+      #Attaches it as a signed OCI attestation (cosign attest) so it travels
+      #with the image and is verifiable at deploy time.
+      #─────────────────────────────────────────────────────────────────────────
 
       - name: Install Syft
-        # Closes backlog #39 — install pinned from `main` to a tagged release.
-        # Bump the tag intentionally; never let `main` flow through CI.
+        #Closes backlog #39 — install pinned from `main` to a tagged release.
+        #Bump the tag intentionally; never let `main` flow through CI.
         uses: anchore/sbom-action/download-syft@v0.17.7
 
       - name: Generate SBOM
@@ -348,7 +363,7 @@ jobs:
           import json
           with open('sbom.spdx.json') as f:
               d = json.load(f)
-          # spdx-json top-level packages list includes the root image package
+          #spdx-json top-level packages list includes the root image package
           pkgs = d.get('packages', [])
           print(len(pkgs))
           " 2>/dev/null || echo "unknown")
@@ -374,14 +389,14 @@ jobs:
           \`\`\`
           EOF
 
-      # ── Grype vulnerability scan against the SBOM ─────────────────────────────
-      # Scans only for vulnerabilities that have a fix available (--only-fixed).
-      # Fails the job if any CRITICAL fixable CVEs are found (--fail-on critical).
-      # SARIF results are uploaded to the repository Security tab.
-      # ─────────────────────────────────────────────────────────────────────────
+      #── Grype vulnerability scan against the SBOM ─────────────────────────────
+      #Scans only for vulnerabilities that have a fix available (--only-fixed).
+      #Fails the job if any CRITICAL fixable CVEs are found (--fail-on critical).
+      #SARIF results are uploaded to the repository Security tab.
+      #─────────────────────────────────────────────────────────────────────────
 
       - name: Install Grype
-        # Closes backlog #39 — install pinned from `main` to a tagged release.
+        #Closes backlog #39 — install pinned from `main` to a tagged release.
         uses: anchore/scan-action/download-grype@v5.2.1
 
       - name: Scan SBOM with Grype
@@ -405,7 +420,7 @@ jobs:
       - name: Post Grype failure summary
         if: steps.grype.outcome == 'failure'
         run: |
-          # Count CRITICAL fixable findings from SARIF
+          #Count CRITICAL fixable findings from SARIF
           CRIT_COUNT=$(python3 -c "
           import json
           with open('grype-results.sarif') as f:
@@ -434,12 +449,12 @@ jobs:
         if: steps.grype.outcome == 'failure'
         run: exit 1
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 4: Trivy image scan — blocks deploy on CRITICAL vulnerabilities
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 4: Trivy image scan — blocks deploy on CRITICAL vulnerabilities
+  #─────────────────────────────────────────────────────────────────────────────
   image-scan:
-    # Skipped on promotion (#54) — the digest was already scanned in the env
-    # where it was first built and pushed.
+    #Skipped on promotion (#54) — the digest was already scanned in the env
+    #where it was first built and pushed.
     if: github.event_name != 'pull_request' && inputs.promote_digest == ''
     runs-on: ubuntu-latest
     needs: build-and-push
@@ -466,10 +481,10 @@ jobs:
 
       - name: Scan image for CRITICAL vulnerabilities
         id: trivy
-        # Closes backlog #39 — pinned from mutable `@master` to a tagged
-        # release. continue-on-error is preserved ONLY so the SARIF upload +
-        # failure-summary steps run; the explicit `Fail job on CRITICAL
-        # findings` step at the end of this job is the actual hard gate.
+        #Closes backlog #39 — pinned from mutable `@master` to a tagged
+        #release. continue-on-error is preserved ONLY so the SARIF upload +
+        #failure-summary steps run; the explicit `Fail job on CRITICAL
+        #findings` step at the end of this job is the actual hard gate.
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -507,23 +522,23 @@ jobs:
         if: steps.trivy.outcome == 'failure'
         run: exit 1
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 5: Error budget gate — blocks deploy when SLO budget is critically low.
-  # Skipped automatically when override_budget_check=true (dispatch only).
-  # Skipped gracefully when the SLO module is not yet deployed (no metric data).
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 5: Error budget gate — blocks deploy when SLO budget is critically low.
+  #Skipped automatically when override_budget_check=true (dispatch only).
+  #Skipped gracefully when the SLO module is not yet deployed (no metric data).
   #
-  # Budget thresholds:
-  #   >= 50%  → green, deployment unblocked
-  #   10–49%  → warning posted to summary, deployment continues
-  #   <  10%  → deployment blocked; set override_budget_check=true to bypass
-  # ─────────────────────────────────────────────────────────────────────────────
+  #Budget thresholds:
+  #>= 50%  → green, deployment unblocked
+  #10–49%  → warning posted to summary, deployment continues
+  #<  10%  → deployment blocked; set override_budget_check=true to bypass
+  #─────────────────────────────────────────────────────────────────────────────
   budget-check:
     runs-on: ubuntu-latest
     needs: image-scan
-    # Skip on PRs (closes backlog #25 — no CloudWatch reads from forks).
-    # Skip when the override input is explicitly set to true.
-    # For push triggers (no inputs), github.event.inputs.override_budget_check
-    # is null, which evaluates to != 'true', so the job runs normally.
+    #Skip on PRs (closes backlog #25 — no CloudWatch reads from forks).
+    #Skip when the override input is explicitly set to true.
+    #For push triggers (no inputs), github.event.inputs.override_budget_check
+    #is null, which evaluates to != 'true', so the job runs normally.
     if: ${{ github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true' }}
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
@@ -545,8 +560,8 @@ jobs:
 
       - name: Check SLO error budget
         run: |
-          # Pull the Grafana hostname out of the tfvars secret so the dashboard
-          # link in the step summary renders as a real URL.
+          #Pull the Grafana hostname out of the tfvars secret so the dashboard
+          #link in the step summary renders as a real URL.
           SELECTED_TF_VARS="${TF_VARS}"
           if [ "${TARGET_ENVIRONMENT}" = "dev" ] && [ -n "${TF_VARS_DEV}" ]; then SELECTED_TF_VARS="${TF_VARS_DEV}"; fi
           if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ -n "${TF_VARS_STAGING}" ]; then SELECTED_TF_VARS="${TF_VARS_STAGING}"; fi
@@ -652,21 +667,21 @@ jobs:
             echo "Error budget healthy at ${BUDGET_INT}% — deployment unblocked."
           fi
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 6: Deploy to EKS with automatic rollback on failure.
-  # Waits for budget-check (SLO gate), image-scan (security gate), and
-  # manifest-validation (schema gate) to pass.
-  # budget-check is skipped when override_budget_check=true — a skipped
-  # dependency does not block a downstream job in GitHub Actions.
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 6: Deploy to EKS with automatic rollback on failure.
+  #Waits for budget-check (SLO gate), image-scan (security gate), and
+  #manifest-validation (schema gate) to pass.
+  #budget-check is skipped when override_budget_check=true — a skipped
+  #dependency does not block a downstream job in GitHub Actions.
   #
-  # Before rolling out, the image signature is verified with Cosign to ensure
-  # only images signed by this workflow are deployed to the cluster.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #Before rolling out, the image signature is verified with Cosign to ensure
+  #only images signed by this workflow are deployed to the cluster.
+  #─────────────────────────────────────────────────────────────────────────────
   deploy:
     runs-on: ubuntu-latest
-    # build-and-push (and image-scan/budget-check) are skipped on promotion;
-    # `!cancelled() && !failure()` lets deploy run when those upstream
-    # jobs were skipped but lets a real failure still block.
+    #build-and-push (and image-scan/budget-check) are skipped on promotion;
+    #`!cancelled() && !failure()` lets deploy run when those upstream
+    #jobs were skipped but lets a real failure still block.
     needs: [budget-check, manifest-validation, build-and-push, image-scan]
     if: ${{ github.event_name != 'pull_request' && !cancelled() && !failure() && needs.manifest-validation.result == 'success' && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped') }}
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
@@ -674,13 +689,13 @@ jobs:
       id-token: write
       contents: read
     env:
-      # Immutable image reference — closes backlog #18.
-      # Format: <repo>@sha256:<digest>. Sourced from build-and-push when this
-      # run built a fresh image, or from `inputs.promote_digest` when this run
-      # is a promotion (closes backlog #54). Either way, rollout, signature
-      # verification, and the rendered manifests use this exact reference —
-      # the digest signed in the source environment is the digest deployed
-      # in the target environment.
+      #Immutable image reference — closes backlog #18.
+      #Format: <repo>@sha256:<digest>. Sourced from build-and-push when this
+      #run built a fresh image, or from `inputs.promote_digest` when this run
+      #is a promotion (closes backlog #54). Either way, rollout, signature
+      #verification, and the rendered manifests use this exact reference —
+      #the digest signed in the source environment is the digest deployed
+      #in the target environment.
       AWS_REGION: ${{ secrets.AWS_REGION }}
       ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
       EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
@@ -692,9 +707,21 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      #tsx is required to run the TS render-k8s script (closes backlog #64).
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/order-api/package-lock.json
+
+      - name: Install order-api deps
+        run: npm ci
+        working-directory: apps/order-api
+
       - name: Validate promotion input
-        # Closes backlog #54 — when promoting, the digest must be a real
-        # sha256 to prevent a typo from selecting an unintended image.
+        #Closes backlog #54 — when promoting, the digest must be a real
+        #sha256 to prevent a typo from selecting an unintended image.
         if: inputs.promote_digest != ''
         run: |
           set -euo pipefail
@@ -741,7 +768,7 @@ jobs:
           ORDER_API_SERVICE_ACCOUNT=$(grep '^order_api_service_account' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
           ORDER_API_ENVIRONMENT=$(grep '^environment' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
           DB_NAME=$(grep '^database_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
-          # VPC_CIDR feeds the order-api NetworkPolicy ipBlock (closes backlog #26).
+          #VPC_CIDR feeds the order-api NetworkPolicy ipBlock (closes backlog #26).
           VPC_CIDR=$(grep '^vpc_cidr' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
 
           ORDER_API_NAMESPACE=${ORDER_API_NAMESPACE:-cloudops}
@@ -752,16 +779,16 @@ jobs:
 
           OTEL_RESOURCE_ATTRIBUTES="deployment.environment=${ORDER_API_ENVIRONMENT},k8s.cluster.name=${EKS_CLUSTER_NAME}"
 
-          # Closes backlog #37 — assert the deploy-time API-key secret ARN
-          # matches the Terraform-managed `order_api_api_key_secret_arn`. If
-          # the secret drifts from the IRSA-allowed list, the running Pod
-          # silently loses access; we'd rather fail the deploy.
+          #Closes backlog #37 — assert the deploy-time API-key secret ARN
+          #matches the Terraform-managed `order_api_api_key_secret_arn`. If
+          #the secret drifts from the IRSA-allowed list, the running Pod
+          #silently loses access; we'd rather fail the deploy.
           API_KEY_SECRET_ARN="${{ secrets.ORDER_API_KEY_SECRET_ARN }}"
 
-          # OIDC / JWKS auth — closes backlog #7. Empty values disable JWT
-          # verification at runtime; setting all three (issuer, audience,
-          # JWKS URL) enables it. Required scopes is a space-separated list
-          # or empty.
+          #OIDC / JWKS auth — closes backlog #7. Empty values disable JWT
+          #verification at runtime; setting all three (issuer, audience,
+          #JWKS URL) enables it. Required scopes is a space-separated list
+          #or empty.
           OIDC_ISSUER="${{ secrets.OIDC_ISSUER }}"
           OIDC_AUDIENCE="${{ secrets.OIDC_AUDIENCE }}"
           OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
@@ -801,14 +828,14 @@ jobs:
             echo "OIDC_REQUIRED_SCOPES=${OIDC_REQUIRED_SCOPES:-}"
           } >> "$GITHUB_ENV"
 
-      # ── Signature gate ────────────────────────────────────────────────────────
-      # Aborts the deployment if the image does not have a valid Cosign signature
-      # from this repository's workflow. Prevents deploying manually-pushed or
-      # tampered images even if they slip past ECR access controls.
-      # ─────────────────────────────────────────────────────────────────────────
+      #── Signature gate ────────────────────────────────────────────────────────
+      #Aborts the deployment if the image does not have a valid Cosign signature
+      #from this repository's workflow. Prevents deploying manually-pushed or
+      #tampered images even if they slip past ECR access controls.
+      #─────────────────────────────────────────────────────────────────────────
 
       - name: Install Cosign
-        # Pinned (closes backlog #39).
+        #Pinned (closes backlog #39).
         uses: sigstore/cosign-installer@v3.7.0
 
       - name: Verify image signature
@@ -835,7 +862,7 @@ jobs:
       - name: Render Kubernetes manifests
         env:
           ORDER_API_IMAGE: ${{ env.IMAGE_REF }}
-        run: node apps/order-api/scripts/render-k8s.js apps/order-api/k8s /tmp/order-api-k8s
+        run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
       - name: Run DB migration Job
         run: |
@@ -844,8 +871,8 @@ jobs:
           echo "Applying migration Job ${JOB_NAME} in namespace ${ORDER_API_NAMESPACE}"
           kubectl apply -f /tmp/order-api-k8s/migration-job.yaml
 
-          # Wait up to 5 minutes for the Job to complete. --for=condition=complete
-          # returns immediately on success; --for=condition=failed exits non-zero.
+          #Wait up to 5 minutes for the Job to complete. --for=condition=complete
+          #returns immediately on success; --for=condition=failed exits non-zero.
           if ! kubectl wait --for=condition=complete --timeout=300s \
               "job/${JOB_NAME}" -n "$ORDER_API_NAMESPACE"; then
             echo "::error::Migration Job ${JOB_NAME} failed or timed out — aborting deploy"
@@ -860,7 +887,7 @@ jobs:
           set -e
 
           echo "Applying manifests for image: $IMAGE_REF"
-          # Migration Job already applied + waited above; re-applying is a no-op.
+          #Migration Job already applied + waited above; re-applying is a no-op.
           kubectl apply -f /tmp/order-api-k8s/
 
           if ! kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=300s; then
@@ -868,7 +895,7 @@ jobs:
 
             if [ "$DEPLOYMENT_EXISTS" = "true" ] && [ "$PREVIOUS_IMAGE" != "none" ]; then
               kubectl rollout undo deployment/order-api -n "$ORDER_API_NAMESPACE"
-            # Wait for rollback to settle (best-effort — don't fail if this also times out)
+            #Wait for rollback to settle (best-effort — don't fail if this also times out)
               kubectl rollout status deployment/order-api -n "$ORDER_API_NAMESPACE" --timeout=120s || true
 
               ROLLED_BACK_TO=$(kubectl get deployment order-api -n "$ORDER_API_NAMESPACE" \
@@ -895,9 +922,9 @@ jobs:
 
           echo "✓ Rollout succeeded"
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 7: Integration tests against live endpoints
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 7: Integration tests against live endpoints
+  #─────────────────────────────────────────────────────────────────────────────
   integration-test:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -949,9 +976,9 @@ jobs:
           OIDC_AUDIENCE: ${{ secrets.OIDC_AUDIENCE }}
         run: |
           set -euo pipefail
-          # Backlog #50 — prefer a real OIDC client_credentials token when the
-          # IdP is configured; fall back to the API key path. Tests must run
-          # at least one auth path; failing closed when neither is set.
+          #Backlog #50 — prefer a real OIDC client_credentials token when the
+          #IdP is configured; fall back to the API key path. Tests must run
+          #at least one auth path; failing closed when neither is set.
           if [ -n "${OIDC_TOKEN_URL:-}" ] && [ -n "${OIDC_CLIENT_ID:-}" ] && [ -n "${OIDC_CLIENT_SECRET:-}" ]; then
             echo "Fetching OIDC client_credentials token from $OIDC_TOKEN_URL"
             RESP=$(curl -sf -X POST "$OIDC_TOKEN_URL" \
@@ -1039,7 +1066,7 @@ jobs:
             if [ "$STATUS" = "201" ]; then
               if echo "$BODY" | grep -q '"orderId"\|"id"\|"order_id"'; then
                 echo "✓ PASS: POST /order returned 201 with order identifier"
-                # Store order ID for downstream assertions
+                #Store order ID for downstream assertions
                 ORDER_ID=$(echo "$BODY" | python3 -c \
                   "import sys,json; d=json.load(sys.stdin); print(d.get('orderId',d.get('id',d.get('order_id',''))))" 2>/dev/null || echo "")
                 echo "ORDER_ID=$ORDER_ID" >> "$GITHUB_ENV"
@@ -1150,18 +1177,18 @@ jobs:
           | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
           EOF
 
-      # ── Security posture check ─────────────────────────────────────────────────
-      # Non-blocking: queries CloudWatch for open CRITICAL security findings
-      # introduced since the deploy. Posts a warning to the step summary if any
-      # are found, but does NOT fail the pipeline.
-      # Skips gracefully when the security module is not yet deployed.
-      # ─────────────────────────────────────────────────────────────────────────
+      #── Security posture check ─────────────────────────────────────────────────
+      #Non-blocking: queries CloudWatch for open CRITICAL security findings
+      #introduced since the deploy. Posts a warning to the step summary if any
+      #are found, but does NOT fail the pipeline.
+      #Skips gracefully when the security module is not yet deployed.
+      #─────────────────────────────────────────────────────────────────────────
       - name: Security posture check
         if: always()
         continue-on-error: true
         run: |
-          # Pull the Grafana hostname out of the tfvars secret so the dashboard
-          # link in the step summary renders as a real URL.
+          #Pull the Grafana hostname out of the tfvars secret so the dashboard
+          #link in the step summary renders as a real URL.
           DOMAIN=$(grep '^domain_name' terraform.tfvars \
             | sed 's/.*= *"\(.*\)".*/\1/' \
             | head -1)
@@ -1234,9 +1261,9 @@ jobs:
           EOF
           fi
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 8: Pipeline summary — always runs
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 8: Pipeline summary — always runs
+  #─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
     needs: [test, manifest-validation, build-and-push, image-scan, budget-check, deploy, integration-test]
@@ -1250,9 +1277,9 @@ jobs:
           TEST_RESULT="${{ needs.test.result }}"
           MANIFEST_RESULT="${{ needs.manifest-validation.result }}"
 
-          # Closes backlog #33 — PR runs only execute test + manifest-validation;
-          # AWS-touching jobs are intentionally skipped. Render a PR-shaped
-          # summary so successful PRs no longer report "Deployment Failed".
+          #Closes backlog #33 — PR runs only execute test + manifest-validation;
+          #AWS-touching jobs are intentionally skipped. Render a PR-shaped
+          #summary so successful PRs no longer report "Deployment Failed".
           if [ "$EVENT_NAME" = "pull_request" ]; then
             if [ "$TEST_RESULT" = "success" ] && [ "$MANIFEST_RESULT" = "success" ]; then
               cat >> "$GITHUB_STEP_SUMMARY" <<EOF

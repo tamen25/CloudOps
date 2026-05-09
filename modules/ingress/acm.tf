@@ -1,4 +1,5 @@
-# Wildcard certificate for *.${var.domain_name} (also covers root domain via SAN)
+#This file defines acm settings for CloudOps.
+#Wildcard certificate for *.${var.domain_name} (also covers root domain via SAN)
 resource "aws_acm_certificate" "main" {
   domain_name               = "*.${var.domain_name}"
   subject_alternative_names = [var.domain_name]
@@ -11,7 +12,7 @@ resource "aws_acm_certificate" "main" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-wildcard-cert" })
 }
 
-# DNS validation records in the existing Route 53 hosted zone
+#DNS validation records in the existing Route 53 hosted zone
 resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
@@ -29,7 +30,7 @@ resource "aws_route53_record" "cert_validation" {
   ttl             = 60
 }
 
-# Blocks until ACM confirms the certificate is issued
+#Blocks until ACM confirms the certificate is issued
 resource "aws_acm_certificate_validation" "main" {
   certificate_arn         = aws_acm_certificate.main.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]

@@ -1,4 +1,5 @@
-# FinOps Module — IAM role for cost ingestion Lambda
+#This file defines IAM settings for CloudOps.
+#FinOps Module — IAM role for cost ingestion Lambda
 
 data "aws_iam_policy_document" "cost_ingestion_assume" {
   statement {
@@ -11,15 +12,17 @@ data "aws_iam_policy_document" "cost_ingestion_assume" {
   }
 }
 
+#Creates the AWS IAM role resource named cost ingestion.
 resource "aws_iam_role" "cost_ingestion" {
   name               = "${var.project_name}-cost-ingestion-role"
   assume_role_policy = data.aws_iam_policy_document.cost_ingestion_assume.json
   tags               = var.tags
 }
 
+#Reads the AWS IAM policy document data source named cost ingestion.
 data "aws_iam_policy_document" "cost_ingestion" {
   #checkov:skip=CKV_AWS_356:FinOps Lambda requires Cost Explorer access - no resource-level restrictions available
-  # CloudWatch Logs
+  #CloudWatch Logs
   statement {
     sid    = "CloudWatchLogs"
     effect = "Allow"
@@ -31,7 +34,7 @@ data "aws_iam_policy_document" "cost_ingestion" {
     resources = ["arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}-cost-ingestion:*"]
   }
 
-  # CloudWatch metrics
+  #CloudWatch metrics
   statement {
     sid       = "CloudWatchMetrics"
     effect    = "Allow"
@@ -44,7 +47,7 @@ data "aws_iam_policy_document" "cost_ingestion" {
     }
   }
 
-  # DynamoDB — cost history table only
+  #DynamoDB — cost history table only
   statement {
     sid    = "DynamoDB"
     effect = "Allow"
@@ -60,7 +63,7 @@ data "aws_iam_policy_document" "cost_ingestion" {
     ]
   }
 
-  # SNS — cost alerts topic only
+  #SNS — cost alerts topic only
   statement {
     sid       = "SNSPublish"
     effect    = "Allow"
@@ -68,7 +71,7 @@ data "aws_iam_policy_document" "cost_ingestion" {
     resources = [aws_sns_topic.cost_alerts.arn]
   }
 
-  # Cost Explorer — no resource-level permissions supported
+  #Cost Explorer — no resource-level permissions supported
   statement {
     sid    = "CostExplorer"
     effect = "Allow"
@@ -83,6 +86,7 @@ data "aws_iam_policy_document" "cost_ingestion" {
   }
 }
 
+#Creates the AWS IAM role policy resource named cost ingestion.
 resource "aws_iam_role_policy" "cost_ingestion" {
   name   = "${var.project_name}-cost-ingestion-policy"
   role   = aws_iam_role.cost_ingestion.id

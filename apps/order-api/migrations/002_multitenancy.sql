@@ -1,3 +1,4 @@
+/* This migration prepares 002 multitenancy database changes for CloudOps. */
 -- Multi-tenant data model — closes backlog #8.
 --
 -- Adds `tenant_id` to orders, backfills existing rows with `default`, then
@@ -25,8 +26,10 @@ CREATE INDEX IF NOT EXISTS orders_tenant_created_idx
 -- Sanity constraint — tenant_id must be 1–64 chars of [a-zA-Z0-9_-].
 -- Catches accidental empty strings and prevents header smuggling.
 ALTER TABLE orders
+  /* Drops the database object named constraint. */
   DROP CONSTRAINT IF EXISTS orders_tenant_id_format;
 
+/* Alters the table named orders. */
 ALTER TABLE orders
   ADD CONSTRAINT orders_tenant_id_format
   CHECK (tenant_id ~ '^[a-zA-Z0-9_-]{1,64}$');

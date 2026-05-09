@@ -1,4 +1,5 @@
-# VPC with DNS support for ECS and RDS
+#This file defines VPC settings for CloudOps.
+#VPC with DNS support for ECS and RDS
 resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
 
@@ -13,7 +14,7 @@ resource "aws_vpc" "main" {
   )
 }
 
-# Internet Gateway for public subnet internet access
+#Internet Gateway for public subnet internet access
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 

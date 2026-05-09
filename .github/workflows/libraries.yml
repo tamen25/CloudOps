@@ -1,0 +1,576 @@
+#This manifest defines libraries for CloudOps.
+#Required GitHub Actions secrets:
+#AWS_GITHUB_ACTIONS_ROLE_ARN  - IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_REGION                   - AWS region (e.g. us-east-1)
+#
+#Optional GitHub Actions variables:
+#CODEARTIFACT_DOMAIN          - defaults to cloudops-<environment>
+#CODEARTIFACT_REPOSITORY      - backward-compatible Node.js repo override
+#CODEARTIFACT_NODEJS_REPOSITORY - defaults to cloudops-nodejs
+#CODEARTIFACT_JAVA_REPOSITORY   - defaults to cloudops-java
+#CODEARTIFACT_DOTNET_REPOSITORY - defaults to cloudops-dotnet
+#CODEARTIFACT_PYTHON_REPOSITORY - defaults to cloudops-python
+#CODEARTIFACT_DOMAIN_OWNER    - AWS account ID; defaults to caller account
+#LIBRARY_PUBLISH_LANGUAGES    - comma-separated publish list; defaults to all
+#supported values: all, none, nodejs, java, dotnet, python
+
+name: Library Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'libraries/**'
+      - 'scripts/publish-node-packages.sh'
+      - 'scripts/publish-java-packages.sh'
+      - 'scripts/publish-dotnet-packages.sh'
+      - 'scripts/publish-python-packages.sh'
+      - '.github/workflows/libraries.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'libraries/**'
+      - 'scripts/publish-node-packages.sh'
+      - 'scripts/publish-java-packages.sh'
+      - 'scripts/publish-dotnet-packages.sh'
+      - 'scripts/publish-python-packages.sh'
+      - '.github/workflows/libraries.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for AWS credentials'
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+      publish_languages:
+        description: 'Optional override: all, none, nodejs, java, dotnet, python'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  CODEARTIFACT_DOMAIN: ${{ vars.CODEARTIFACT_DOMAIN || format('cloudops-{0}', inputs.environment || 'dev') }}
+  CODEARTIFACT_NODEJS_REPOSITORY: ${{ vars.CODEARTIFACT_NODEJS_REPOSITORY || vars.CODEARTIFACT_REPOSITORY || 'cloudops-nodejs' }}
+  CODEARTIFACT_JAVA_REPOSITORY: ${{ vars.CODEARTIFACT_JAVA_REPOSITORY || 'cloudops-java' }}
+  CODEARTIFACT_DOTNET_REPOSITORY: ${{ vars.CODEARTIFACT_DOTNET_REPOSITORY || 'cloudops-dotnet' }}
+  CODEARTIFACT_PYTHON_REPOSITORY: ${{ vars.CODEARTIFACT_PYTHON_REPOSITORY || 'cloudops-python' }}
+  CODEARTIFACT_DOMAIN_OWNER: ${{ vars.CODEARTIFACT_DOMAIN_OWNER }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  nodejs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Check Node package manifests
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_NODEJS_REPOSITORY }}
+        run: bash scripts/publish-node-packages.sh --check
+
+      - name: Test Node logs package with coverage
+        working-directory: libraries/nodejs/logs
+        run: |
+          npm ci
+          npm run test:coverage 2>&1 | tee coverage-summary.txt
+
+      #Backlog #66 — make coverage failures inspectable from the Actions UI.
+      - name: Upload Node coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-nodejs-logs
+          path: libraries/nodejs/logs/coverage-summary.txt
+          retention-days: 14
+          if-no-files-found: ignore
+
+  java-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Check Java package manifests
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_JAVA_REPOSITORY }}
+        run: bash scripts/publish-java-packages.sh --check
+
+      - name: Test Java logs package with coverage
+        working-directory: libraries/java/logs
+        run: mvn -q verify
+
+      - name: Upload Java coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-java-logs
+          path: |
+            libraries/java/logs/target/site/jacoco/
+            libraries/java/logs/target/site/jacoco/jacoco.xml
+          retention-days: 14
+          if-no-files-found: ignore
+
+  dotnet-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Check .NET package manifests
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_DOTNET_REPOSITORY }}
+        run: bash scripts/publish-dotnet-packages.sh --check
+
+      - name: Test .NET logs package with coverage
+        working-directory: libraries/dotnet/logs
+        run: >
+          dotnet test tests/CloudOps.Otel.Logs.Tests.csproj
+          --configuration Release
+          /p:CollectCoverage=true
+          /p:CoverletOutputFormat=cobertura
+          /p:CoverletOutput=TestResults/coverage/
+          /p:Threshold=40
+          /p:ThresholdType=line
+
+      - name: Upload .NET coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-dotnet-logs
+          path: libraries/dotnet/logs/tests/TestResults/coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Check Python package manifests
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_PYTHON_REPOSITORY }}
+        run: bash scripts/publish-python-packages.sh --check
+
+      - name: Install Python coverage tooling
+        run: python -m pip install --upgrade coverage
+
+      - name: Run Python logs tests with coverage
+        env:
+          PYTHONPATH: libraries/python/logs/src
+        run: |
+          python -m coverage run --source=libraries/python/logs/src/cloudops_otel_logs -m unittest discover -s libraries/python/logs/tests
+          python -m coverage report --fail-under=70 | tee coverage-summary.txt
+          python -m coverage xml -o coverage.xml
+          python -m coverage html -d htmlcov
+
+      - name: Upload Python coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python-logs
+          path: |
+            coverage-summary.txt
+            coverage.xml
+            htmlcov/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  go-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: libraries/go/logs/go.mod
+          cache-dependency-path: libraries/go/logs/go.sum
+
+      - name: Run Go logs tests with coverage
+        working-directory: libraries/go/logs
+        run: |
+          go test -coverprofile coverage.out -covermode atomic -coverpkg github.com/cloudops/otel-logs ./...
+          go tool cover -func coverage.out | tee coverage-summary.txt
+          go tool cover -html coverage.out -o coverage.html
+          coverage="$(go tool cover -func coverage.out | awk '/^total:/ { gsub("%", "", $3); print $3 }')"
+          echo "Go line coverage: ${coverage}%"
+          awk -v coverage="$coverage" 'BEGIN { if (coverage < 75) { printf "Go coverage %.1f%% is below 75%%\n", coverage; exit 1 } }'
+
+      - name: Upload Go coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-go-logs
+          path: |
+            libraries/go/logs/coverage.out
+            libraries/go/logs/coverage.html
+            libraries/go/logs/coverage-summary.txt
+          retention-days: 14
+          if-no-files-found: ignore
+
+  cpp-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python for C++ coverage tooling
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install C++ coverage tooling
+        run: python -m pip install --upgrade gcovr
+
+      - name: Configure C++ logs
+        run: cmake -S libraries/cpp/logs -B libraries/cpp/logs/build -DCMAKE_BUILD_TYPE=Debug -DCLOUDOPS_LOGS_ENABLE_COVERAGE=ON
+
+      - name: Build C++ logs
+        run: cmake --build libraries/cpp/logs/build --config Debug
+
+      - name: Run C++ logs tests
+        run: ctest --test-dir libraries/cpp/logs/build --output-on-failure -C Debug
+
+      - name: Check C++ logs coverage
+        run: |
+          gcovr \
+            --root libraries/cpp/logs \
+            --filter libraries/cpp/logs/src \
+            --filter libraries/cpp/logs/include \
+            --exclude libraries/cpp/logs/tests \
+            --exclude libraries/cpp/logs/examples \
+            --fail-under-line 50 \
+            --print-summary | tee libraries/cpp/logs/coverage-summary.txt
+          gcovr \
+            --root libraries/cpp/logs \
+            --filter libraries/cpp/logs/src \
+            --filter libraries/cpp/logs/include \
+            --exclude libraries/cpp/logs/tests \
+            --exclude libraries/cpp/logs/examples \
+            --xml -o libraries/cpp/logs/coverage.xml || true
+          gcovr \
+            --root libraries/cpp/logs \
+            --filter libraries/cpp/logs/src \
+            --filter libraries/cpp/logs/include \
+            --exclude libraries/cpp/logs/tests \
+            --exclude libraries/cpp/logs/examples \
+            --html-details libraries/cpp/logs/coverage.html || true
+
+      - name: Upload C++ coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-cpp-logs
+          path: |
+            libraries/cpp/logs/coverage-summary.txt
+            libraries/cpp/logs/coverage.xml
+            libraries/cpp/logs/coverage.html*
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      nodejs: ${{ steps.plan.outputs.nodejs }}
+      java: ${{ steps.plan.outputs.java }}
+      dotnet: ${{ steps.plan.outputs.dotnet }}
+      python: ${{ steps.plan.outputs.python }}
+      selected: ${{ steps.plan.outputs.selected }}
+    steps:
+      - name: Resolve publish language list
+        id: plan
+        env:
+          PUBLISH_LANGUAGES: ${{ inputs.publish_languages || vars.LIBRARY_PUBLISH_LANGUAGES || 'all' }}
+        shell: bash
+        run: |
+          raw="${PUBLISH_LANGUAGES:-all}"
+
+          nodejs=false
+          java=false
+          dotnet=false
+          python=false
+          saw_token=false
+          saw_all=false
+          saw_none=false
+
+          raw="${raw//$'\n'/,}"
+          raw="${raw//;/,}"
+          IFS=',' read -ra tokens <<< "$raw"
+
+          for item in "${tokens[@]}"; do
+            token="$(printf '%s' "$item" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            [ -z "$token" ] && continue
+            saw_token=true
+
+            case "$token" in
+              all|'*')
+                saw_all=true
+                ;;
+              none|skip|off|false)
+                saw_none=true
+                ;;
+              nodejs|node|javascript|js|typescript|ts|npm)
+                nodejs=true
+                ;;
+              java|maven)
+                java=true
+                ;;
+              dotnet|.net|csharp|cs|nuget)
+                dotnet=true
+                ;;
+              python|py|pypi)
+                python=true
+                ;;
+              *)
+                echo "::error::Unsupported library publish language '$token'. Use all, none, nodejs, java, dotnet, or python."
+                exit 1
+                ;;
+            esac
+          done
+
+          if [ "$saw_none" = "true" ] && { [ "$saw_all" = "true" ] || [ "$nodejs" = "true" ] || [ "$java" = "true" ] || [ "$dotnet" = "true" ] || [ "$python" = "true" ]; }; then
+            echo "::error::Use 'none' by itself, not with publish languages."
+            exit 1
+          fi
+
+          if [ "$saw_token" = "false" ] || [ "$saw_all" = "true" ]; then
+            nodejs=true
+            java=true
+            dotnet=true
+            python=true
+          fi
+
+          selected=()
+          [ "$nodejs" = "true" ] && selected+=("nodejs")
+          [ "$java" = "true" ] && selected+=("java")
+          [ "$dotnet" = "true" ] && selected+=("dotnet")
+          [ "$python" = "true" ] && selected+=("python")
+
+          if [ "${#selected[@]}" -eq 0 ]; then
+            selected_text="none"
+          else
+            selected_text="$(IFS=','; echo "${selected[*]}")"
+          fi
+
+          {
+            echo "nodejs=$nodejs"
+            echo "java=$java"
+            echo "dotnet=$dotnet"
+            echo "python=$python"
+            echo "selected=$selected_text"
+          } >> "$GITHUB_OUTPUT"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Library Publish Plan
+
+          | | |
+          |---|---|
+          | **Requested** | \`${raw}\` |
+          | **Publishing** | \`${selected_text}\` |
+          EOF
+
+  nodejs-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - nodejs-check
+      - publish-plan
+    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.nodejs == 'true'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-libraries
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish Node packages to CodeArtifact
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_NODEJS_REPOSITORY }}
+        run: bash scripts/publish-node-packages.sh
+
+      - name: Write summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Library Publish
+
+          | | |
+          |---|---|
+          | **Language** | Node.js / npm |
+          | **Domain** | \`${CODEARTIFACT_DOMAIN}\` |
+          | **Repository** | \`${CODEARTIFACT_NODEJS_REPOSITORY}\` |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+  java-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - java-check
+      - publish-plan
+    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.java == 'true'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-libraries-java
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish Java packages to CodeArtifact
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_JAVA_REPOSITORY }}
+        run: bash scripts/publish-java-packages.sh
+
+      - name: Write summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Java Library Publish
+
+          | | |
+          |---|---|
+          | **Language** | Java / Maven |
+          | **Domain** | \`${CODEARTIFACT_DOMAIN}\` |
+          | **Repository** | \`${CODEARTIFACT_JAVA_REPOSITORY}\` |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+  dotnet-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - dotnet-check
+      - publish-plan
+    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.dotnet == 'true'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-libraries-dotnet
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish .NET packages to CodeArtifact
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_DOTNET_REPOSITORY }}
+        run: bash scripts/publish-dotnet-packages.sh
+
+      - name: Write summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## .NET Library Publish
+
+          | | |
+          |---|---|
+          | **Language** | .NET / NuGet |
+          | **Domain** | \`${CODEARTIFACT_DOMAIN}\` |
+          | **Repository** | \`${CODEARTIFACT_DOTNET_REPOSITORY}\` |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF
+
+  python-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - python-check
+      - publish-plan
+    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.python == 'true'
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install packaging tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-libraries-python
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish Python packages to CodeArtifact
+        env:
+          CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_PYTHON_REPOSITORY }}
+        run: bash scripts/publish-python-packages.sh
+
+      - name: Write summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Python Library Publish
+
+          | | |
+          |---|---|
+          | **Language** | Python / PyPI |
+          | **Domain** | \`${CODEARTIFACT_DOMAIN}\` |
+          | **Repository** | \`${CODEARTIFACT_PYTHON_REPOSITORY}\` |
+          | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF

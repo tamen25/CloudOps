@@ -31,10 +31,17 @@ enable_observability = true
 enable_slo           = true
 enable_security      = true
 enable_finops        = true
+enable_codeartifact  = true
 enable_self_healing  = true
 enable_backup        = true
 enable_compliance    = true
 destroy_all          = false
+
+# Internal library package repository. Domain defaults to <project>-<env> when
+# empty; keep repository names stable after the first publish.
+codeartifact_domain_name      = ""
+codeartifact_repository_names = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+codeartifact_kms_key_arn      = ""
 
 # ── EKS — 3-AZ on-demand ─────────────────────────────────────────────────────
 az_count                = 3

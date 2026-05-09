@@ -1,19 +1,21 @@
-# OTel ingestion WAF — closes backlog #38.
+#This file defines OTel WAF settings for CloudOps.
+#OTel ingestion WAF — closes backlog #38.
 #
-# Independent of the public `cloudops` WAF (which protects api.<domain> +
-# grafana.<domain>). gRPC L7 inspection is out of scope, so the rules here
-# are just rate-limit + optional CIDR allow-list. Activate by setting either
-# var.otel_rate_limit_per_5min > 0 or a non-empty var.otel_allowed_cidrs.
+#Independent of the public `cloudops` WAF (which protects api.<domain> +
+#grafana.<domain>). gRPC L7 inspection is out of scope, so the rules here
+#are just rate-limit + optional CIDR allow-list. Activate by setting either
+#var.otel_rate_limit_per_5min > 0 or a non-empty var.otel_allowed_cidrs.
 
 locals {
   otel_waf_configured = var.otel_rate_limit_per_5min > 0 || length(var.otel_allowed_cidrs) > 0
-  # The web ACL itself can be created on the first pass; only the association
-  # waits until the OTel ALB has been created by the LBC (var.otel_alb_dns_name
-  # is the two-pass marker, mirrored from modules/ingress/waf.tf).
+  #The web ACL itself can be created on the first pass; only the association
+  #waits until the OTel ALB has been created by the LBC (var.otel_alb_dns_name
+  #is the two-pass marker, mirrored from modules/ingress/waf.tf).
   otel_waf_enabled = local.otel_waf_configured
   otel_waf_attach  = local.otel_waf_configured && var.otel_alb_dns_name != ""
 }
 
+#Creates the AWS wafv2 web acl resource named OTel.
 resource "aws_wafv2_web_acl" "otel" {
   count = local.otel_waf_enabled ? 1 : 0
 
@@ -21,8 +23,8 @@ resource "aws_wafv2_web_acl" "otel" {
   scope = "REGIONAL"
 
   default_action {
-    # If a CIDR allow-list is set, default-deny and allow only listed CIDRs.
-    # Otherwise default-allow and rely on the rate limit.
+    #If a CIDR allow-list is set, default-deny and allow only listed CIDRs.
+    #Otherwise default-allow and rely on the rate limit.
     dynamic "allow" {
       for_each = length(var.otel_allowed_cidrs) > 0 ? [] : [1]
       content {}
@@ -33,7 +35,7 @@ resource "aws_wafv2_web_acl" "otel" {
     }
   }
 
-  # ── Allow-list rule ────────────────────────────────────────────────────────
+  #── Allow-list rule ────────────────────────────────────────────────────────
   dynamic "rule" {
     for_each = length(var.otel_allowed_cidrs) > 0 ? [1] : []
     content {
@@ -58,7 +60,7 @@ resource "aws_wafv2_web_acl" "otel" {
     }
   }
 
-  # ── Rate limit ─────────────────────────────────────────────────────────────
+  #── Rate limit ─────────────────────────────────────────────────────────────
   dynamic "rule" {
     for_each = var.otel_rate_limit_per_5min > 0 ? [1] : []
     content {
@@ -95,6 +97,7 @@ resource "aws_wafv2_web_acl" "otel" {
   }
 }
 
+#Creates the AWS wafv2 ip set resource named OTel allow.
 resource "aws_wafv2_ip_set" "otel_allow" {
   count = length(var.otel_allowed_cidrs) > 0 ? 1 : 0
 
@@ -108,9 +111,9 @@ resource "aws_wafv2_ip_set" "otel_allow" {
   }
 }
 
-# Look up the cloudops-otel ALB by tag (same pattern as the cloudops WAF).
-# The LBC creates the ALB only after the OTel Ingress is applied, so the
-# count guard mirrors the two-pass pattern from modules/ingress/waf.tf.
+#Look up the cloudops-otel ALB by tag (same pattern as the cloudops WAF).
+#The LBC creates the ALB only after the OTel Ingress is applied, so the
+#count guard mirrors the two-pass pattern from modules/ingress/waf.tf.
 data "aws_lb" "otel" {
   count = local.otel_waf_attach ? 1 : 0
 
@@ -125,6 +128,7 @@ data "aws_lb" "otel" {
   ]
 }
 
+#Creates the AWS wafv2 web acl association resource named OTel.
 resource "aws_wafv2_web_acl_association" "otel" {
   count = local.otel_waf_attach ? 1 : 0
 

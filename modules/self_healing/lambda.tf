@@ -1,21 +1,22 @@
-# Self-Healing Controller — Lambda + EventBridge
+#This file defines lambda settings for CloudOps.
+#Self-Healing Controller — Lambda + EventBridge
 #
-# Two triggers:
-#   1. SNS (cloudops-healing-triggers) — CloudWatch Alarms notify this topic
-#      when a threshold is breached; the alarm name drives the routing logic.
-#   2. EventBridge rule watching EKS pod failure events from CloudTrail
-#      (FailedScheduling, BackOff, OOMKilled) so the controller can react
-#      before a CloudWatch Alarm fires.
+#Two triggers:
+#1. SNS (cloudops-healing-triggers) — CloudWatch Alarms notify this topic
+#when a threshold is breached; the alarm name drives the routing logic.
+#2. EventBridge rule watching EKS pod failure events from CloudTrail
+#(FailedScheduling, BackOff, OOMKilled) so the controller can react
+#before a CloudWatch Alarm fires.
 
 locals {
   controller_src_dir = "${path.module}/lambda_function"
   controller_zip     = "${path.module}/lambda_function/self_healing_controller.zip"
 }
 
-# ── Zip ───────────────────────────────────────────────────────────────────────
-# npm install runs in scripts/build-lambdas.sh before terraform apply (closes
-# backlog #20). The lifecycle.precondition on aws_lambda_function below fails
-# fast with a clear message if the build step was skipped.
+#── Zip ───────────────────────────────────────────────────────────────────────
+#npm install runs in scripts/build-lambdas.sh before terraform apply (closes
+#backlog #20). The lifecycle.precondition on aws_lambda_function below fails
+#fast with a clear message if the build step was skipped.
 
 data "archive_file" "self_healing" {
   type        = "zip"
@@ -24,7 +25,7 @@ data "archive_file" "self_healing" {
   excludes    = ["*.zip"]
 }
 
-# ── Lambda ────────────────────────────────────────────────────────────────────
+#── Lambda ────────────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "self_healing_controller" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
@@ -33,7 +34,7 @@ resource "aws_lambda_function" "self_healing_controller" {
   #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-self-healing-controller"
   role             = aws_iam_role.self_healing.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   timeout          = 120
   memory_size      = 256
@@ -73,6 +74,7 @@ resource "aws_lambda_function" "self_healing_controller" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch log group resource named self healing controller.
 resource "aws_cloudwatch_log_group" "self_healing_controller" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-self-healing-controller"
@@ -80,7 +82,7 @@ resource "aws_cloudwatch_log_group" "self_healing_controller" {
   tags              = var.tags
 }
 
-# ── SNS trigger topic ─────────────────────────────────────────────────────────
+#── SNS trigger topic ─────────────────────────────────────────────────────────
 
 resource "aws_sns_topic" "healing_triggers" {
   name              = "${var.project_name}-healing-triggers"
@@ -88,6 +90,7 @@ resource "aws_sns_topic" "healing_triggers" {
   tags              = var.tags
 }
 
+#Creates the AWS sns topic policy resource named healing triggers.
 resource "aws_sns_topic_policy" "healing_triggers" {
   arn = aws_sns_topic.healing_triggers.arn
 
@@ -110,6 +113,7 @@ resource "aws_sns_topic_policy" "healing_triggers" {
   })
 }
 
+#Creates the AWS lambda permission resource named sns invoke self healing.
 resource "aws_lambda_permission" "sns_invoke_self_healing" {
   statement_id  = "AllowSNSInvoke"
   action        = "lambda:InvokeFunction"
@@ -118,15 +122,16 @@ resource "aws_lambda_permission" "sns_invoke_self_healing" {
   source_arn    = aws_sns_topic.healing_triggers.arn
 }
 
+#Creates the AWS sns topic subscription resource named self healing lambda.
 resource "aws_sns_topic_subscription" "self_healing_lambda" {
   topic_arn = aws_sns_topic.healing_triggers.arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.self_healing_controller.arn
 }
 
-# ── EventBridge — EKS pod failure events ─────────────────────────────────────
-# Watches CloudTrail management events for EKS pod scheduling failures
-# and container back-off so the controller can react before a CW alarm fires.
+#── EventBridge — EKS pod failure events ─────────────────────────────────────
+#Watches CloudTrail management events for EKS pod scheduling failures
+#and container back-off so the controller can react before a CW alarm fires.
 
 resource "aws_cloudwatch_event_rule" "eks_pod_failures" {
   name        = "${var.project_name}-eks-pod-failures"
@@ -143,12 +148,14 @@ resource "aws_cloudwatch_event_rule" "eks_pod_failures" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch event target resource named EKS pod failures to lambda.
 resource "aws_cloudwatch_event_target" "eks_pod_failures_to_lambda" {
   rule      = aws_cloudwatch_event_rule.eks_pod_failures.name
   target_id = "SelfHealingController"
   arn       = aws_lambda_function.self_healing_controller.arn
 }
 
+#Creates the AWS lambda permission resource named eventbridge invoke self healing.
 resource "aws_lambda_permission" "eventbridge_invoke_self_healing" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"

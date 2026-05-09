@@ -1,3 +1,4 @@
+<!-- This document explains prod roadmap for CloudOps. -->
 # Prod Readiness Roadmap
 
 Plan for taking this dev/test platform to production-enterprise grade. Assumes
@@ -9,19 +10,19 @@ unlocks the full set via `environments/prod.tfvars`.
 
 > **Status note (2026-05-05):** this is a roadmap snapshot. The
 > *canonical*, day-to-day backlog (with resolution notes per item) lives in
-> `CLAUDE.md` at the repo root. Items marked `todo` here that are now
-> resolved should be assumed superseded by the CLAUDE.md row of the same
+> the repo backlog at the repo root. Items marked `todo` here that are now
+> resolved should be assumed superseded by the repo backlog row of the same
 > topic; updated below where the topic maps cleanly. Items still `todo`
 > here are work that has not yet been picked up.
 
 ## What landed since the original snapshot
 
-Tracked by CLAUDE.md backlog ID; cross-referenced for the topics covered in
+Tracked by repo backlog ID; cross-referenced for the topics covered in
 this roadmap:
 
-- **A-1** Real auth — `done` (CLAUDE.md #7: JWT verifier via `jose`).
-- **A-2** Per-tenant rate limit — `done` (CLAUDE.md #45: two-tier limiter).
-- **A-4** Tenancy model — `done` (CLAUDE.md #8 + #51: tenant_id + RLS).
+- **A-1** Real auth — `done` (repo backlog #7: JWT verifier via `jose`).
+- **A-2** Per-tenant rate limit — `done` (repo backlog #45: two-tier limiter).
+- **A-4** Tenancy model — `done` (repo backlog #8 + #51: tenant_id + RLS).
 - **D-1** RDS multi-AZ + final snapshot policy — `done` for prod profile (#40).
 - **D-3** Secrets rotation — `done` (#11: SAR app auto-deploys).
 - **D-5** AWS Backup vault — `done` (#14 / prod-enterprise reshape).
@@ -42,7 +43,7 @@ this roadmap:
 - **K-4 Karpenter** — `todo` (autoscaler stays Cluster Autoscaler for now).
 
 The full per-item state — including what changed and why — is in
-`CLAUDE.md` § Known Risks / Follow-ups (backlog).
+the repo backlog § Known Risks / Follow-ups (backlog).
 
 ---
 

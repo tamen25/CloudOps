@@ -1,8 +1,17 @@
+<!-- This document explains readme for CloudOps. -->
 # Order API
 
-Node.js REST API used as the sample workload for the CloudOps platform. Runs
-on EKS, exports Prometheus metrics on an internal port, and emits OpenTelemetry
-traces/metrics/logs to an OTel Collector. Persists orders to RDS PostgreSQL.
+TypeScript/Node.js REST API used as the sample workload for the CloudOps
+platform. Runs on EKS, exports Prometheus metrics on an internal port, and
+emits OpenTelemetry traces/metrics/logs to an OTel Collector. Persists orders
+to RDS PostgreSQL. Source under `src/*.ts`, compiled to `dist/*.js` for
+runtime; unit tests run directly against `.ts` via `tsx`.
+
+## API contract
+
+The full HTTP contract — request/response schemas, auth headers, tenant
+header, error shapes — lives in [`openapi.yaml`](./openapi.yaml). It is
+linted on every CI run (`npm run openapi:lint`) via Spectral.
 
 ## Endpoints
 
@@ -46,12 +55,13 @@ Service port.
 ```bash
 cd apps/order-api
 npm install
-npm test          # unit tests via node --test (no AWS needed)
-npm start         # starts the server; requires DB_SECRET_ARN + AWS creds
+npm test          # unit tests via tsx + node:test (no AWS needed)
+npm run build     # tsc -> dist/
+npm start         # node dist/server.js; requires DB_SECRET_ARN + AWS creds
 ```
 
-Unit tests use `node:test` and inject a mock pool — they don't require a real
-database or network.
+Unit tests use `node:test` (run via `tsx`) and inject a mock pool — they don't
+require a real database or network.
 
 ## Kubernetes manifests
 
@@ -59,12 +69,13 @@ All manifests in `k8s/` use `${VAR}` placeholders so values come from Terraform
 outputs instead of hardcodes. Render them with:
 
 ```bash
-# Export the variables (see scripts/render-k8s.js for the full list)
+# Export the variables (see scripts/render-k8s.ts for the full list)
 export ORDER_API_NAMESPACE=cloudops
 export ORDER_API_IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/order-api:latest
 # … etc
 
-node scripts/render-k8s.js k8s /tmp/order-api-k8s
+# tsx is installed as a dev dependency via `npm install`
+node_modules/.bin/tsx scripts/render-k8s.ts k8s /tmp/order-api-k8s
 kubectl apply -f /tmp/order-api-k8s/
 ```
 
@@ -76,7 +87,7 @@ The app workflow (`.github/workflows/app.yml`) does this automatically using
 - **Metrics**: exported on `:9090/metrics` in Prometheus text format. Counters:
   `http_requests_total`, `http_request_duration_seconds` (histogram), both
   labeled by method/route/status.
-- **Traces**: OTel auto-instrumentation in `src/tracing.js` wraps `http`, `pg`,
+- **Traces**: OTel auto-instrumentation in `src/tracing.ts` wraps `http`, `pg`,
   and `express` and ships spans to `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - **Logs**: structured JSON via `pino` at `info` level by default.
 

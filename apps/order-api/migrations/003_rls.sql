@@ -1,3 +1,4 @@
+/* This migration prepares 003 rls database changes for CloudOps. */
 -- Backlog #51 — DB-level tenant isolation via Row Level Security.
 --
 -- App-side filtering (#8) is necessary but not sufficient: a missing WHERE
@@ -19,18 +20,25 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'order_api_app') THEN
+    /* Creates the database object named role. */
     CREATE ROLE order_api_app NOLOGIN;
   END IF;
 END
 $$;
 
+/* Grants the database object named usage. */
 GRANT USAGE ON SCHEMA public TO order_api_app;
+/* Grants the database object named select. */
 GRANT SELECT, INSERT, UPDATE, DELETE ON orders TO order_api_app;
 
+/* Alters the table named orders. */
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+/* Alters the table named orders. */
 ALTER TABLE orders FORCE ROW LEVEL SECURITY;
 
+/* Drops the policy named tenant isolation. */
 DROP POLICY IF EXISTS tenant_isolation ON orders;
+/* Creates the policy named tenant isolation. */
 CREATE POLICY tenant_isolation ON orders
   USING (tenant_id = current_setting('app.tenant_id', true))
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));

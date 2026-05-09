@@ -1,3 +1,4 @@
+#This file defines remote state settings for CloudOps.
 data "terraform_remote_state" "foundation" {
   count = var.use_remote_state_foundation ? 1 : 0
 
@@ -10,6 +11,7 @@ data "terraform_remote_state" "foundation" {
   }
 }
 
+#Reads the terraform remote state data source named cluster.
 data "terraform_remote_state" "cluster" {
   count = var.use_remote_state_cluster ? 1 : 0
 

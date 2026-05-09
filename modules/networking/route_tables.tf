@@ -1,4 +1,5 @@
-# Route table for public subnets
+#This file defines route tables settings for CloudOps.
+#Route table for public subnets
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -10,14 +11,14 @@ resource "aws_route_table" "public" {
   )
 }
 
-# Route public traffic to Internet Gateway
+#Route public traffic to Internet Gateway
 resource "aws_route" "public_internet" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
 }
 
-# Associate public subnets with public route table
+#Associate public subnets with public route table
 resource "aws_route_table_association" "public" {
   count = local.az_count
 
@@ -25,7 +26,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Route table for each private subnet (one per AZ for NAT HA)
+#Route table for each private subnet (one per AZ for NAT HA)
 resource "aws_route_table" "private" {
   count = local.az_count
 
@@ -39,7 +40,7 @@ resource "aws_route_table" "private" {
   )
 }
 
-# Route private traffic to NAT Gateway (if enabled)
+#Route private traffic to NAT Gateway (if enabled)
 resource "aws_route" "private_nat" {
   count = var.enable_nat_gateway ? local.az_count : 0
 
@@ -48,7 +49,7 @@ resource "aws_route" "private_nat" {
   nat_gateway_id         = aws_nat_gateway.main[count.index].id
 }
 
-# Associate private subnets with their route tables
+#Associate private subnets with their route tables
 resource "aws_route_table_association" "private" {
   count = local.az_count
 
@@ -56,7 +57,7 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-# Route table for database subnets (no internet access)
+#Route table for database subnets (no internet access)
 resource "aws_route_table" "database" {
   vpc_id = aws_vpc.main.id
 
@@ -68,7 +69,7 @@ resource "aws_route_table" "database" {
   )
 }
 
-# Associate database subnets with database route table
+#Associate database subnets with database route table
 resource "aws_route_table_association" "database" {
   count = local.az_count
 

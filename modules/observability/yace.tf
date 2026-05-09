@@ -1,15 +1,16 @@
-# yace — Yet Another CloudWatch Exporter.
-# Scrapes AWS/RDS, AWS/ApplicationELB, AWS/NATGateway, AWS/Lambda, etc., and
-# exposes them as Prometheus metrics so the existing Prom + Grafana + alerting
-# stack can consume them uniformly. Closes backlog #14 (and supersedes #13:
-# direct CW datasource hits the CW API on every dashboard load + every alert
-# eval, expensive at scale).
+#This file defines yace settings for CloudOps.
+#yace — Yet Another CloudWatch Exporter.
+#Scrapes AWS/RDS, AWS/ApplicationELB, AWS/NATGateway, AWS/Lambda, etc., and
+#exposes them as Prometheus metrics so the existing Prom + Grafana + alerting
+#stack can consume them uniformly. Closes backlog #14 (and supersedes #13:
+#direct CW datasource hits the CW API on every dashboard load + every alert
+#eval, expensive at scale).
 #
-# Activate by setting `var.enable_yace = true`. IRSA is auto-wired against the
-# existing oidc provider; the helm chart runs in the `monitoring` namespace
-# and is auto-discovered by the kube-prometheus-stack ServiceMonitor selector.
+#Activate by setting `var.enable_yace = true`. IRSA is auto-wired against the
+#existing oidc provider; the helm chart runs in the `monitoring` namespace
+#and is auto-discovered by the kube-prometheus-stack ServiceMonitor selector.
 
-# ── IRSA ─────────────────────────────────────────────────────────────────────
+#── IRSA ─────────────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "yace" {
   count = var.enable_yace ? 1 : 0
@@ -34,6 +35,7 @@ resource "aws_iam_role" "yace" {
   tags = merge(local.common_tags, { Name = "${local.name}-yace-irsa" })
 }
 
+#Creates the AWS IAM role policy resource named yace.
 resource "aws_iam_role_policy" "yace" {
   count = var.enable_yace ? 1 : 0
 
@@ -65,7 +67,7 @@ resource "aws_iam_role_policy" "yace" {
   })
 }
 
-# ── Helm release ─────────────────────────────────────────────────────────────
+#── Helm release ─────────────────────────────────────────────────────────────
 
 resource "helm_release" "yace" {
   count = var.enable_yace ? 1 : 0
@@ -87,17 +89,17 @@ resource "helm_release" "yace" {
       }
     }
 
-    # Picked up by the kube-prometheus-stack ServiceMonitor selector
-    # (release=prometheus + release-namespace=monitoring).
+    #Picked up by the kube-prometheus-stack ServiceMonitor selector
+    #(release=prometheus + release-namespace=monitoring).
     serviceMonitor = {
       enabled  = true
       interval = "60s"
       labels   = { release = "prometheus" }
     }
 
-    # Scrape config. Each job hits a single AWS/<namespace>; tag-based
-    # discovery means RDS instances / ALBs / etc. are picked up automatically
-    # as long as they have any tag (default behaviour).
+    #Scrape config. Each job hits a single AWS/<namespace>; tag-based
+    #discovery means RDS instances / ALBs / etc. are picked up automatically
+    #as long as they have any tag (default behaviour).
     config = {
       apiVersion = "v1alpha1"
       sts-region = var.region
@@ -179,10 +181,10 @@ resource "helm_release" "yace" {
   ]
 }
 
-# ── PrometheusRule: CloudWatch-sourced alerts ────────────────────────────────
-# Now that yace exposes AWS/RDS + AWS/ApplicationELB metrics in Prom, the
-# alerts the user originally wanted in backlog #3 (RDS CPU credits, ALB 5xx)
-# are evaluated by the Prom operator alongside the SLO rules.
+#── PrometheusRule: CloudWatch-sourced alerts ────────────────────────────────
+#Now that yace exposes AWS/RDS + AWS/ApplicationELB metrics in Prom, the
+#alerts the user originally wanted in backlog #3 (RDS CPU credits, ALB 5xx)
+#are evaluated by the Prom operator alongside the SLO rules.
 
 resource "kubernetes_manifest" "yace_alerts" {
   count = var.enable_yace ? 1 : 0

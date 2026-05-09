@@ -1,19 +1,20 @@
-# Self-Healing — Scale-In Scheduler
+#This file defines scale in scheduler settings for CloudOps.
+#Self-Healing — Scale-In Scheduler
 #
-# A lightweight Lambda that resets the order-api HPA minReplicas back to its
-# baseline after the self-healing controller temporarily scaled out.
+#A lightweight Lambda that resets the order-api HPA minReplicas back to its
+#baseline after the self-healing controller temporarily scaled out.
 #
-# The scale-in Lambda is invoked by a one-time EventBridge rule created
-# dynamically by the controller (30 minutes after a scale-out action).
-# This file provisions the Lambda and its execution role so the controller
-# can reference the function ARN when creating that transient rule.
+#The scale-in Lambda is invoked by a one-time EventBridge rule created
+#dynamically by the controller (30 minutes after a scale-out action).
+#This file provisions the Lambda and its execution role so the controller
+#can reference the function ARN when creating that transient rule.
 
 locals {
   scale_in_src_dir = "${path.module}/lambda_function_scale_in"
   scale_in_zip     = "${path.module}/lambda_function_scale_in/scale_in_scheduler.zip"
 }
 
-# Inline the scale-in handler — it is tiny and has no npm dependencies.
+#Inline the scale-in handler — it is tiny and has no npm dependencies.
 resource "local_file" "scale_in_index" {
   filename = "${local.scale_in_src_dir}/index.js"
   content  = <<-JS
@@ -111,6 +112,7 @@ exports.handler = async function handler(event) {
 JS
 }
 
+#Creates the local file resource named scale in package.
 resource "local_file" "scale_in_package" {
   filename = "${local.scale_in_src_dir}/package.json"
   content = jsonencode({
@@ -130,8 +132,8 @@ resource "local_file" "scale_in_package" {
   })
 }
 
-# npm install runs in scripts/build-lambdas.sh before terraform apply.
-# Closes backlog #20.
+#npm install runs in scripts/build-lambdas.sh before terraform apply.
+#Closes backlog #20.
 data "archive_file" "scale_in_scheduler" {
   type        = "zip"
   source_dir  = local.scale_in_src_dir
@@ -141,6 +143,7 @@ data "archive_file" "scale_in_scheduler" {
   depends_on = [local_file.scale_in_index, local_file.scale_in_package]
 }
 
+#Creates the AWS lambda function resource named scale in scheduler.
 resource "aws_lambda_function" "scale_in_scheduler" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -148,7 +151,7 @@ resource "aws_lambda_function" "scale_in_scheduler" {
   #checkov:skip=CKV_AWS_116:DLQ not implemented - Lambda errors are surfaced via CloudWatch alarms
   function_name    = "${var.project_name}-scale-in-scheduler"
   role             = aws_iam_role.scale_in_scheduler.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   timeout          = 60
   memory_size      = 128
@@ -180,6 +183,7 @@ resource "aws_lambda_function" "scale_in_scheduler" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch log group resource named scale in scheduler.
 resource "aws_cloudwatch_log_group" "scale_in_scheduler" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-scale-in-scheduler"
@@ -187,6 +191,7 @@ resource "aws_cloudwatch_log_group" "scale_in_scheduler" {
   tags              = var.tags
 }
 
+#Creates the AWS lambda permission resource named eventbridge invoke scale in.
 resource "aws_lambda_permission" "eventbridge_invoke_scale_in" {
   statement_id  = "AllowEventBridgeScaleIn"
   action        = "lambda:InvokeFunction"

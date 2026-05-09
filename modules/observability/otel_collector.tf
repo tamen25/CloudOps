@@ -1,5 +1,6 @@
-# OpenTelemetry Collector in GATEWAY mode (Deployment, not DaemonSet)
-# All SDK clients send telemetry to this central collector inside the cluster
+#This file defines OTel collector settings for CloudOps.
+#OpenTelemetry Collector in GATEWAY mode (Deployment, not DaemonSet)
+#All SDK clients send telemetry to this central collector inside the cluster
 resource "helm_release" "otel_collector" {
   name       = "opentelemetry-collector"
   repository = "https://open-telemetry.github.io/opentelemetry-helm-charts"
@@ -10,11 +11,11 @@ resource "helm_release" "otel_collector" {
   timeout = 300
 
   values = [yamlencode({
-    # Gateway mode — runs as a Deployment rather than DaemonSet
+    #Gateway mode — runs as a Deployment rather than DaemonSet
     mode         = "deployment"
     replicaCount = 2
 
-    # Expose OTLP gRPC (4317) and HTTP (4318) as named service ports
+    #Expose OTLP gRPC (4317) and HTTP (4318) as named service ports
     ports = {
       otlp = {
         enabled       = true
@@ -31,7 +32,7 @@ resource "helm_release" "otel_collector" {
       }
     }
 
-    # Mount the otel-auth k8s secret as a file — bearertokenauth reads token from this path
+    #Mount the otel-auth k8s secret as a file — bearertokenauth reads token from this path
     extraVolumes = [{
       name   = "otel-auth"
       secret = { secretName = "otel-auth" }
@@ -45,7 +46,7 @@ resource "helm_release" "otel_collector" {
 
     config = {
       extensions = {
-        # Reads the bearer token from the mounted k8s secret file
+        #Reads the bearer token from the mounted k8s secret file
         bearertokenauth = {
           scheme   = "Bearer"
           filename = "/etc/otel/auth/api-key"
@@ -74,7 +75,7 @@ resource "helm_release" "otel_collector" {
           spike_limit_percentage = 15
         }
 
-        # Inject cluster and environment as resource attributes on all telemetry
+        #Inject cluster and environment as resource attributes on all telemetry
         resource = {
           attributes = [
             { key = "cluster", value = var.eks_cluster_name, action = "upsert" },
@@ -89,19 +90,19 @@ resource "helm_release" "otel_collector" {
       }
 
       exporters = {
-        # Traces → Tempo via OTLP HTTP
+        #Traces → Tempo via OTLP HTTP
         "otlphttp/tempo" = {
           endpoint = "http://tempo.tempo.svc:4318"
           tls      = { insecure = true }
         }
 
-        # Metrics → Prometheus remote write
+        #Metrics → Prometheus remote write
         prometheusremotewrite = {
           endpoint = "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/write"
           tls      = { insecure_skip_verify = true }
         }
 
-        # Logs → Loki gateway; promote service.name, level, trace_id as Loki labels
+        #Logs → Loki gateway; promote service.name, level, trace_id as Loki labels
         loki = {
           endpoint = "http://loki-gateway.loki.svc/loki/api/v1/push"
           default_labels_enabled = {
@@ -146,8 +147,8 @@ resource "helm_release" "otel_collector" {
   depends_on = [kubernetes_secret.otel_auth, helm_release.prometheus, helm_release.loki, helm_release.tempo]
 }
 
-# Ingress for OTel Collector HTTP endpoint (OTLP/HTTP, port 4318)
-# TLS is terminated at the ALB; backend is plain HTTP.
+#Ingress for OTel Collector HTTP endpoint (OTLP/HTTP, port 4318)
+#TLS is terminated at the ALB; backend is plain HTTP.
 resource "kubernetes_ingress_v1" "otel_http" {
   metadata {
     name      = "otel-collector-http"
@@ -187,9 +188,9 @@ resource "kubernetes_ingress_v1" "otel_http" {
   depends_on = [helm_release.otel_collector]
 }
 
-# Ingress for OTel Collector gRPC endpoint (OTLP/gRPC, port 4317)
-# ALB backend-protocol GRPC uses HTTP/2 to forward to the collector pod.
-# NOTE: ALB requires the backend to accept clear-text HTTP/2 (h2c) on port 4317.
+#Ingress for OTel Collector gRPC endpoint (OTLP/gRPC, port 4317)
+#ALB backend-protocol GRPC uses HTTP/2 to forward to the collector pod.
+#NOTE: ALB requires the backend to accept clear-text HTTP/2 (h2c) on port 4317.
 resource "kubernetes_ingress_v1" "otel_grpc" {
   metadata {
     name      = "otel-collector-grpc"

@@ -1,19 +1,20 @@
 #!/bin/bash
-# Usage: scripts/oidc.sh
-# Run once locally before first CI/CD deployment.
-# Creates AWS OIDC provider + GitHub Actions IAM role using AWS CLI only.
-# No Terraform, no S3 bucket, no jq needed — just AWS credentials.
-# Never needs to be run again unless you recreate the AWS account.
+#This script runs OIDC automation for CloudOps.
+#Usage: scripts/oidc.sh
+#Run once locally before first CI/CD deployment.
+#Creates AWS OIDC provider + GitHub Actions IAM role using AWS CLI only.
+#No Terraform, no S3 bucket, no jq needed — just AWS credentials.
+#Never needs to be run again unless you recreate the AWS account.
 
 set -e
 
-# Backlog #62 — moved from repo root to scripts/. Resolve repo root from
-# this script's location so the bare `terraform.tfvars` lookup below works.
+#Backlog #62 — moved from repo root to scripts/. Resolve repo root from
+#this script's location so the bare `terraform.tfvars` lookup below works.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$REPO_ROOT"
 
-# ── Colors (matches scripts/deploy.sh) ────────────────────────────────────────
+#── Colors (matches scripts/deploy.sh) ────────────────────────────────────────
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
@@ -21,10 +22,15 @@ RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+#Handles info.
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
+#Handles success.
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
+#Handles warn.
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+#Handles die.
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+#Handles step.
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
 echo -e "${BOLD}"
@@ -33,7 +39,7 @@ echo "   CloudOps OIDC Bootstrap"
 echo "========================================"
 echo -e "${NC}"
 
-# ── Step 1: Validate prerequisites ───────────────────────────────────────────
+#── Step 1: Validate prerequisites ───────────────────────────────────────────
 step "Validating prerequisites"
 
 command -v aws &>/dev/null || die "aws CLI not found. Install from https://aws.amazon.com/cli/"
@@ -52,14 +58,15 @@ echo ""
 read -r -p "Proceed with this account and region? [y/N] " CONFIRM
 [[ "${CONFIRM,,}" == "y" ]] || { warn "Aborted by user."; exit 0; }
 
-# ── Step 2: Read config from terraform.tfvars ─────────────────────────────────
+#── Step 2: Read config from terraform.tfvars ─────────────────────────────────
 step "Reading config from terraform.tfvars"
 
 TFVARS="terraform.tfvars"
 [[ -f "$TFVARS" ]] || die "$TFVARS not found. Copy terraform.tfvars.example and fill in your values."
 
+#Gets tfvar.
 get_tfvar() {
-  # Handles:  key = "value"  and  key = value  (strips quotes, trailing spaces, inline comments)
+  #Handles:  key = "value"  and  key = value  (strips quotes, trailing spaces, inline comments)
   grep -E "^${1}\s*=" "$TFVARS" 2>/dev/null \
     | sed -E 's/^[^=]+=\s*"?([^"#]+)"?.*/\1/' \
     | tr -d ' ' \
@@ -89,7 +96,7 @@ info "environment  : $ENVIRONMENT"
 info "region       : $REGION"
 info "role name    : $ROLE_NAME"
 
-# ── Step 3: Create OIDC provider (idempotent) ─────────────────────────────────
+#── Step 3: Create OIDC provider (idempotent) ─────────────────────────────────
 step "Checking OIDC provider"
 
 EXISTING_OIDC=$(aws iam list-open-id-connect-providers \
@@ -110,7 +117,7 @@ else
   success "OIDC provider created: $OIDC_ARN"
 fi
 
-# ── Step 4: Build trust policy ────────────────────────────────────────────────
+#── Step 4: Build trust policy ────────────────────────────────────────────────
 step "Building trust policy"
 
 TRUST_POLICY=$(cat <<EOF
@@ -139,7 +146,7 @@ EOF
 
 success "Trust policy built (scoped to repo:${GITHUB_REPO}:*)"
 
-# ── Steps 5 & 6: Create or update IAM role (idempotent) ──────────────────────
+#── Steps 5 & 6: Create or update IAM role (idempotent) ──────────────────────
 step "Creating / updating IAM role: $ROLE_NAME"
 
 if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
@@ -167,7 +174,7 @@ else
   success "Role created: $ROLE_ARN"
 fi
 
-# ── Step 7: Attach inline permissions policy (idempotent) ────────────────────
+#── Step 7: Attach inline permissions policy (idempotent) ────────────────────
 step "Attaching permissions policy: $POLICY_NAME"
 
 PERMISSIONS_POLICY=$(cat <<EOF
@@ -213,7 +220,7 @@ PERMISSIONS_POLICY=$(cat <<EOF
 EOF
 )
 
-# put-role-policy is always an upsert — check only for the info message
+#put-role-policy is always an upsert — check only for the info message
 if aws iam get-role-policy \
      --role-name "$ROLE_NAME" \
      --policy-name "$POLICY_NAME" \
@@ -230,7 +237,7 @@ aws iam put-role-policy \
 
 success "Policy '$POLICY_NAME' applied to role $ROLE_NAME"
 
-# ── Step 8: Print final summary ───────────────────────────────────────────────
+#── Step 8: Print final summary ───────────────────────────────────────────────
 BUCKET_NAME="${PROJECT_NAME}-tfstate-tamen25"
 
 echo ""

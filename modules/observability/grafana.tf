@@ -1,4 +1,5 @@
-# Grafana with auto-provisioned datasources and dashboard sidecar
+#This file defines grafana settings for CloudOps.
+#Grafana with auto-provisioned datasources and dashboard sidecar
 resource "helm_release" "grafana" {
   name       = "grafana"
   repository = "https://grafana.github.io/helm-charts"
@@ -9,7 +10,7 @@ resource "helm_release" "grafana" {
   timeout = 300
 
   values = [yamlencode({
-    # Admin credentials from the k8s secret created in secrets.tf
+    #Admin credentials from the k8s secret created in secrets.tf
     admin = {
       existingSecret = kubernetes_secret.grafana_admin.metadata[0].name
       userKey        = "username"
@@ -22,7 +23,7 @@ resource "helm_release" "grafana" {
       size             = "10Gi"
     }
 
-    # Auto-provision datasources on startup
+    #Auto-provision datasources on startup
     datasources = {
       "datasources.yaml" = {
         apiVersion = 1
@@ -66,10 +67,10 @@ resource "helm_release" "grafana" {
       }
     }
 
-    # Sidecar watches for ConfigMaps across all namespaces:
-    #   grafana_dashboard=1           → dashboards (existing)
-    #   grafana_alert=1               → unified-alerting rules + contact points + policies
-    #   grafana_datasource=1          → extra datasources
+    #Sidecar watches for ConfigMaps across all namespaces:
+    #grafana_dashboard=1           → dashboards (existing)
+    #grafana_alert=1               → unified-alerting rules + contact points + policies
+    #grafana_datasource=1          → extra datasources
     sidecar = {
       dashboards = {
         enabled         = true
@@ -87,8 +88,8 @@ resource "helm_release" "grafana" {
         label           = "grafana_alert"
         labelValue      = "1"
         folder          = "/etc/grafana/provisioning/alerting"
-        # Restart the Grafana pod whenever provisioning files change, since
-        # Grafana does not hot-reload alerting provisioning on all versions.
+        #Restart the Grafana pod whenever provisioning files change, since
+        #Grafana does not hot-reload alerting provisioning on all versions.
         watchMethod = "WATCH"
       }
       datasources = {
@@ -99,7 +100,7 @@ resource "helm_release" "grafana" {
       }
     }
 
-    # Ingress — ALB terminates TLS; Grafana runs plain HTTP inside the cluster
+    #Ingress — ALB terminates TLS; Grafana runs plain HTTP inside the cluster
     ingress = {
       enabled = true
       annotations = {
@@ -124,12 +125,12 @@ resource "helm_release" "grafana" {
         auth = {
           disable_login_form = false
         }
-        # Unified Alerting is on by default in Grafana >= 9 — spelled out here
-        # so the behaviour is obvious and can't drift on future upgrades.
+        #Unified Alerting is on by default in Grafana >= 9 — spelled out here
+        #so the behaviour is obvious and can't drift on future upgrades.
         unified_alerting = {
           enabled = true
         }
-        # Disable legacy alerting explicitly so both systems don't run side by side.
+        #Disable legacy alerting explicitly so both systems don't run side by side.
         alerting = {
           enabled = false
         }
@@ -150,21 +151,21 @@ resource "helm_release" "grafana" {
   ]
 }
 
-# ── Grafana Service Account for SLO Lambda ────────────────────────────────────
-# Creates a Viewer-role service account and API token in Grafana, then stores
-# the token in AWS Secrets Manager so the SLO Lambda can authenticate with the
-# Grafana Prometheus datasource proxy.
+#── Grafana Service Account for SLO Lambda ────────────────────────────────────
+#Creates a Viewer-role service account and API token in Grafana, then stores
+#the token in AWS Secrets Manager so the SLO Lambda can authenticate with the
+#Grafana Prometheus datasource proxy.
 #
-# Implementation note: The grafana/grafana Terraform provider requires the
-# Grafana admin password at provider-init time, which creates a bootstrapping
-# conflict because the password is generated within this same module.
-# The null_resource approach avoids this by calling the Grafana REST API
-# directly via curl after the Helm release is deployed and accessible.
+#Implementation note: The grafana/grafana Terraform provider requires the
+#Grafana admin password at provider-init time, which creates a bootstrapping
+#conflict because the password is generated within this same module.
+#The null_resource approach avoids this by calling the Grafana REST API
+#directly via curl after the Helm release is deployed and accessible.
 #
-# The null_resource re-runs if the Grafana URL or the secret ARN changes.
-# Each run creates a new token (old tokens accumulate in Grafana but do not
-# invalidate previous ones — clean up via the Grafana UI or API if needed).
-# ─────────────────────────────────────────────────────────────────────────────
+#The null_resource re-runs if the Grafana URL or the secret ARN changes.
+#Each run creates a new token (old tokens accumulate in Grafana but do not
+#invalidate previous ones — clean up via the Grafana UI or API if needed).
+#─────────────────────────────────────────────────────────────────────────────
 
 resource "aws_secretsmanager_secret" "grafana_api_key" {
   #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
@@ -179,10 +180,10 @@ resource "aws_secretsmanager_secret" "grafana_api_key" {
   })
 }
 
-# Placeholder version written immediately so the secret ARN is usable as an
-# output before the null_resource has had a chance to run.
-# The lifecycle ignore_changes block prevents Terraform from overwriting the
-# real token with the placeholder on subsequent applies.
+#Placeholder version written immediately so the secret ARN is usable as an
+#output before the null_resource has had a chance to run.
+#The lifecycle ignore_changes block prevents Terraform from overwriting the
+#real token with the placeholder on subsequent applies.
 resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
   secret_id     = aws_secretsmanager_secret.grafana_api_key.id
   secret_string = "placeholder-replaced-by-grafana-service-account-provisioner"
@@ -192,31 +193,31 @@ resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
   }
 }
 
-# Provisions the Grafana service account and token via the REST API, then
-# writes the token to the Secrets Manager secret created above.
+#Provisions the Grafana service account and token via the REST API, then
+#writes the token to the Secrets Manager secret created above.
 #
-# Requires on the executor machine:
-#   - curl
-#   - python3 (stdlib only)
-#   - aws CLI authenticated with secretsmanager:PutSecretValue on the secret ARN
+#Requires on the executor machine:
+#- curl
+#- python3 (stdlib only)
+#- aws CLI authenticated with secretsmanager:PutSecretValue on the secret ARN
 #
-# Idempotency + cleanup (closes part of backlog #20):
-#   - Service account named cloudops-lambda-reader is reused if it exists.
-#   - BEFORE creating a new token the script deletes every existing token on
-#     the same service account, so applies do not silently accumulate stale
-#     tokens in Grafana.
-#   - The trigger is now a fixed string ("v1") so re-applies do NOT rotate the
-#     token by default. To force rotation: `terraform apply
-#     -replace=module.observability.null_resource.grafana_service_account`.
+#Idempotency + cleanup (closes part of backlog #20):
+#- Service account named cloudops-lambda-reader is reused if it exists.
+#- BEFORE creating a new token the script deletes every existing token on
+#the same service account, so applies do not silently accumulate stale
+#tokens in Grafana.
+#- The trigger is now a fixed string ("v1") so re-applies do NOT rotate the
+#token by default. To force rotation: `terraform apply
+#-replace=module.observability.null_resource.grafana_service_account`.
 resource "null_resource" "grafana_service_account" {
   triggers = {
-    # Bump this string to force a token rotation on the next apply.
+    #Bump this string to force a token rotation on the next apply.
     rotation_marker = "v1"
   }
 
   provisioner "local-exec" {
-    # Pass credentials via environment variables to avoid embedding them in
-    # the command string (where they could appear in shell history or logs).
+    #Pass credentials via environment variables to avoid embedding them in
+    #the command string (where they could appear in shell history or logs).
     environment = {
       GRAFANA_URL    = "https://grafana.${var.domain}"
       ADMIN_PASSWORD = random_password.grafana_admin.result
@@ -242,7 +243,7 @@ resource "null_resource" "grafana_service_account" {
         sleep 10
       done
 
-      # ── Idempotent: reuse existing service account if it already exists ──────
+      #── Idempotent: reuse existing service account if it already exists ──────
       echo "Checking for existing cloudops-lambda-reader service account..."
       SEARCH_RESP=$(curl -sf \
         -u "admin:$ADMIN_PASSWORD" \
@@ -255,7 +256,7 @@ import sys, json
 try:
     d = json.load(sys.stdin)
     accounts = d.get('serviceAccounts', [])
-    # Match exact name to avoid partial matches
+    #Match exact name to avoid partial matches
     for sa in accounts:
         if sa.get('name') == 'cloudops-lambda-reader':
             print(sa['id'])
@@ -276,7 +277,7 @@ except Exception:
         echo "Service account cloudops-lambda-reader already exists (ID $SA_ID) — reusing."
       fi
 
-      # ── Delete existing tokens on this SA to avoid silent accumulation ─────
+      #── Delete existing tokens on this SA to avoid silent accumulation ─────
       echo "Listing existing tokens on service account $SA_ID..."
       EXISTING=$(curl -sf -u "admin:$ADMIN_PASSWORD" \
         -H "Accept: application/json" \
@@ -297,7 +298,7 @@ except Exception:
           "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens/$OLD_ID" >/dev/null 2>&1 || true
       done
 
-      # ── Create a new token ────────────────────────────────────────────────
+      #── Create a new token ────────────────────────────────────────────────
       echo "Creating API token for service account $SA_ID..."
       TOKEN_NAME="cloudops-lambda-slo-$(date -u +%Y%m%d%H%M%S 2>/dev/null || date -u +%s)"
       TOKEN_RESP=$(curl -sf -X POST "$GRAFANA_URL/api/serviceaccounts/$SA_ID/tokens" \
@@ -311,7 +312,7 @@ except Exception:
         exit 1
       fi
 
-      # ── Store token in Secrets Manager ─────────────────────────────────────
+      #── Store token in Secrets Manager ─────────────────────────────────────
       echo "Storing token in Secrets Manager ($SECRET_ARN)..."
       aws secretsmanager put-secret-value \
         --secret-id "$SECRET_ARN" \

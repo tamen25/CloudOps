@@ -1,24 +1,25 @@
-# OPA Gatekeeper ConstraintTemplates and Constraints
+#This file defines gatekeeper policies settings for CloudOps.
+#OPA Gatekeeper ConstraintTemplates and Constraints
 #
-# Each policy is two resources:
-#   1. kubernetes_manifest.<name>_ct  — ConstraintTemplate: defines the CRD kind + Rego logic
-#   2. kubernetes_manifest.<name>_c   — Constraint: instance that scopes and activates the policy
+#Each policy is two resources:
+#1. kubernetes_manifest.<name>_ct  — ConstraintTemplate: defines the CRD kind + Rego logic
+#2. kubernetes_manifest.<name>_c   — Constraint: instance that scopes and activates the policy
 #
-# depends_on chains:
-#   ConstraintTemplates → helm_release.gatekeeper
-#   Constraints         → their ConstraintTemplate (CRD must be registered first)
+#depends_on chains:
+#ConstraintTemplates → helm_release.gatekeeper
+#Constraints         → their ConstraintTemplate (CRD must be registered first)
 #
-# Enforcement actions:
-#   deny  — blocks the admission request; Pod is not created
-#   warn  — admits the Pod but attaches a warning to the API response (less disruptive)
+#Enforcement actions:
+#deny  — blocks the admission request; Pod is not created
+#warn  — admits the Pod but attaches a warning to the API response (less disruptive)
 #
-# All constraints match kind: Pod in apiGroups: [""].
+#All constraints match kind: Pod in apiGroups: [""].
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 1 — No Root Containers
-# Checks: runAsNonRoot: true OR runAsUser > 0 at container or pod level
-# Scope:  all namespaces except kube-system, gatekeeper-system, falco
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 1 — No Root Containers
+#Checks: runAsNonRoot: true OR runAsUser > 0 at container or pod level
+#Scope:  all namespaces except kube-system, gatekeeper-system, falco
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_no_root_containers" {
   manifest = {
@@ -55,7 +56,7 @@ resource "kubernetes_manifest" "ct_no_root_containers" {
               msg := sprintf("initContainer <%v> must set securityContext.runAsNonRoot: true or runAsUser > 0", [c.name])
             }
 
-            # Container-level check (takes precedence over pod-level)
+            #Container-level check (takes precedence over pod-level)
             is_nonroot(c, _) {
               c.securityContext.runAsNonRoot == true
             }
@@ -63,7 +64,7 @@ resource "kubernetes_manifest" "ct_no_root_containers" {
               c.securityContext.runAsUser > 0
             }
 
-            # Fall back to pod-level security context
+            #Fall back to pod-level security context
             is_nonroot(_, spec) {
               spec.securityContext.runAsNonRoot == true
             }
@@ -79,6 +80,7 @@ resource "kubernetes_manifest" "ct_no_root_containers" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c no root containers.
 resource "kubernetes_manifest" "c_no_root_containers" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -96,11 +98,11 @@ resource "kubernetes_manifest" "c_no_root_containers" {
   depends_on = [kubernetes_manifest.ct_no_root_containers]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 2 — Required Resource Limits
-# Checks: resources.limits.cpu and resources.limits.memory set on all containers
-# Scope:  cloudops and monitoring namespaces
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 2 — Required Resource Limits
+#Checks: resources.limits.cpu and resources.limits.memory set on all containers
+#Scope:  cloudops and monitoring namespaces
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_required_resources" {
   manifest = {
@@ -157,6 +159,7 @@ resource "kubernetes_manifest" "ct_required_resources" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c required resources.
 resource "kubernetes_manifest" "c_required_resources" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -174,11 +177,11 @@ resource "kubernetes_manifest" "c_required_resources" {
   depends_on = [kubernetes_manifest.ct_required_resources]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 3 — No Privileged Containers
-# Checks: securityContext.privileged != true
-# Scope:  all namespaces EXCEPT falco (Falco's eBPF driver needs privileged mode)
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 3 — No Privileged Containers
+#Checks: securityContext.privileged != true
+#Scope:  all namespaces EXCEPT falco (Falco's eBPF driver needs privileged mode)
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_no_privileged" {
   manifest = {
@@ -223,6 +226,7 @@ resource "kubernetes_manifest" "ct_no_privileged" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c no privileged.
 resource "kubernetes_manifest" "c_no_privileged" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -232,7 +236,7 @@ resource "kubernetes_manifest" "c_no_privileged" {
       enforcementAction = "deny"
       match = {
         kinds = [{ apiGroups = [""], kinds = ["Pod"] }]
-        # Falco's eBPF driver pod runs privileged — exempt its namespace
+        #Falco's eBPF driver pod runs privileged — exempt its namespace
         excludedNamespaces = ["falco"]
       }
     }
@@ -241,12 +245,12 @@ resource "kubernetes_manifest" "c_no_privileged" {
   depends_on = [kubernetes_manifest.ct_no_privileged]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 4 — Required Liveness and Readiness Probes
-# Checks: livenessProbe and readinessProbe present on all containers
-# Scope:  cloudops namespace only
-# Action: warn (not deny) — less disruptive; surfaces missing probes as warnings
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 4 — Required Liveness and Readiness Probes
+#Checks: livenessProbe and readinessProbe present on all containers
+#Scope:  cloudops namespace only
+#Action: warn (not deny) — less disruptive; surfaces missing probes as warnings
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_required_probes" {
   manifest = {
@@ -291,14 +295,15 @@ resource "kubernetes_manifest" "ct_required_probes" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c required probes.
 resource "kubernetes_manifest" "c_required_probes" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
     kind       = "K8sRequiredProbes"
     metadata   = { name = "required-probes" }
     spec = {
-      # warn: Pod is admitted but the API response contains a warning message.
-      # Upgrade to "deny" once all workloads in cloudops have both probes defined.
+      #warn: Pod is admitted but the API response contains a warning message.
+      #Upgrade to "deny" once all workloads in cloudops have both probes defined.
       enforcementAction = "warn"
       match = {
         kinds      = [{ apiGroups = [""], kinds = ["Pod"] }]
@@ -310,11 +315,11 @@ resource "kubernetes_manifest" "c_required_probes" {
   depends_on = [kubernetes_manifest.ct_required_probes]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 5 — No Latest Image Tag
-# Checks: image tag is not ":latest" and is not absent (untagged)
-# Scope:  cloudops namespace
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 5 — No Latest Image Tag
+#Checks: image tag is not ":latest" and is not absent (untagged)
+#Scope:  cloudops namespace
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_no_latest_tag" {
   manifest = {
@@ -351,12 +356,12 @@ resource "kubernetes_manifest" "ct_no_latest_tag" {
               msg := sprintf("initContainer <%v> image <%v> must specify an explicit tag — :latest and untagged images are not allowed", [c.name, c.image])
             }
 
-            # Explicitly tagged :latest
+            #Explicitly tagged :latest
             bad_tag(image) {
               endswith(image, ":latest")
             }
 
-            # No tag at all (no colon, no digest)
+            #No tag at all (no colon, no digest)
             bad_tag(image) {
               not contains(image, ":")
               not contains(image, "@")
@@ -370,6 +375,7 @@ resource "kubernetes_manifest" "ct_no_latest_tag" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c no latest tag.
 resource "kubernetes_manifest" "c_no_latest_tag" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -387,12 +393,12 @@ resource "kubernetes_manifest" "c_no_latest_tag" {
   depends_on = [kubernetes_manifest.ct_no_latest_tag]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 6 — Allowed Image Registries
-# Checks: image starts with one of the allowed registry prefixes (parameters.repos)
-# Scope:  cloudops namespace
-# Registries: ECR (account-specific), public.ecr.aws, registry.k8s.io, quay.io, ghcr.io
-# ═══════════════════════════════════════════════════════════════════════════════
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 6 — Allowed Image Registries
+#Checks: image starts with one of the allowed registry prefixes (parameters.repos)
+#Scope:  cloudops namespace
+#Registries: ECR (account-specific), public.ecr.aws, registry.k8s.io, quay.io, ghcr.io
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_allowed_repos" {
   manifest = {
@@ -453,6 +459,7 @@ resource "kubernetes_manifest" "ct_allowed_repos" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c allowed repos.
 resource "kubernetes_manifest" "c_allowed_repos" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -479,26 +486,26 @@ resource "kubernetes_manifest" "c_allowed_repos" {
   depends_on = [kubernetes_manifest.ct_allowed_repos]
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Policy 7 — Require Cosign Image Signature
-# Checks: every container image in the cloudops namespace has a valid Cosign
-#         keyless signature from this repository's CI workflow, verified via the
-#         Cosign Gatekeeper provider (cosign-gatekeeper-provider sidecar).
+#═══════════════════════════════════════════════════════════════════════════════
+#Policy 7 — Require Cosign Image Signature
+#Checks: every container image in the cloudops namespace has a valid Cosign
+#keyless signature from this repository's CI workflow, verified via the
+#Cosign Gatekeeper provider (cosign-gatekeeper-provider sidecar).
 #
-# Architecture:
-#   The Cosign Gatekeeper provider runs as a sidecar inside gatekeeper-system and
-#   exposes a webhook that Gatekeeper calls out to during admission. The Rego
-#   policy calls `external_data` with the image reference; the provider queries
-#   the Sigstore transparency log (Rekor) and returns "true" for signed images
-#   and an error string for unsigned ones.
+#Architecture:
+#The Cosign Gatekeeper provider runs as a sidecar inside gatekeeper-system and
+#exposes a webhook that Gatekeeper calls out to during admission. The Rego
+#policy calls `external_data` with the image reference; the provider queries
+#the Sigstore transparency log (Rekor) and returns "true" for signed images
+#and an error string for unsigned ones.
 #
-# Prerequisites:
-#   - Cosign Gatekeeper provider deployed (see gatekeeper.tf helm_release.cosign_provider)
-#   - Images signed in CI via `cosign sign --yes` (build-and-push job in app.yml)
+#Prerequisites:
+#- Cosign Gatekeeper provider deployed (see gatekeeper.tf helm_release.cosign_provider)
+#- Images signed in CI via `cosign sign --yes` (build-and-push job in app.yml)
 #
-# Scope:  cloudops namespace only
-# Action: deny — unsigned images are blocked from being scheduled
-# ═══════════════════════════════════════════════════════════════════════════════
+#Scope:  cloudops namespace only
+#Action: deny — unsigned images are blocked from being scheduled
+#═══════════════════════════════════════════════════════════════════════════════
 
 resource "kubernetes_manifest" "ct_require_image_signature" {
   count = var.enable_image_signature_constraint ? 1 : 0
@@ -519,13 +526,13 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
             openAPIV3Schema = {
               type = "object"
               properties = {
-                # The certificate identity regexp passed to the Cosign provider
-                # for signature verification (matches the GitHub Actions workflow URL).
+                #The certificate identity regexp passed to the Cosign provider
+                #for signature verification (matches the GitHub Actions workflow URL).
                 certificateIdentityRegexp = {
                   type        = "string"
                   description = "Regexp matched against the signing certificate's Subject Alternative Name (workflow URL)"
                 }
-                # The expected OIDC issuer in the signing certificate.
+                #The expected OIDC issuer in the signing certificate.
                 certificateOidcIssuer = {
                   type        = "string"
                   description = "OIDC issuer URL that must appear in the signing certificate"
@@ -541,9 +548,9 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
           rego   = <<-REGO
             package k8srequireimagesignature
 
-            # The Cosign Gatekeeper provider is registered under this provider name.
-            # It accepts image references and returns verified=true or an error.
-            # See: https://github.com/sigstore/cosign-gatekeeper-provider
+            #The Cosign Gatekeeper provider is registered under this provider name.
+            #It accepts image references and returns verified=true or an error.
+            #See: https://github.com/sigstore/cosign-gatekeeper-provider
 
             violation[{"msg": msg}] {
               container := input.review.object.spec.containers[_]
@@ -569,8 +576,8 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
               )
             }
 
-            # Surface system errors from the provider (e.g. provider unreachable)
-            # as violations so that failing open is never silently allowed.
+            #Surface system errors from the provider (e.g. provider unreachable)
+            #as violations so that failing open is never silently allowed.
             violation[{"msg": msg}] {
               container := input.review.object.spec.containers[_]
               response   := external_data({"provider": "cosign-provider", "keys": [container.image]})
@@ -590,6 +597,7 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
   depends_on = [helm_release.gatekeeper]
 }
 
+#Creates the kubernetes manifest resource named c require image signature.
 resource "kubernetes_manifest" "c_require_image_signature" {
   count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {
@@ -603,8 +611,8 @@ resource "kubernetes_manifest" "c_require_image_signature" {
         namespaces = [var.application_namespace]
       }
       parameters = {
-        # Matches the identity used by the build-and-push job in app.yml.
-        # Scoped to this repository's workflow file so forks cannot sign with the same identity.
+        #Matches the identity used by the build-and-push job in app.yml.
+        #Scoped to this repository's workflow file so forks cannot sign with the same identity.
         certificateIdentityRegexp = "https://github\\.com/${var.github_repo}/\\.github/workflows/app\\.yml@refs/heads/.*"
         certificateOidcIssuer     = "https://token.actions.githubusercontent.com"
       }

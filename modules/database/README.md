@@ -1,3 +1,4 @@
+<!-- This document explains readme for CloudOps. -->
 # Database Module
 
 Production-grade managed RDS PostgreSQL database with encryption, automated backups, and disaster recovery support.

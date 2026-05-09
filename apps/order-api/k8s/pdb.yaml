@@ -1,3 +1,4 @@
+#This manifest defines PDB for CloudOps.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

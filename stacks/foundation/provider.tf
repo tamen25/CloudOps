@@ -1,3 +1,4 @@
+#This file defines provider settings for CloudOps.
 terraform {
   required_version = ">= 1.5.0"
 
@@ -12,8 +13,8 @@ terraform {
     }
   }
 
-  # Partial S3 backend. Bucket + key set at init time by scripts/tf-init.sh
-  # (STACK=foundation → key = `<env>/foundation/terraform.tfstate`).
+  #Partial S3 backend. Bucket + key set at init time by scripts/tf-init.sh
+  #(STACK=foundation → key = `<env>/foundation/terraform.tfstate`).
   backend "s3" {
     region       = "us-east-1"
     encrypt      = true
@@ -21,6 +22,7 @@ terraform {
   }
 }
 
+#Configures the AWS provider.
 provider "aws" {
   region = var.region
 

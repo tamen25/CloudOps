@@ -1,24 +1,25 @@
-# SLI/SLO PrometheusRule CRDs for order-api
-# Implements the Google SRE Workbook multi-window multi-burn-rate alerting pattern.
+#This file defines SLO settings for CloudOps.
+#SLI/SLO PrometheusRule CRDs for order-api
+#Implements the Google SRE Workbook multi-window multi-burn-rate alerting pattern.
 #
-# SLO 1 — Availability: 99.9% of requests must be non-5xx over 30 days
-# SLO 2 — Latency:      95%  of requests must complete in < 300ms over 30 days
-# SLO 3 — Throughput:   recording rule only (no SLO target)
+#SLO 1 — Availability: 99.9% of requests must be non-5xx over 30 days
+#SLO 2 — Latency:      95%  of requests must complete in < 300ms over 30 days
+#SLO 3 — Throughput:   recording rule only (no SLO target)
 #
-# PrometheusRule CRDs are served by the prometheus-operator installed via
-# kube-prometheus-stack (prometheus.tf). The `release: prometheus` label
-# ensures the operator picks up these rules.
+#PrometheusRule CRDs are served by the prometheus-operator installed via
+#kube-prometheus-stack (prometheus.tf). The `release: prometheus` label
+#ensures the operator picks up these rules.
 
 locals {
-  # Formatted as fixed-point strings for safe PromQL interpolation.
-  # Avoids floating-point representation noise (e.g. 0.9999999999 instead of 0.999).
+  #Formatted as fixed-point strings for safe PromQL interpolation.
+  #Avoids floating-point representation noise (e.g. 0.9999999999 instead of 0.999).
   availability_target_str = format("%.4f", var.slo_availability_target) # "0.9990"
   latency_target_str      = format("%.4f", var.slo_latency_target)      # "0.9500"
 }
 
-# ─── SLO 1: Availability ─────────────────────────────────────────────────────
-# SLI: proportion of non-5xx requests
-# Target: var.slo_availability_target (default 99.9%)
+#─── SLO 1: Availability ─────────────────────────────────────────────────────
+#SLI: proportion of non-5xx requests
+#Target: var.slo_availability_target (default 99.9%)
 
 resource "kubernetes_manifest" "slo_availability" {
   manifest = {
@@ -35,7 +36,7 @@ resource "kubernetes_manifest" "slo_availability" {
     }
     spec = {
       groups = [
-        # ── Recording rules: multi-window SLI ratios ──────────────────────
+        #── Recording rules: multi-window SLI ratios ──────────────────────
         {
           name     = "order-api.slo.availability.recording"
           interval = "30s"
@@ -70,9 +71,9 @@ resource "kubernetes_manifest" "slo_availability" {
               expr   = "sum(rate(http_requests_total{job=\"order-api\",status!~\"5..\"}[3d])) / sum(rate(http_requests_total{job=\"order-api\"}[3d]))"
               labels = { service = "order-api", slo = "availability" }
             },
-            # Error budget remaining: fraction of 30-day budget left.
-            # Uses the 3d burn rate as a proxy for recent trend.
-            # Value 1.0 = full budget; 0.0 = budget exhausted; negative = SLO breached.
+            #Error budget remaining: fraction of 30-day budget left.
+            #Uses the 3d burn rate as a proxy for recent trend.
+            #Value 1.0 = full budget; 0.0 = budget exhausted; negative = SLO breached.
             {
               record = "job:slo_error_budget:availability_remaining"
               expr   = "1 - ((1 - job:slo_availability:ratio_rate3d) / (1 - ${local.availability_target_str}))"
@@ -81,14 +82,14 @@ resource "kubernetes_manifest" "slo_availability" {
           ]
         },
 
-        # ── Alerting rules: multi-window multi-burn-rate ──────────────────
+        #── Alerting rules: multi-window multi-burn-rate ──────────────────
         {
           name = "order-api.slo.availability.alerts"
           rules = [
-            # Fast burn — page immediately.
-            # Burn rate > 14.4x means 2% of the 30d budget consumed in 1 hour.
-            # Confirmed over both a 1h long window and a 5m short window to reduce
-            # false positives from brief spikes.
+            #Fast burn — page immediately.
+            #Burn rate > 14.4x means 2% of the 30d budget consumed in 1 hour.
+            #Confirmed over both a 1h long window and a 5m short window to reduce
+            #false positives from brief spikes.
             {
               alert = "SLOAvailabilityFastBurn"
               expr  = "((1 - job:slo_availability:ratio_rate1h) / (1 - ${local.availability_target_str})) > 14.4 and ((1 - job:slo_availability:ratio_rate5m) / (1 - ${local.availability_target_str})) > 14.4"
@@ -106,9 +107,9 @@ resource "kubernetes_manifest" "slo_availability" {
               }
             },
 
-            # Slow burn — open a ticket.
-            # Burn rate > 6x means 5% of the 30d budget consumed in 6 hours.
-            # Confirmed over both a 6h long window and a 30m short window.
+            #Slow burn — open a ticket.
+            #Burn rate > 6x means 5% of the 30d budget consumed in 6 hours.
+            #Confirmed over both a 6h long window and a 30m short window.
             {
               alert = "SLOAvailabilitySlowBurn"
               expr  = "((1 - job:slo_availability:ratio_rate6h) / (1 - ${local.availability_target_str})) > 6 and ((1 - job:slo_availability:ratio_rate30m) / (1 - ${local.availability_target_str})) > 6"
@@ -126,7 +127,7 @@ resource "kubernetes_manifest" "slo_availability" {
               }
             },
 
-            # Budget < 10% remaining — treat as critical; SLO breach imminent.
+            #Budget < 10% remaining — treat as critical; SLO breach imminent.
             {
               alert = "SLOAvailabilityBudgetCritical"
               expr  = "job:slo_error_budget:availability_remaining < 0.10"
@@ -144,7 +145,7 @@ resource "kubernetes_manifest" "slo_availability" {
               }
             },
 
-            # Budget < 50% remaining — warning; investigate before it gets worse.
+            #Budget < 50% remaining — warning; investigate before it gets worse.
             {
               alert = "SLOAvailabilityBudgetLow"
               expr  = "job:slo_error_budget:availability_remaining < 0.50"
@@ -170,9 +171,9 @@ resource "kubernetes_manifest" "slo_availability" {
   depends_on = [helm_release.prometheus]
 }
 
-# ─── SLO 2: Latency ──────────────────────────────────────────────────────────
-# SLI: proportion of requests completing in < 300ms
-# Target: var.slo_latency_target (default 95%)
+#─── SLO 2: Latency ──────────────────────────────────────────────────────────
+#SLI: proportion of requests completing in < 300ms
+#Target: var.slo_latency_target (default 95%)
 
 resource "kubernetes_manifest" "slo_latency" {
   manifest = {
@@ -189,7 +190,7 @@ resource "kubernetes_manifest" "slo_latency" {
     }
     spec = {
       groups = [
-        # ── Recording rules: multi-window SLI ratios ──────────────────────
+        #── Recording rules: multi-window SLI ratios ──────────────────────
         {
           name     = "order-api.slo.latency.recording"
           interval = "30s"
@@ -232,11 +233,11 @@ resource "kubernetes_manifest" "slo_latency" {
           ]
         },
 
-        # ── Alerting rules: multi-window multi-burn-rate ──────────────────
+        #── Alerting rules: multi-window multi-burn-rate ──────────────────
         {
           name = "order-api.slo.latency.alerts"
           rules = [
-            # Fast burn — page immediately.
+            #Fast burn — page immediately.
             {
               alert = "SLOLatencyFastBurn"
               expr  = "((1 - job:slo_latency:ratio_rate1h) / (1 - ${local.latency_target_str})) > 14.4 and ((1 - job:slo_latency:ratio_rate5m) / (1 - ${local.latency_target_str})) > 14.4"
@@ -254,7 +255,7 @@ resource "kubernetes_manifest" "slo_latency" {
               }
             },
 
-            # Slow burn — open a ticket.
+            #Slow burn — open a ticket.
             {
               alert = "SLOLatencySlowBurn"
               expr  = "((1 - job:slo_latency:ratio_rate6h) / (1 - ${local.latency_target_str})) > 6 and ((1 - job:slo_latency:ratio_rate30m) / (1 - ${local.latency_target_str})) > 6"
@@ -272,7 +273,7 @@ resource "kubernetes_manifest" "slo_latency" {
               }
             },
 
-            # Budget < 10% remaining — critical.
+            #Budget < 10% remaining — critical.
             {
               alert = "SLOLatencyBudgetCritical"
               expr  = "job:slo_error_budget:latency_remaining < 0.10"
@@ -290,7 +291,7 @@ resource "kubernetes_manifest" "slo_latency" {
               }
             },
 
-            # Budget < 50% remaining — warning.
+            #Budget < 50% remaining — warning.
             {
               alert = "SLOLatencyBudgetLow"
               expr  = "job:slo_error_budget:latency_remaining < 0.50"
@@ -316,9 +317,9 @@ resource "kubernetes_manifest" "slo_latency" {
   depends_on = [helm_release.prometheus]
 }
 
-# ─── SLO 3: Throughput ───────────────────────────────────────────────────────
-# Recording rule only — no SLO target or alerting.
-# Exposes request throughput for dashboards and capacity planning.
+#─── SLO 3: Throughput ───────────────────────────────────────────────────────
+#Recording rule only — no SLO target or alerting.
+#Exposes request throughput for dashboards and capacity planning.
 
 resource "kubernetes_manifest" "slo_throughput" {
   manifest = {

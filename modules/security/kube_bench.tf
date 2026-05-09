@@ -1,26 +1,27 @@
-# kube-bench CIS Kubernetes Benchmark — EKS daily runner
+#This file defines kube bench settings for CloudOps.
+#kube-bench CIS Kubernetes Benchmark — EKS daily runner
 #
-# Architecture:
-#   CronJob (3 am UTC) ─► init container: kube-bench → /tmp/results/output.json
-#                       ─► main container: Node.js dispatcher → Lambda invoke
-#                       ─► kube_bench_processor Lambda → DynamoDB + CloudWatch
+#Architecture:
+#CronJob (3 am UTC) ─► init container: kube-bench → /tmp/results/output.json
+#─► main container: Node.js dispatcher → Lambda invoke
+#─► kube_bench_processor Lambda → DynamoDB + CloudWatch
 #
-# The CronJob pod uses IRSA so the processor container can invoke the Lambda
-# without any static credentials.  The ClusterRole gives kube-bench read-only
-# access to the Kubernetes API resources needed for the EKS 1.4 benchmark.
+#The CronJob pod uses IRSA so the processor container can invoke the Lambda
+#without any static credentials.  The ClusterRole gives kube-bench read-only
+#access to the Kubernetes API resources needed for the EKS 1.4 benchmark.
 #
-# Note on privileges: EKS managed-node controls that require host-level file
-# access (kubelet config files, etc.) will be reported as NOT_CHECKED when the
-# pod runs without hostPID or privileged mode.  All API-checkable controls run
-# normally.  This is the correct trade-off for clusters protected by OPA
-# Gatekeeper's no-privileged policy.
+#Note on privileges: EKS managed-node controls that require host-level file
+#access (kubelet config files, etc.) will be reported as NOT_CHECKED when the
+#pod runs without hostPID or privileged mode.  All API-checkable controls run
+#normally.  This is the correct trade-off for clusters protected by OPA
+#Gatekeeper's no-privileged policy.
 #
-# Pin the kube-bench image to an immutable digest before deploying to production:
-#   docker pull aquasec/kube-bench:v0.8.0
-#   docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
-# Then replace the image value below with aquasec/kube-bench@sha256:<digest>.
+#Pin the kube-bench image to an immutable digest before deploying to production:
+#docker pull aquasec/kube-bench:v0.8.0
+#docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
+#Then replace the image value below with aquasec/kube-bench@sha256:<digest>.
 
-# ── Namespace ─────────────────────────────────────────────────────────────────
+#── Namespace ─────────────────────────────────────────────────────────────────
 
 resource "kubernetes_namespace" "security" {
   metadata {
@@ -32,7 +33,7 @@ resource "kubernetes_namespace" "security" {
   }
 }
 
-# ── RBAC ──────────────────────────────────────────────────────────────────────
+#── RBAC ──────────────────────────────────────────────────────────────────────
 
 resource "kubernetes_cluster_role" "kube_bench" {
   metadata {
@@ -43,49 +44,49 @@ resource "kubernetes_cluster_role" "kube_bench" {
     }
   }
 
-  # Core API — nodes, pods, configmaps, namespaces, service accounts
+  #Core API — nodes, pods, configmaps, namespaces, service accounts
   rule {
     api_groups = [""]
     resources  = ["nodes", "pods", "configmaps", "namespaces", "serviceaccounts", "secrets", "endpoints", "services", "persistentvolumes", "persistentvolumeclaims"]
     verbs      = ["get", "list"]
   }
 
-  # Workload controllers
+  #Workload controllers
   rule {
     api_groups = ["apps"]
     resources  = ["deployments", "daemonsets", "replicasets", "statefulsets"]
     verbs      = ["get", "list"]
   }
 
-  # Batch jobs
+  #Batch jobs
   rule {
     api_groups = ["batch"]
     resources  = ["jobs", "cronjobs"]
     verbs      = ["get", "list"]
   }
 
-  # RBAC objects — kube-bench audits role bindings and cluster admin usage
+  #RBAC objects — kube-bench audits role bindings and cluster admin usage
   rule {
     api_groups = ["rbac.authorization.k8s.io"]
     resources  = ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
     verbs      = ["get", "list"]
   }
 
-  # Network policies and ingresses
+  #Network policies and ingresses
   rule {
     api_groups = ["networking.k8s.io"]
     resources  = ["networkpolicies", "ingresses", "ingressclasses"]
     verbs      = ["get", "list"]
   }
 
-  # Pod security policies (deprecated in 1.25 but still checked by CIS)
+  #Pod security policies (deprecated in 1.25 but still checked by CIS)
   rule {
     api_groups = ["policy"]
     resources  = ["podsecuritypolicies"]
     verbs      = ["get", "list"]
   }
 
-  # Storage classes
+  #Storage classes
   rule {
     api_groups = ["storage.k8s.io"]
     resources  = ["storageclasses"]
@@ -93,6 +94,7 @@ resource "kubernetes_cluster_role" "kube_bench" {
   }
 }
 
+#Creates the kubernetes cluster role binding resource named kube bench.
 resource "kubernetes_cluster_role_binding" "kube_bench" {
   metadata {
     name = "kube-bench"
@@ -115,9 +117,9 @@ resource "kubernetes_cluster_role_binding" "kube_bench" {
   }
 }
 
-# ── IRSA — kube-bench pod IAM role ────────────────────────────────────────────
-# The processor container (node:alpine) uses this role to invoke the
-# kube_bench_processor Lambda. IRSA is the only credential path — no static keys.
+#── IRSA — kube-bench pod IAM role ────────────────────────────────────────────
+#The processor container (node:alpine) uses this role to invoke the
+#kube_bench_processor Lambda. IRSA is the only credential path — no static keys.
 
 data "aws_iam_policy_document" "kube_bench_assume_role" {
   statement {
@@ -143,6 +145,7 @@ data "aws_iam_policy_document" "kube_bench_assume_role" {
   }
 }
 
+#Creates the AWS IAM role resource named kube bench.
 resource "aws_iam_role" "kube_bench" {
   name               = "${var.project_name}-kube-bench"
   assume_role_policy = data.aws_iam_policy_document.kube_bench_assume_role.json
@@ -151,6 +154,7 @@ resource "aws_iam_role" "kube_bench" {
   tags = var.tags
 }
 
+#Reads the AWS IAM policy document data source named kube bench pod permissions.
 data "aws_iam_policy_document" "kube_bench_pod_permissions" {
   statement {
     sid    = "InvokeKubeBenchProcessor"
@@ -162,13 +166,14 @@ data "aws_iam_policy_document" "kube_bench_pod_permissions" {
   }
 }
 
+#Creates the AWS IAM role policy resource named kube bench pod.
 resource "aws_iam_role_policy" "kube_bench_pod" {
   name   = "${var.project_name}-kube-bench-pod"
   role   = aws_iam_role.kube_bench.id
   policy = data.aws_iam_policy_document.kube_bench_pod_permissions.json
 }
 
-# ── ServiceAccount — annotated with IRSA role ARN ─────────────────────────────
+#── ServiceAccount — annotated with IRSA role ARN ─────────────────────────────
 
 resource "kubernetes_service_account" "kube_bench" {
   metadata {
@@ -184,8 +189,8 @@ resource "kubernetes_service_account" "kube_bench" {
   }
 }
 
-# ── ConfigMap — dispatcher script for the main container ──────────────────────
-# Runs inside node:20-alpine, reads kube-bench JSON output, invokes the Lambda.
+#── ConfigMap — dispatcher script for the main container ──────────────────────
+#Runs inside node:22-alpine, reads kube-bench JSON output, invokes the Lambda.
 
 resource "kubernetes_config_map" "kube_bench_script" {
   metadata {
@@ -256,11 +261,11 @@ resource "kubernetes_config_map" "kube_bench_script" {
   }
 }
 
-# ── kube_bench_processor Lambda ───────────────────────────────────────────────
+#── kube_bench_processor Lambda ───────────────────────────────────────────────
 
-# Install Lambda dependencies BEFORE terraform apply via:
-#   ./scripts/build-lambdas.sh
-# Closes backlog #20.
+#Install Lambda dependencies BEFORE terraform apply via:
+#./scripts/build-lambdas.sh
+#Closes backlog #20.
 
 data "archive_file" "kube_bench_processor" {
   type        = "zip"
@@ -268,6 +273,7 @@ data "archive_file" "kube_bench_processor" {
   output_path = "${path.module}/lambda_function/kube_bench_processor.zip"
 }
 
+#Creates the AWS cloudwatch log group resource named kube bench processor.
 resource "aws_cloudwatch_log_group" "kube_bench_processor" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-kube-bench-processor"
@@ -276,6 +282,7 @@ resource "aws_cloudwatch_log_group" "kube_bench_processor" {
   tags = var.tags
 }
 
+#Reads the AWS IAM policy document data source named kube bench processor assume role.
 data "aws_iam_policy_document" "kube_bench_processor_assume_role" {
   statement {
     effect  = "Allow"
@@ -287,6 +294,7 @@ data "aws_iam_policy_document" "kube_bench_processor_assume_role" {
   }
 }
 
+#Creates the AWS IAM role resource named kube bench processor.
 resource "aws_iam_role" "kube_bench_processor" {
   name               = "${var.project_name}-kube-bench-processor"
   assume_role_policy = data.aws_iam_policy_document.kube_bench_processor_assume_role.json
@@ -295,11 +303,13 @@ resource "aws_iam_role" "kube_bench_processor" {
   tags = var.tags
 }
 
+#Creates the AWS IAM role policy attachment resource named kube bench processor basic execution.
 resource "aws_iam_role_policy_attachment" "kube_bench_processor_basic_execution" {
   role       = aws_iam_role.kube_bench_processor.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+#Reads the AWS IAM policy document data source named kube bench processor permissions.
 data "aws_iam_policy_document" "kube_bench_processor_permissions" {
   statement {
     sid    = "DynamoDBFindings"
@@ -331,12 +341,14 @@ data "aws_iam_policy_document" "kube_bench_processor_permissions" {
   }
 }
 
+#Creates the AWS IAM role policy resource named kube bench processor permissions.
 resource "aws_iam_role_policy" "kube_bench_processor_permissions" {
   name   = "${var.project_name}-kube-bench-processor-permissions"
   role   = aws_iam_role.kube_bench_processor.id
   policy = data.aws_iam_policy_document.kube_bench_processor_permissions.json
 }
 
+#Creates the AWS lambda function resource named kube bench processor.
 resource "aws_lambda_function" "kube_bench_processor" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -347,7 +359,7 @@ resource "aws_lambda_function" "kube_bench_processor" {
 
   filename         = data.archive_file.kube_bench_processor.output_path
   source_code_hash = data.archive_file.kube_bench_processor.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   role             = aws_iam_role.kube_bench_processor.arn
 
@@ -384,7 +396,7 @@ resource "aws_lambda_function" "kube_bench_processor" {
   tags = merge(var.tags, { Name = "${var.project_name}-kube-bench-processor" })
 }
 
-# ── CronJob ───────────────────────────────────────────────────────────────────
+#── CronJob ───────────────────────────────────────────────────────────────────
 
 resource "kubernetes_cron_job_v1" "kube_bench" {
   metadata {
@@ -397,10 +409,10 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
   }
 
   spec {
-    # 3 am UTC daily
+    #3 am UTC daily
     schedule = "0 3 * * *"
 
-    # If a previous job is still running at 3 am, skip the new run
+    #If a previous job is still running at 3 am, skip the new run
     concurrency_policy = "Forbid"
 
     failed_jobs_history_limit     = 3
@@ -423,14 +435,14 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
             restart_policy       = "Never"
             service_account_name = kubernetes_service_account.kube_bench.metadata[0].name
 
-            # ── Init container — runs kube-bench, saves JSON to shared volume ──
-            # Image should be pinned to an immutable SHA256 digest in production.
-            # Run: docker pull aquasec/kube-bench:v0.8.0 && docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
+            #── Init container — runs kube-bench, saves JSON to shared volume ──
+            #Image should be pinned to an immutable SHA256 digest in production.
+            #Run: docker pull aquasec/kube-bench:v0.8.0 && docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
             init_container {
               name  = "kube-bench"
               image = "aquasec/kube-bench:v0.8.0"
 
-              # Run the EKS-1.4 benchmark; redirect JSON stdout to the shared volume
+              #Run the EKS-1.4 benchmark; redirect JSON stdout to the shared volume
               command = ["/bin/sh", "-c"]
               args    = ["kube-bench run --benchmark eks-1.4 --json > /tmp/results/kube-bench-output.json 2>&1; echo \"Exit: $?\""]
 
@@ -456,12 +468,12 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
               }
             }
 
-            # ── Main container — Node.js dispatcher → Lambda invoke ────────────
+            #── Main container — Node.js dispatcher → Lambda invoke ────────────
             container {
               name  = "processor"
-              image = "node:20-alpine"
+              image = "node:22-alpine"
 
-              # Install @aws-sdk/client-lambda at runtime, then run the dispatcher
+              #Install @aws-sdk/client-lambda at runtime, then run the dispatcher
               command = ["/bin/sh", "-c"]
               args    = ["npm install --prefix /tmp/deps @aws-sdk/client-lambda@3 --no-fund --no-audit --quiet && NODE_PATH=/tmp/deps/node_modules node /scripts/process.js"]
 
@@ -511,13 +523,13 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
               }
             }
 
-            # Shared emptyDir between init container and main container
+            #Shared emptyDir between init container and main container
             volume {
               name = "results"
               empty_dir {}
             }
 
-            # ConfigMap containing the dispatcher Node.js script
+            #ConfigMap containing the dispatcher Node.js script
             volume {
               name = "scripts"
               config_map {

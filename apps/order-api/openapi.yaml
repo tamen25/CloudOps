@@ -1,0 +1,475 @@
+#This manifest defines openapi for CloudOps.
+openapi: 3.0.3
+info:
+  title: order-api
+  version: 1.0.0
+  description: |
+    CloudOps sample order-processing API. Public endpoints sit behind the
+    cloudops ALB Ingress at `https://api.<domain>`. Auth is JWT-first
+    (`Authorization: Bearer`), with `X-Api-Key` accepted as a fallback when
+    the deployment exposes one. Tenant identity comes from the JWT
+    `tenant_id` claim or `X-Tenant-Id` header on the API-key path.
+
+    The internal `/metrics` endpoint runs on a separate port (9090) and is
+    not part of this contract — Prometheus scrapes it directly inside the
+    cluster.
+  contact:
+    name: CloudOps platform
+servers:
+  - url: https://api.example.com
+    description: Production-shaped public Ingress (replace `example.com` with the deployment's domain)
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: health
+    description: Liveness and readiness probes
+  - name: orders
+    description: Order create / list endpoints
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+paths:
+  /:
+    get:
+      summary: Service banner
+      description: Returns service identity and the list of public endpoints. No auth required.
+      operationId: getServiceBanner
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Service identity payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceBanner'
+  /health:
+    get:
+      summary: Liveness probe
+      description: Process is alive. No DB or downstream calls.
+      operationId: getHealth
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Process is alive AND can reach the database.
+      operationId: getReady
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Ready to serve traffic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyStatus'
+        '503':
+          description: Database unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotReadyStatus'
+  /order:
+    post:
+      summary: Create an order
+      description: |
+        Persists a new order. Tenant scoping is mandatory: the resolved
+        tenant comes from the JWT `tenant_id` claim or, on the API-key
+        path, the `X-Tenant-Id` header. Idempotency is supported via the
+        `Idempotency-Key` header — same key + same payload returns the
+        original response; same key + different payload returns 409.
+      operationId: createOrder
+      tags:
+        - orders
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+        '400':
+          description: Invalid payload (validation, malformed JSON, or tenant resolution)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized (missing or invalid credentials)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '403':
+          description: Forbidden (JWT missing required scope)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '409':
+          description: Idempotency-Key reused with a different payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdempotencyConflictError'
+        '413':
+          description: Request body exceeded the 64 KiB limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SizeError'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+        '500':
+          description: Internal error (DB write or unexpected failure)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  /orders:
+    get:
+      summary: List recent orders for the caller's tenant
+      description: Returns the most recent 100 orders. Tenant scoping is enforced both at the application layer and via Postgres RLS.
+      operationId: listOrders
+      tags:
+        - orders
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Orders for the calling tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOrdersResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OIDC-issued JWT. The verifier is configured by `OIDC_ISSUER`,
+        `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, and `OIDC_REQUIRED_SCOPES`.
+        Tenant identity is taken from the `tenant_id` claim.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Fallback authentication when no JWT is presented. The expected key
+        is loaded from `API_KEY_SECRET_ARN` (Secrets Manager) at startup.
+        On this path, tenant identity comes from the `X-Tenant-Id` header.
+  parameters:
+    TenantHeader:
+      name: X-Tenant-Id
+      in: header
+      required: false
+      description: |
+        Required on the API-key path when running outside `dev/test/local`.
+        Ignored when a JWT is presented (the `tenant_id` claim wins).
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]{1,64}$'
+        example: acme
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Optional retry-safety token (closes backlog #72). Tenant-scoped on
+        the server: a 24h replay window. Same key + same payload replays
+        the original status + body; same key + different payload returns
+        409 `idempotency_conflict`.
+      schema:
+        type: string
+        pattern: '^[\x21-\x7e]{1,255}$'
+        example: 5e9a1f0d-2b6c-4d78-9c5b-2ad8d0c1f001
+  schemas:
+    ServiceBanner:
+      type: object
+      required:
+        - service
+        - version
+        - environment
+        - endpoints
+      properties:
+        service:
+          type: string
+          example: order-api
+        version:
+          type: string
+          example: 1.0.0
+        environment:
+          type: string
+          example: dev
+        endpoints:
+          type: object
+          properties:
+            health:
+              type: string
+              example: GET /health
+            metrics:
+              type: string
+              example: GET /metrics
+            createOrder:
+              type: string
+              example: POST /order
+            getOrders:
+              type: string
+              example: GET /orders
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - environment
+        - region
+        - timestamp
+        - uptime
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        environment:
+          type: string
+          example: dev
+        region:
+          type: string
+          example: us-east-1
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+          description: Seconds since process start
+          example: 1234.56
+    ReadyStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        timestamp:
+          type: string
+          format: date-time
+    NotReadyStatus:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum: [not_ready]
+        error:
+          type: string
+          enum: [database_unreachable]
+    OrderItem:
+      type: object
+      required:
+        - sku
+        - quantity
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: SKU-100
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+          example: 2
+    CreateOrderRequest:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        total:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          description: Up to 2 decimal places. The server rejects fractional cents beyond IEEE-754 tolerance.
+          example: 99.99
+    OrderRow:
+      type: object
+      required:
+        - id
+        - order_id
+        - items
+        - total
+        - environment
+        - tenant_id
+        - created_at
+      properties:
+        id:
+          type: integer
+          example: 42
+        order_id:
+          type: string
+          example: ORD-1714780000000-ab12cd34e
+        items:
+          oneOf:
+            - type: string
+              description: Items as JSON string (some pg driver paths)
+            - type: array
+              items:
+                $ref: '#/components/schemas/OrderItem'
+        total:
+          type: number
+          example: 99.99
+        environment:
+          type: string
+          example: dev
+        tenant_id:
+          type: string
+          example: acme
+        created_at:
+          type: string
+          format: date-time
+    CreateOrderResponse:
+      type: object
+      required:
+        - success
+        - order
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        order:
+          $ref: '#/components/schemas/OrderRow'
+    ListOrdersResponse:
+      type: object
+      required:
+        - orders
+        - count
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderRow'
+        count:
+          type: integer
+          example: 1
+    ValidationError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          enum: [invalid_request, invalid_json, invalid_tenant]
+        detail:
+          type: string
+          example: items length must be between 1 and 50
+    AuthError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden]
+    SizeError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          enum: [payload_too_large]
+    RateLimitError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          enum: [too_many_requests]
+    IdempotencyConflictError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          enum: [idempotency_conflict]
+        detail:
+          type: string
+          example: Idempotency-Key reused with a different payload
+    ServerError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          example: Failed to process order

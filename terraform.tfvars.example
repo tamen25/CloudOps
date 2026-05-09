@@ -21,6 +21,7 @@ enable_observability = false  # Enable after ingress is deployed
 enable_slo           = false  # Enable after observability is deployed
 enable_security      = false  # Enable after eks + observability are deployed
 enable_finops        = false  # Standalone — can be enabled alongside bootstrap
+enable_codeartifact  = false  # Internal package repos for CloudOps client libraries
 enable_self_healing  = false  # Enable after eks + observability are deployed
 
 # DANGER ZONE: set to true ONLY when running scripts/destroy.sh
@@ -128,6 +129,14 @@ bootstrap_require_mfa             = false
 bootstrap_external_id             = ""
 bootstrap_max_session_duration    = 3600  # Seconds (3600–43200)
 bootstrap_additional_policy_arns  = []
+
+# CodeArtifact Library Repositories
+# Creates an internal npm package repository used by the library pipeline.
+# Domain defaults to <project_name>-<environment> when empty. Keep names stable
+# once libraries are published because consumers pin registry URLs to these values.
+codeartifact_domain_name      = ""
+codeartifact_repository_names = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python"]
+codeartifact_kms_key_arn      = ""
 
 # ─────────────────────────────────────────────────────────────
 # Database Configuration (RDS PostgreSQL)

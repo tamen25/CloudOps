@@ -1,3 +1,4 @@
+<!-- This document explains readme for CloudOps. -->
 # CloudOps
 
 **Production-grade AWS platform engineering on EKS — self-healing operations, multi-window SLO alerting, zero-trust security, and FinOps observability, all provisioned as code and delivered through a gated CI/CD pipeline with no long-lived credentials.**
@@ -164,6 +165,11 @@ All decisions are documented as Architecture Decision Records:
 | [ADR-008](docs/adr/008-oss-security-over-aws-native.md) | OSS security tooling over AWS-native services |
 | [ADR-009](docs/adr/009-auto-remediation-blast-radius.md) | Blast-radius constraints for auto-remediation |
 | [ADR-010](docs/adr/010-finops-as-sre-concern.md) | FinOps as an SRE concern, not a finance concern |
+| [ADR-011](docs/adr/011-layered-terraform-state.md) | Layered Terraform state (foundation / cluster / platform) |
+| [ADR-012](docs/adr/012-vpc-cni-network-policy.md) | AWS VPC CNI network policy now, Cilium service mesh later |
+| [ADR-013](docs/adr/013-private-eks-emergency-cidr.md) | Private EKS endpoint with emergency CIDR break-glass |
+| [ADR-014](docs/adr/014-rds-proxy-defer.md) | Defer RDS Proxy adoption (with explicit triggers) |
+| [ADR-015](docs/adr/015-order-api-idempotency.md) | order-api idempotency semantics (`Idempotency-Key`) |
 
 ---
 

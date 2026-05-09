@@ -1,3 +1,4 @@
+// This file contains index logic for lambda function idle detector.
 'use strict';
 
 const {
@@ -56,6 +57,7 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), ...data }));
 }
 
+// Handles date str.
 function dateStr(d = new Date()) { return d.toISOString().slice(0, 10); }
 
 /**

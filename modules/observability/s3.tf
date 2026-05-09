@@ -1,10 +1,11 @@
-# Observability buckets.
-# All hardening flips via root-level vars (see variables.tf):
-#   buckets_force_destroy / buckets_versioning / buckets_kms_cmk
-#   buckets_replication_destination_arn / buckets_replication_role_arn
-#   buckets_glacier_transition_days / buckets_expiration_days
+#This file defines s3 settings for CloudOps.
+#Observability buckets.
+#All hardening flips via root-level vars (see variables.tf):
+#buckets_force_destroy / buckets_versioning / buckets_kms_cmk
+#buckets_replication_destination_arn / buckets_replication_role_arn
+#buckets_glacier_transition_days / buckets_expiration_days
 #
-# Defaults are dev-friendly. prod.tfvars flips them.
+#Defaults are dev-friendly. prod.tfvars flips them.
 
 locals {
   buckets = {
@@ -18,7 +19,7 @@ locals {
   }
 }
 
-# ── Loki bucket ──────────────────────────────────────────────────────────────
+#── Loki bucket ──────────────────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "loki" {
   bucket        = local.buckets.loki
@@ -27,6 +28,7 @@ resource "aws_s3_bucket" "loki" {
   tags = merge(local.common_tags, { Name = local.buckets.loki })
 }
 
+#Creates the AWS s3 bucket server side encryption configuration resource named loki.
 resource "aws_s3_bucket_server_side_encryption_configuration" "loki" {
   bucket = aws_s3_bucket.loki.id
 
@@ -39,6 +41,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "loki" {
   }
 }
 
+#Creates the AWS s3 bucket public access block resource named loki.
 resource "aws_s3_bucket_public_access_block" "loki" {
   bucket                  = aws_s3_bucket.loki.id
   block_public_acls       = true
@@ -47,6 +50,7 @@ resource "aws_s3_bucket_public_access_block" "loki" {
   restrict_public_buckets = true
 }
 
+#Creates the AWS s3 bucket versioning resource named loki.
 resource "aws_s3_bucket_versioning" "loki" {
   bucket = aws_s3_bucket.loki.id
 
@@ -55,10 +59,11 @@ resource "aws_s3_bucket_versioning" "loki" {
   }
 }
 
+#Creates the AWS s3 bucket lifecycle configuration resource named loki.
 resource "aws_s3_bucket_lifecycle_configuration" "loki" {
   bucket = aws_s3_bucket.loki.id
 
-  # Always enabled — handles abort-incomplete-multipart even in minimal setups.
+  #Always enabled — handles abort-incomplete-multipart even in minimal setups.
   rule {
     id     = "abort-incomplete-multipart"
     status = "Enabled"
@@ -93,7 +98,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "loki" {
     }
   }
 
-  # Old versions are pointless after the live object is purged — dedupe storage.
+  #Old versions are pointless after the live object is purged — dedupe storage.
   dynamic "rule" {
     for_each = var.buckets_versioning ? [1] : []
     content {
@@ -107,6 +112,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "loki" {
   }
 }
 
+#Creates the AWS s3 bucket replication configuration resource named loki.
 resource "aws_s3_bucket_replication_configuration" "loki" {
   count = var.buckets_replication_destination_arn != "" ? 1 : 0
 
@@ -130,7 +136,7 @@ resource "aws_s3_bucket_replication_configuration" "loki" {
   depends_on = [aws_s3_bucket_versioning.loki]
 }
 
-# ── Tempo bucket ─────────────────────────────────────────────────────────────
+#── Tempo bucket ─────────────────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "tempo" {
   bucket        = local.buckets.tempo
@@ -139,6 +145,7 @@ resource "aws_s3_bucket" "tempo" {
   tags = merge(local.common_tags, { Name = local.buckets.tempo })
 }
 
+#Creates the AWS s3 bucket server side encryption configuration resource named tempo.
 resource "aws_s3_bucket_server_side_encryption_configuration" "tempo" {
   bucket = aws_s3_bucket.tempo.id
 
@@ -151,6 +158,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "tempo" {
   }
 }
 
+#Creates the AWS s3 bucket public access block resource named tempo.
 resource "aws_s3_bucket_public_access_block" "tempo" {
   bucket                  = aws_s3_bucket.tempo.id
   block_public_acls       = true
@@ -159,6 +167,7 @@ resource "aws_s3_bucket_public_access_block" "tempo" {
   restrict_public_buckets = true
 }
 
+#Creates the AWS s3 bucket versioning resource named tempo.
 resource "aws_s3_bucket_versioning" "tempo" {
   bucket = aws_s3_bucket.tempo.id
 
@@ -167,6 +176,7 @@ resource "aws_s3_bucket_versioning" "tempo" {
   }
 }
 
+#Creates the AWS s3 bucket lifecycle configuration resource named tempo.
 resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
   bucket = aws_s3_bucket.tempo.id
 
@@ -217,6 +227,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "tempo" {
   }
 }
 
+#Creates the AWS s3 bucket replication configuration resource named tempo.
 resource "aws_s3_bucket_replication_configuration" "tempo" {
   count = var.buckets_replication_destination_arn != "" ? 1 : 0
 

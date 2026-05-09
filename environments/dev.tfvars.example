@@ -33,6 +33,7 @@ enable_security         = true
 enable_self_healing     = true
 enable_slo              = true
 enable_finops           = true
+enable_codeartifact     = true
 enable_external_secrets = true
 
 # Cost-saving: heavy compliance/backup services stay OFF in dev. Their
@@ -46,6 +47,12 @@ enable_yace         = false # CloudWatch -> Prom exporter; off in dev
 
 destroy_all          = false
 self_healing_dry_run = true
+
+# Internal library package repository. Domain defaults to <project>-<env> when
+# empty; keep repository names stable after the first publish.
+codeartifact_domain_name      = ""
+codeartifact_repository_names = ["cloudops-nodejs", "cloudops-java", "cloudops-dotnet", "cloudops-python", "cloudops-go", "cloudops-cpp"]
+codeartifact_kms_key_arn      = ""
 
 # ── EKS — cheapest floor ─────────────────────────────────────────────────────
 az_count                = 2

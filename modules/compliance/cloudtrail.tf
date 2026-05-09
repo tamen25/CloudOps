@@ -1,10 +1,12 @@
-# CloudTrail — multi-region trail with log file validation.
-# Object Lock is gated by var.cloudtrail_object_lock_enabled (test envs OFF).
+#This file defines cloudtrail settings for CloudOps.
+#CloudTrail — multi-region trail with log file validation.
+#Object Lock is gated by var.cloudtrail_object_lock_enabled (test envs OFF).
 
 locals {
   ct_bucket_name = "${var.name_prefix}-cloudtrail-${var.aws_account_id}"
 }
 
+#Creates the AWS s3 bucket resource named cloudtrail.
 resource "aws_s3_bucket" "cloudtrail" {
   count = var.enable_cloudtrail ? 1 : 0
 
@@ -15,6 +17,7 @@ resource "aws_s3_bucket" "cloudtrail" {
   tags = merge(var.tags, { Name = local.ct_bucket_name, Domain = "audit-cloudtrail" })
 }
 
+#Creates the AWS s3 bucket server side encryption configuration resource named cloudtrail.
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   count  = var.enable_cloudtrail ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail[0].id
@@ -26,6 +29,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   }
 }
 
+#Creates the AWS s3 bucket public access block resource named cloudtrail.
 resource "aws_s3_bucket_public_access_block" "cloudtrail" {
   count                   = var.enable_cloudtrail ? 1 : 0
   bucket                  = aws_s3_bucket.cloudtrail[0].id
@@ -35,6 +39,7 @@ resource "aws_s3_bucket_public_access_block" "cloudtrail" {
   restrict_public_buckets = true
 }
 
+#Creates the AWS s3 bucket versioning resource named cloudtrail.
 resource "aws_s3_bucket_versioning" "cloudtrail" {
   count  = var.enable_cloudtrail ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail[0].id
@@ -44,6 +49,7 @@ resource "aws_s3_bucket_versioning" "cloudtrail" {
   }
 }
 
+#Creates the AWS s3 bucket object lock configuration resource named cloudtrail.
 resource "aws_s3_bucket_object_lock_configuration" "cloudtrail" {
   count  = var.enable_cloudtrail && var.cloudtrail_object_lock_enabled ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail[0].id
@@ -56,6 +62,7 @@ resource "aws_s3_bucket_object_lock_configuration" "cloudtrail" {
   }
 }
 
+#Creates the AWS s3 bucket policy resource named cloudtrail.
 resource "aws_s3_bucket_policy" "cloudtrail" {
   count  = var.enable_cloudtrail ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail[0].id
@@ -84,6 +91,7 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
   })
 }
 
+#Creates the AWS cloudtrail resource named main.
 resource "aws_cloudtrail" "main" {
   count = var.enable_cloudtrail ? 1 : 0
 

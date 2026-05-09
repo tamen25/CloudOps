@@ -1,3 +1,4 @@
+#This file defines provider settings for CloudOps.
 terraform {
   required_version = ">= 1.5.0"
 
@@ -19,6 +20,7 @@ terraform {
   }
 }
 
+#Configures the AWS provider.
 provider "aws" {
   region = var.region
 

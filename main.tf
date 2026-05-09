@@ -1,11 +1,12 @@
-# CloudOps - Root Configuration
-# Main Terraform configuration to deploy all modules with toggle controls
+#This file defines main settings for CloudOps.
+#CloudOps - Root Configuration
+#Main Terraform configuration to deploy all modules with toggle controls
 
 data "aws_caller_identity" "current" {}
 
-# Toggle dependency guard — fails plan early when module flags conflict.
-# Closes backlog #19. Rules live here (not in module variable blocks) so the
-# error names every offending root flag together instead of one at a time.
+#Toggle dependency guard — fails plan early when module flags conflict.
+#Closes backlog #19. Rules live here (not in module variable blocks) so the
+#error names every offending root flag together instead of one at a time.
 resource "terraform_data" "toggle_guard" {
   input = {
     enable_eks              = var.enable_eks
@@ -108,7 +109,7 @@ resource "terraform_data" "toggle_guard" {
       error_message = "buckets_replication_destination_arn requires buckets_versioning=true (S3 CRR requires versioning enabled)."
     }
 
-    # Closes backlog #28 — base-infra inputs.
+    #Closes backlog #28 — base-infra inputs.
     precondition {
       condition = (
         !var.enable_eks ||
@@ -130,24 +131,25 @@ resource "terraform_data" "toggle_guard" {
   }
 }
 
+#Groups local values used by this Terraform file.
 locals {
   name_prefix = var.project_name
 
-  # Derived at root so both networking (subnet tags) and EKS module agree on the name
+  #Derived at root so both networking (subnet tags) and EKS module agree on the name
   eks_cluster_name = "${var.project_name}-${var.environment}-cluster"
 
-  # Use explicit var if provided, otherwise fall back to the current caller identity
+  #Use explicit var if provided, otherwise fall back to the current caller identity
   account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.current.account_id
 
-  # GitHub token secret ARN resolution:
-  #   1. If github_token (raw PAT) is provided, bootstrap creates the secret → use its ARN
-  #   2. Else fall back to the explicitly supplied security_github_token_secret_arn
-  #   3. If neither is provided, security module disables GitHub issue creation
+  #GitHub token secret ARN resolution:
+  #1. If github_token (raw PAT) is provided, bootstrap creates the secret → use its ARN
+  #2. Else fall back to the explicitly supplied security_github_token_secret_arn
+  #3. If neither is provided, security module disables GitHub issue creation
   github_token_secret_arn = var.github_token != "" ? module.bootstrap[0].github_token_secret_arn : var.security_github_token_secret_arn
 
-  # Order-api Secrets Manager scoping (closes backlog #22). Built from the
-  # deterministic DB-credentials secret name + the optional API-key ARN. Pattern
-  # uses the `-*` wildcard because Secrets Manager appends a 6-char suffix.
+  #Order-api Secrets Manager scoping (closes backlog #22). Built from the
+  #deterministic DB-credentials secret name + the optional API-key ARN. Pattern
+  #uses the `-*` wildcard because Secrets Manager appends a 6-char suffix.
   order_api_db_secret_arn_pattern = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.name_prefix}-db-credentials-*"
   order_api_secret_arns = compact(concat(
     var.enable_database ? [local.order_api_db_secret_arn_pattern] : [],
@@ -162,8 +164,8 @@ locals {
   }
 }
 
-# Bootstrap Module (Always Deployed - Required for Remote State)
-# NOTE: Run ./modules/bootstrap/create-s3-bucket.sh BEFORE terraform apply
+#Bootstrap Module (Always Deployed - Required for Remote State)
+#NOTE: Run ./modules/bootstrap/create-s3-bucket.sh BEFORE terraform apply
 
 module "bootstrap" {
   count  = var.destroy_all ? 0 : 1
@@ -184,15 +186,15 @@ module "bootstrap" {
   max_session_duration    = var.bootstrap_max_session_duration
   additional_policy_arns  = var.bootstrap_additional_policy_arns
 
-  # Raw GitHub PAT — bootstrap stores it in Secrets Manager so the ARN can be
-  # passed to the security module without duplicating secret management.
+  #Raw GitHub PAT — bootstrap stores it in Secrets Manager so the ARN can be
+  #passed to the security module without duplicating secret management.
   github_token = var.github_token
   github_repo  = var.security_github_repo
 }
 
-# DNS Module — hosted zone for var.domain_name
-# Kept alive independently of other modules; only destroyed when destroy_all = true.
-# After first apply, update registrar nameservers to the route53_name_servers output.
+#DNS Module — hosted zone for var.domain_name
+#Kept alive independently of other modules; only destroyed when destroy_all = true.
+#After first apply, update registrar nameservers to the route53_name_servers output.
 
 module "dns" {
   count  = var.destroy_all ? 0 : 1
@@ -203,7 +205,19 @@ module "dns" {
   tags        = local.common_tags
 }
 
-# Networking Module
+#Wires the codeartifact module into this stack.
+module "codeartifact" {
+  count  = var.enable_codeartifact ? 1 : 0
+  source = "./modules/codeartifact"
+
+  domain_name      = var.codeartifact_domain_name != "" ? var.codeartifact_domain_name : lower("${var.project_name}-${var.environment}")
+  repository_names = var.codeartifact_repository_names
+  kms_key_arn      = var.codeartifact_kms_key_arn
+
+  tags = local.common_tags
+}
+
+#Networking Module
 
 module "networking" {
   count  = var.enable_networking ? 1 : 0
@@ -237,7 +251,7 @@ module "networking" {
   tags = local.common_tags
 }
 
-# EKS Module
+#EKS Module
 
 module "eks" {
   count  = var.enable_eks ? 1 : 0
@@ -263,7 +277,7 @@ module "eks" {
   order_api_service_account = var.order_api_service_account
   order_api_secret_arns     = local.order_api_secret_arns
 
-  # Control-plane endpoint (backlog #42)
+  #Control-plane endpoint (backlog #42)
   endpoint_private_access      = var.eks_endpoint_private_access
   endpoint_public_access       = var.eks_endpoint_public_access
   endpoint_public_access_cidrs = var.eks_endpoint_public_access_cidrs
@@ -271,8 +285,8 @@ module "eks" {
   tags = local.common_tags
 }
 
-# Ingress Module (ACM, Route 53, AWS Load Balancer Controller)
-# Requires EKS cluster to exist — apply with enable_eks=true before setting enable_ingress=true.
+#Ingress Module (ACM, Route 53, AWS Load Balancer Controller)
+#Requires EKS cluster to exist — apply with enable_eks=true before setting enable_ingress=true.
 
 module "ingress" {
   count  = var.enable_ingress ? 1 : 0
@@ -291,15 +305,15 @@ module "ingress" {
   zone_id     = !var.destroy_all ? module.dns[0].zone_id : ""
   domain_name = var.domain_name
 
-  # Set these after the LBC has provisioned the ALB (leave empty on first deploy).
-  # cloudops group: api.<domain> + grafana.<domain> (shared public ALB).
-  # cloudops-otel group: otel.<domain> (separate ALB, gRPC traceport).
+  #Set these after the LBC has provisioned the ALB (leave empty on first deploy).
+  #cloudops group: api.<domain> + grafana.<domain> (shared public ALB).
+  #cloudops-otel group: otel.<domain> (separate ALB, gRPC traceport).
   alb_dns_name      = var.alb_dns_name
   alb_zone_id       = var.alb_zone_id
   otel_alb_dns_name = var.otel_alb_dns_name
   otel_alb_zone_id  = var.otel_alb_zone_id
 
-  # WAFv2
+  #WAFv2
   enable_waf              = var.enable_waf
   waf_rate_limit_per_5min = var.waf_rate_limit_per_5min
   waf_geo_block_countries = var.waf_geo_block_countries
@@ -308,9 +322,9 @@ module "ingress" {
   tags = local.common_tags
 }
 
-# Observability Module (LGTM stack — Loki, Grafana, Tempo, Mimir-less Prometheus)
-# Requires: enable_eks=true + enable_ingress=true applied first.
-# Deploy order: 1) eks, 2) ingress, 3) observability
+#Observability Module (LGTM stack — Loki, Grafana, Tempo, Mimir-less Prometheus)
+#Requires: enable_eks=true + enable_ingress=true applied first.
+#Deploy order: 1) eks, 2) ingress, 3) observability
 
 module "observability" {
   count  = var.enable_observability ? 1 : 0
@@ -329,8 +343,8 @@ module "observability" {
   domain                = var.domain_name
   application_namespace = var.order_api_namespace
 
-  # Grafana unified alerting — contact points + notification policies.
-  # Leave all three empty to run without any Grafana alert notifications.
+  #Grafana unified alerting — contact points + notification policies.
+  #Leave all three empty to run without any Grafana alert notifications.
   alert_email         = var.security_alert_email
   alert_sns_topic_arn = var.enable_self_healing ? module.self_healing[0].sns_topic_arn : ""
   alert_webhook_url   = var.grafana_alert_webhook_url
@@ -338,14 +352,14 @@ module "observability" {
   enable_alertmanager = var.enable_alertmanager
   enable_yace         = var.enable_yace
 
-  # OTel hardening (backlog #38)
+  #OTel hardening (backlog #38)
   otel_ingestion_internal  = var.otel_ingestion_internal
   otel_allowed_cidrs       = var.otel_allowed_cidrs
   otel_rate_limit_per_5min = var.otel_rate_limit_per_5min
   otel_token_rotation_days = var.otel_token_rotation_days
   otel_alb_dns_name        = var.otel_alb_dns_name
 
-  # Bucket hardening (defaults dev-friendly; flip via prod tfvars)
+  #Bucket hardening (defaults dev-friendly; flip via prod tfvars)
   buckets_force_destroy               = var.buckets_force_destroy
   buckets_versioning                  = var.buckets_versioning
   buckets_kms_cmk                     = var.buckets_kms_cmk
@@ -354,7 +368,7 @@ module "observability" {
   buckets_glacier_transition_days     = var.buckets_glacier_transition_days
   buckets_expiration_days             = var.buckets_expiration_days
 
-  # HA replicas
+  #HA replicas
   loki_replication_factor         = var.loki_replication_factor
   loki_write_replicas             = var.loki_write_replicas
   loki_read_replicas              = var.loki_read_replicas
@@ -363,19 +377,19 @@ module "observability" {
   tempo_ingester_replicas         = var.tempo_ingester_replicas
   tempo_metrics_generator_enabled = var.tempo_metrics_generator_enabled
 
-  # Long-term metrics storage backend (none|mimir|thanos)
+  #Long-term metrics storage backend (none|mimir|thanos)
   metrics_long_term_storage = var.metrics_long_term_storage
 
-  # Backlog #61 — opt-in OTel SSM publishing.
+  #Backlog #61 — opt-in OTel SSM publishing.
   publish_otel_ssm_config = var.publish_otel_ssm_config
   ssm_kms_key_id          = var.ssm_kms_key_id
 
   tags = local.common_tags
 }
 
-# SLO Module — Lambda error budget tracker + DynamoDB history
-# Requires: enable_observability=true (Prometheus URL comes from that module)
-# Deploy order: after observability
+#SLO Module — Lambda error budget tracker + DynamoDB history
+#Requires: enable_observability=true (Prometheus URL comes from that module)
+#Deploy order: after observability
 
 module "slo" {
   count  = var.enable_slo ? 1 : 0
@@ -387,21 +401,21 @@ module "slo" {
   prometheus_url = var.enable_observability ? module.observability[0].prometheus_url : var.slo_prometheus_url
   grafana_url    = var.enable_observability ? module.observability[0].grafana_url : ""
 
-  # When observability is enabled, use the auto-created service account token ARN.
-  # When observability is disabled (bring-your-own Prometheus), fall back to the
-  # manually supplied var (slo_grafana_api_key_secret_arn in terraform.tfvars).
+  #When observability is enabled, use the auto-created service account token ARN.
+  #When observability is disabled (bring-your-own Prometheus), fall back to the
+  #manually supplied var (slo_grafana_api_key_secret_arn in terraform.tfvars).
   grafana_api_key_secret_arn = var.enable_observability ? module.observability[0].grafana_api_key_secret_arn : var.slo_grafana_api_key_secret_arn
 
   tags = local.common_tags
 }
 
-# Security Module (Falco runtime threat detection + compliance scanner + kube-bench)
-# Installs Falco as a DaemonSet with eBPF driver. Falcosidekick routes findings
-# into the OTel Collector log pipeline → Loki → Grafana.
-# Compliance scanner Lambda runs every 6 hours: S3, RDS, EKS, IAM, SG, Secrets.
-# kube-bench CronJob runs daily at 03:00 UTC with EKS 1.4 CIS benchmark.
-# Requires: enable_eks=true + enable_observability=true applied first.
-# Deploy order: after observability
+#Security Module (Falco runtime threat detection + compliance scanner + kube-bench)
+#Installs Falco as a DaemonSet with eBPF driver. Falcosidekick routes findings
+#into the OTel Collector log pipeline → Loki → Grafana.
+#Compliance scanner Lambda runs every 6 hours: S3, RDS, EKS, IAM, SG, Secrets.
+#kube-bench CronJob runs daily at 03:00 UTC with EKS 1.4 CIS benchmark.
+#Requires: enable_eks=true + enable_observability=true applied first.
+#Deploy order: after observability
 
 module "security" {
   count  = var.enable_security ? 1 : 0
@@ -414,10 +428,10 @@ module "security" {
 
   aws_account_id = local.account_id
   region         = var.region
-  # Closes backlog #32 — pass the effective DB subnet CIDRs from networking
-  # (caller's input or auto-generated). The legacy `var.db_subnet_cidrs ?? []`
-  # fallback would silently drop the order-api → RDS NetworkPolicy egress
-  # rule once VPC CNI enforcement (backlog #26) is on, breaking 5432.
+  #Closes backlog #32 — pass the effective DB subnet CIDRs from networking
+  #(caller's input or auto-generated). The legacy `var.db_subnet_cidrs ?? []`
+  #fallback would silently drop the order-api → RDS NetworkPolicy egress
+  #rule once VPC CNI enforcement (backlog #26) is on, breaking 5432.
   db_subnet_cidrs = (
     var.enable_networking
     ? module.networking[0].db_subnet_cidrs
@@ -425,11 +439,11 @@ module "security" {
   )
   vpc_cidr = var.vpc_cidr
 
-  # Compliance scanner inputs
+  #Compliance scanner inputs
   vpc_id          = var.enable_networking ? module.networking[0].vpc_id : var.existing_vpc_id
   rds_instance_id = var.enable_database ? module.database[0].rds_instance_id : ""
 
-  # S3 buckets to audit — fall back to empty string (check skipped) when module not deployed
+  #S3 buckets to audit — fall back to empty string (check skipped) when module not deployed
   state_bucket_name = var.bootstrap_bucket_name
   loki_bucket_name  = var.enable_observability ? module.observability[0].loki_bucket : ""
   tempo_bucket_name = var.enable_observability ? module.observability[0].tempo_bucket : ""
@@ -437,8 +451,8 @@ module "security" {
   security_alert_email    = var.security_alert_email
   security_critical_email = var.security_critical_email
 
-  # GitHub token secret ARN: prefer the bootstrap-managed secret (created from
-  # var.github_token); fall back to an explicitly provided ARN.
+  #GitHub token secret ARN: prefer the bootstrap-managed secret (created from
+  #var.github_token); fall back to an explicitly provided ARN.
   github_token_secret_arn = local.github_token_secret_arn
   github_repo             = var.security_github_repo
 
@@ -452,14 +466,14 @@ module "security" {
 
   tags = local.common_tags
 
-  # Observability must be applied first — security reads the otel-auth secret
-  # from the monitoring namespace which is created by the observability stack.
+  #Observability must be applied first — security reads the otel-auth secret
+  #from the monitoring namespace which is created by the observability stack.
   depends_on = [module.observability]
 }
 
-# FinOps Module — Cost Explorer ingestion, anomaly detection, AWS Budgets
-# Requires no other modules — can be deployed standalone alongside bootstrap.
-# Deploy order: any time after bootstrap
+#FinOps Module — Cost Explorer ingestion, anomaly detection, AWS Budgets
+#Requires no other modules — can be deployed standalone alongside bootstrap.
+#Deploy order: any time after bootstrap
 
 module "finops" {
   count  = var.enable_finops ? 1 : 0
@@ -473,17 +487,17 @@ module "finops" {
   cost_alert_email               = var.cost_alert_email
   cost_anomaly_threshold_percent = var.cost_anomaly_threshold_percent
 
-  # Idle detector inputs — optional, checks are skipped when empty
+  #Idle detector inputs — optional, checks are skipped when empty
   eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
   rds_instance_id  = var.enable_database ? module.database[0].rds_instance_id : ""
 
   tags = local.common_tags
 }
 
-# Self-Healing Module — CloudWatch Alarm-driven automated remediation
-# Triggers: SNS (CloudWatch Alarms) + EventBridge (EKS pod failures)
-# Requires: enable_eks=true + enable_observability=true applied first.
-# Deploy order: after observability
+#Self-Healing Module — CloudWatch Alarm-driven automated remediation
+#Triggers: SNS (CloudWatch Alarms) + EventBridge (EKS pod failures)
+#Requires: enable_eks=true + enable_observability=true applied first.
+#Deploy order: after observability
 
 module "self_healing" {
   count  = var.enable_self_healing ? 1 : 0
@@ -495,11 +509,11 @@ module "self_healing" {
   aws_account_id = local.account_id
 
   eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
-  # Deterministic ID (not computed output) so count expressions inside the module
-  # resolve at plan time before the database resource exists.
+  #Deterministic ID (not computed output) so count expressions inside the module
+  #resolve at plan time before the database resource exists.
   rds_instance_id = var.enable_database ? "${local.name_prefix}-db-primary" : ""
 
-  # ALB metric dimensions — populated after first ingress deploy
+  #ALB metric dimensions — populated after first ingress deploy
   alb_arn_suffix          = var.self_healing_alb_arn_suffix
   target_group_arn_suffix = var.self_healing_target_group_arn_suffix
 
@@ -518,7 +532,7 @@ module "self_healing" {
   tags = local.common_tags
 }
 
-# Database Module (RDS PostgreSQL)
+#Database Module (RDS PostgreSQL)
 
 module "database" {
   count  = var.enable_database ? 1 : 0
@@ -550,14 +564,14 @@ module "database" {
   performance_insights_enabled = var.database_performance_insights_enabled
   monitoring_interval          = var.database_monitoring_interval
 
-  # Logging policy (closes backlog #41)
+  #Logging policy (closes backlog #41)
   log_connections               = var.database_log_connections
   log_disconnections            = var.database_log_disconnections
   log_duration                  = var.database_log_duration
   log_statement                 = var.database_log_statement
   log_min_duration_statement_ms = var.database_log_min_duration_statement_ms
 
-  # Secrets Manager hardening
+  #Secrets Manager hardening
   rotation_enabled                  = var.database_rotation_enabled
   rotation_lambda_arn               = var.database_rotation_lambda_arn
   rotation_lambda_auto_deploy       = var.database_rotation_lambda_auto_deploy
@@ -569,9 +583,9 @@ module "database" {
   tags = local.common_tags
 }
 
-# Compliance — CloudTrail / GuardDuty / Config / Security Hub.
-# Each toggle is independent; defaults OFF so dev tear-down is not gated by
-# org-level audit state. Flip on in prod-test.tfvars to validate the wiring.
+#Compliance — CloudTrail / GuardDuty / Config / Security Hub.
+#Each toggle is independent; defaults OFF so dev tear-down is not gated by
+#org-level audit state. Flip on in prod-test.tfvars to validate the wiring.
 
 module "compliance" {
   count  = var.enable_compliance ? 1 : 0
@@ -580,32 +594,32 @@ module "compliance" {
   name_prefix    = local.name_prefix
   aws_account_id = local.account_id
 
-  # CloudTrail
+  #CloudTrail
   enable_cloudtrail                     = var.enable_cloudtrail
   cloudtrail_object_lock_enabled        = var.cloudtrail_object_lock_enabled
   cloudtrail_object_lock_retention_days = var.cloudtrail_object_lock_retention_days
   cloudtrail_buckets_force_destroy      = var.buckets_force_destroy
 
-  # GuardDuty
+  #GuardDuty
   enable_guardduty             = var.enable_guardduty
   guardduty_eks_protection     = var.guardduty_eks_protection
   guardduty_s3_protection      = var.guardduty_s3_protection
   guardduty_malware_protection = var.guardduty_malware_protection
 
-  # Config
+  #Config
   enable_config            = var.enable_config
   config_conformance_packs = var.config_conformance_packs
 
-  # Security Hub
+  #Security Hub
   enable_security_hub    = var.enable_security_hub
   security_hub_standards = var.security_hub_standards
 
   tags = local.common_tags
 }
 
-# AWS Backup vault — covers RDS + tagged EBS volumes.
-# vault_lock_enabled is OFF by default. Locked vaults CANNOT be destroyed
-# until min_retention_days expires — only enable in real prod.
+#AWS Backup vault — covers RDS + tagged EBS volumes.
+#vault_lock_enabled is OFF by default. Locked vaults CANNOT be destroyed
+#until min_retention_days expires — only enable in real prod.
 
 module "backup" {
   count  = var.enable_backup ? 1 : 0

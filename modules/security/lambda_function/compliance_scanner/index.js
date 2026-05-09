@@ -1,3 +1,4 @@
+// This file contains index logic for lambda function compliance scanner.
 'use strict';
 
 const { EC2Client, DescribeSecurityGroupsCommand } = require('@aws-sdk/client-ec2');
@@ -63,6 +64,7 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), ...data }));
 }
 
+// Creates finding.
 function createFinding({ checkName, resource, severity, description, recommendation, evidence = {} }) {
   return { findingId: crypto.randomUUID(), checkName, resource, severity, description, recommendation, evidence };
 }
@@ -338,6 +340,7 @@ async function checkSecurityGroups() {
 
       if (!hasOpenCidr) continue;
 
+      // Handles port in range.
       const portInRange = (p) => p >= fromPort && p <= toPort;
       const evidence = { groupId: sg.GroupId, groupName: sg.GroupName, fromPort, toPort };
 
@@ -546,6 +549,7 @@ async function loadOpenFindings() {
   return openFindings;
 }
 
+// Handles persist finding.
 async function persistFinding(finding, isNew, existing) {
   const now = new Date().toISOString();
   const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;

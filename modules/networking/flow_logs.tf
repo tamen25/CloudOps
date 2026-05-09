@@ -1,9 +1,10 @@
-# VPC Flow Logs.
-# Two destination options driven by var.flow_logs_destination:
-#   "cloudwatch" — quick, queryable, costs per ingested GB. Good for small VPCs.
-#   "s3"         — cheaper at scale, partitioned for Athena. Recommended for prod.
+#This file defines flow logs settings for CloudOps.
+#VPC Flow Logs.
+#Two destination options driven by var.flow_logs_destination:
+#"cloudwatch" — quick, queryable, costs per ingested GB. Good for small VPCs.
+#"s3"         — cheaper at scale, partitioned for Athena. Recommended for prod.
 
-# ── CloudWatch destination ────────────────────────────────────────────────────
+#── CloudWatch destination ────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
@@ -17,6 +18,7 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   )
 }
 
+#Creates the AWS IAM role resource named VPC flow logs.
 resource "aws_iam_role" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
 
@@ -38,6 +40,7 @@ resource "aws_iam_role" "vpc_flow_logs" {
   tags = local.common_tags
 }
 
+#Creates the AWS IAM role policy resource named VPC flow logs.
 resource "aws_iam_role_policy" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
 
@@ -62,7 +65,7 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
   })
 }
 
-# ── S3 destination (Athena-partitioned) ──────────────────────────────────────
+#── S3 destination (Athena-partitioned) ──────────────────────────────────────
 
 resource "aws_s3_bucket" "flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
@@ -76,6 +79,7 @@ resource "aws_s3_bucket" "flow_logs" {
   )
 }
 
+#Creates the AWS s3 bucket server side encryption configuration resource named flow logs.
 resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
   count  = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket = aws_s3_bucket.flow_logs[0].id
@@ -87,6 +91,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
   }
 }
 
+#Creates the AWS s3 bucket public access block resource named flow logs.
 resource "aws_s3_bucket_public_access_block" "flow_logs" {
   count                   = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket                  = aws_s3_bucket.flow_logs[0].id
@@ -96,6 +101,7 @@ resource "aws_s3_bucket_public_access_block" "flow_logs" {
   restrict_public_buckets = true
 }
 
+#Creates the AWS s3 bucket lifecycle configuration resource named flow logs.
 resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
   count  = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket = aws_s3_bucket.flow_logs[0].id
@@ -110,7 +116,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
   }
 }
 
-# ── Flow log resource ────────────────────────────────────────────────────────
+#── Flow log resource ────────────────────────────────────────────────────────
 
 resource "aws_flow_log" "main" {
   count = var.enable_flow_logs ? 1 : 0
@@ -118,7 +124,7 @@ resource "aws_flow_log" "main" {
   vpc_id       = aws_vpc.main.id
   traffic_type = "ALL"
 
-  # CloudWatch path
+  #CloudWatch path
   iam_role_arn         = var.flow_logs_destination == "cloudwatch" ? aws_iam_role.vpc_flow_logs[0].arn : null
   log_destination_type = var.flow_logs_destination == "cloudwatch" ? "cloud-watch-logs" : "s3"
   log_destination = (
@@ -127,7 +133,7 @@ resource "aws_flow_log" "main" {
     aws_s3_bucket.flow_logs[0].arn
   )
 
-  # Athena-partition-friendly format when going to S3.
+  #Athena-partition-friendly format when going to S3.
   destination_options {
     file_format                = var.flow_logs_destination == "s3" ? "parquet" : null
     hive_compatible_partitions = var.flow_logs_destination == "s3" ? true : null

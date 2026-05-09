@@ -1,4 +1,5 @@
-# Loki — simple scalable mode with S3 backend and IRSA for bucket access
+#This file defines loki settings for CloudOps.
+#Loki — simple scalable mode with S3 backend and IRSA for bucket access
 resource "helm_release" "loki" {
   name       = "loki"
   repository = "https://grafana.github.io/helm-charts"
@@ -69,7 +70,7 @@ resource "helm_release" "loki" {
       }
     }
 
-    # Simple scalable components — replicas driven by vars so prod can flip up.
+    #Simple scalable components — replicas driven by vars so prod can flip up.
     write = {
       replicas = var.loki_write_replicas
     }
@@ -87,7 +88,7 @@ resource "helm_release" "loki" {
       }
     }
 
-    # Disable built-in MinIO
+    #Disable built-in MinIO
     minio = {
       enabled = false
     }
