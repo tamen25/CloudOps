@@ -1,3 +1,4 @@
+// This file contains sampler logic for OTel detail.
 // Internal sampler — exposed only for the .cpp implementation files.
 
 #ifndef CLOUDOPS_OTEL_LOGS_DETAIL_SAMPLER_HPP
@@ -38,6 +39,7 @@ std::unordered_set<LogLevel>       parse_level_set(const std::string& raw,
                                                    const std::unordered_set<LogLevel>& fallback);
 std::string                        normalize_endpoint(const std::string& endpoint);
 SsmParameters                      read_ssm_parameters();
+SsmParameters                      read_ssm_parameters_file(const std::string& file_path = {});
 std::map<std::string, std::string> runtime_resource_attributes();
 double                             sampling_rate();
 }  // namespace detail

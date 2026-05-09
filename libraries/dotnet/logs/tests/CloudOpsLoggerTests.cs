@@ -1,3 +1,4 @@
+// This file contains cloud ops logger tests logic for logs tests.
 using Xunit;
 
 namespace CloudOps.Otel.Logs.Tests;
@@ -5,6 +6,7 @@ namespace CloudOps.Otel.Logs.Tests;
 public sealed class CloudOpsLoggerTests
 {
     [Fact]
+    // Parses log levels ignores unknown values.
     public void ParseLogLevelsIgnoresUnknownValues()
     {
         Assert.True(CloudOpsLogger.ParseLogLevels("bad,error").SetEquals([LogLevel.Error]));
@@ -12,6 +14,7 @@ public sealed class CloudOpsLoggerTests
     }
 
     [Fact]
+    // Handles console logger renders enabled messages and structured params.
     public void ConsoleLoggerRendersEnabledMessagesAndStructuredParams()
     {
         using var env = new EnvironmentScope(new Dictionary<string, string?>

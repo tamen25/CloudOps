@@ -1,9 +1,10 @@
-# vpc-cni — AWS VPC CNI plugin, assigns VPC IPs directly to pods.
-# Network policy enforcement is enabled via configuration_values (closes
-# backlog #26 — chose AWS VPC CNI over Cilium to avoid a CNI swap). With
-# enableNetworkPolicy=true, the CNI runs an eBPF-based enforcer per node and
-# honors standard kubernetes.io/v1 NetworkPolicy resources. Required CNI
-# version: v1.14+ (the EKS-managed addon resolves a recent default).
+#This file defines addons settings for CloudOps.
+#vpc-cni — AWS VPC CNI plugin, assigns VPC IPs directly to pods.
+#Network policy enforcement is enabled via configuration_values (closes
+#backlog #26 — chose AWS VPC CNI over Cilium to avoid a CNI swap). With
+#enableNetworkPolicy=true, the CNI runs an eBPF-based enforcer per node and
+#honors standard kubernetes.io/v1 NetworkPolicy resources. Required CNI
+#version: v1.14+ (the EKS-managed addon resolves a recent default).
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
@@ -18,7 +19,7 @@ resource "aws_eks_addon" "vpc_cni" {
   tags = merge(local.common_tags, { Name = "${local.name}-addon-vpc-cni" })
 }
 
-# coredns — cluster DNS
+#coredns — cluster DNS
 resource "aws_eks_addon" "coredns" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "coredns"
@@ -29,7 +30,7 @@ resource "aws_eks_addon" "coredns" {
   tags = merge(local.common_tags, { Name = "${local.name}-addon-coredns" })
 }
 
-# kube-proxy — maintains network rules on nodes
+#kube-proxy — maintains network rules on nodes
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
@@ -40,7 +41,7 @@ resource "aws_eks_addon" "kube_proxy" {
   tags = merge(local.common_tags, { Name = "${local.name}-addon-kube-proxy" })
 }
 
-# aws-ebs-csi-driver — enables PersistentVolume provisioning via EBS
+#aws-ebs-csi-driver — enables PersistentVolume provisioning via EBS
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"

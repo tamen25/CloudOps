@@ -1,3 +1,4 @@
+// This file contains smoke logic for logs examples.
 // Smoke-test consumer for cloudops-otel-logs (C++). Exercises every public
 // surface and exits 0 when the library wires up correctly. Built ad-hoc by
 // CMake's `examples` target wiring; can also be compiled standalone:
@@ -12,6 +13,7 @@
 
 namespace logs = cloudops::otel::logs;
 
+// Runs the main workflow for the requested work.
 int main() {
 #ifdef _WIN32
   _putenv_s("OTEL_SERVICE_NAME", "smoke-test");

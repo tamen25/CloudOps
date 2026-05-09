@@ -1,4 +1,5 @@
-# Defines the trust policy for the deployer role, allowing trusted principals to assume it
+#This file defines IAM settings for CloudOps.
+#Defines the trust policy for the deployer role, allowing trusted principals to assume it
 data "aws_iam_policy_document" "deployer_assume_role" {
   statement {
     effect = "Allow"
@@ -33,7 +34,7 @@ data "aws_iam_policy_document" "deployer_assume_role" {
   }
 }
 
-# Creates an IAM role for deploying infrastructure with Terraform
+#Creates an IAM role for deploying infrastructure with Terraform
 resource "aws_iam_role" "deployer" {
   name               = local.deployer_role_name
   assume_role_policy = data.aws_iam_policy_document.deployer_assume_role.json
@@ -49,7 +50,7 @@ resource "aws_iam_role" "deployer" {
   )
 }
 
-# Defines permissions for accessing the Terraform state S3 bucket and KMS encryption key
+#Defines permissions for accessing the Terraform state S3 bucket and KMS encryption key
 data "aws_iam_policy_document" "deployer_state_access" {
   statement {
     sid    = "TerraformStateS3Access"
@@ -99,14 +100,14 @@ data "aws_iam_policy_document" "deployer_state_access" {
   }
 }
 
-# Attaches the Terraform state access policy to the deployer role
+#Attaches the Terraform state access policy to the deployer role
 resource "aws_iam_role_policy" "deployer_state_access" {
   name   = "${local.deployer_role_name}-state-access"
   role   = aws_iam_role.deployer.id
   policy = data.aws_iam_policy_document.deployer_state_access.json
 }
 
-# Defines broad permissions for deploying AWS infrastructure resources
+#Defines broad permissions for deploying AWS infrastructure resources
 data "aws_iam_policy_document" "deployer_infrastructure" {
   #checkov:skip=CKV_AWS_356:Deployer role requires broad infrastructure permissions for Terraform
   #checkov:skip=CKV_AWS_111:Deployer role requires write access for infrastructure deployment
@@ -139,14 +140,14 @@ data "aws_iam_policy_document" "deployer_infrastructure" {
   }
 }
 
-# Attaches the infrastructure deployment policy to the deployer role
+#Attaches the infrastructure deployment policy to the deployer role
 resource "aws_iam_role_policy" "deployer_infrastructure" {
   name   = "${local.deployer_role_name}-infrastructure"
   role   = aws_iam_role.deployer.id
   policy = data.aws_iam_policy_document.deployer_infrastructure.json
 }
 
-# Attaches any additional managed IAM policies to the deployer role
+#Attaches any additional managed IAM policies to the deployer role
 resource "aws_iam_role_policy_attachment" "additional_policies" {
   count = length(var.additional_policy_arns)
 

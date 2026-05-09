@@ -1,13 +1,14 @@
+#This manifest defines EKS emergency access for CloudOps.
 name: EKS Emergency Public Access
 
-# Backlog #52 — break-glass path for reaching the prod EKS API server when the
-# private endpoint is the only normally-routable interface and the situation
-# does not allow waiting for a private runner / bastion.
+#Backlog #52 — break-glass path for reaching the prod EKS API server when the
+#private endpoint is the only normally-routable interface and the situation
+#does not allow waiting for a private runner / bastion.
 #
-# Effect: temporarily widens the cluster's public_access_cidrs via the AWS API
-# (NOT Terraform — state intentionally stays unchanged so the next regular
-# apply re-asserts the private-only configuration). The runner records who
-# opened the window, when, the CIDR, and the reason in the run summary.
+#Effect: temporarily widens the cluster's public_access_cidrs via the AWS API
+#(NOT Terraform — state intentionally stays unchanged so the next regular
+#apply re-asserts the private-only configuration). The runner records who
+#opened the window, when, the CIDR, and the reason in the run summary.
 
 on:
   workflow_dispatch:
@@ -39,8 +40,8 @@ permissions:
 jobs:
   emergency-access:
     runs-on: ubuntu-latest
-    # Production approval gate (closes backlog #52). Staging reuses its own
-    # approval path so the same workflow works for both.
+    #Production approval gate (closes backlog #52). Staging reuses its own
+    #approval path so the same workflow works for both.
     environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -68,7 +69,7 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
-          # Convention: <project>-<env>-cluster (matches modules/eks naming).
+          #Convention: <project>-<env>-cluster (matches modules/eks naming).
           CLUSTER="${{ secrets.EKS_CLUSTER_NAME }}"
           if [ -z "$CLUSTER" ]; then
             echo "::error::secrets.EKS_CLUSTER_NAME is empty"; exit 1

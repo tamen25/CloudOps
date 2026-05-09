@@ -1,3 +1,4 @@
+// This file contains app test logic for order API test.
 'use strict';
 
 const test = require('node:test');
@@ -5,14 +6,19 @@ const assert = require('node:assert/strict');
 
 const { createApp, createMetrics, createMetricsApp } = require('../src/app');
 
+// Creates logger.
 function createLogger() {
   return {
+    // Handles info.
     info() {},
+    // Handles warn.
     warn() {},
+    // Handles error.
     error() {},
   };
 }
 
+// Handles start server.
 async function startServer(pool, metricsOrOptions) {
   const options = metricsOrOptions && metricsOrOptions.registry ? { metrics: metricsOrOptions } : (metricsOrOptions || {});
   const { app } = createApp({
@@ -34,6 +40,7 @@ async function startServer(pool, metricsOrOptions) {
   });
 }
 
+// Handles stop server.
 async function stopServer(server) {
   return new Promise((resolve, reject) => {
     server.close((err) => {
@@ -105,6 +112,9 @@ test('POST /order rejects malformed JSON', async () => {
 test('POST /order creates an order and returns the stored row', async () => {
   const pool = {
     query: async (sql, params) => {
+      if (/^INSERT INTO audit_events/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
       assert.match(sql, /INSERT INTO orders/);
       assert.equal(params[2], 19.99);
 

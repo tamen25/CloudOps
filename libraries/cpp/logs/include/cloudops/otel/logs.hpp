@@ -1,3 +1,4 @@
+// This file contains logs logic for cloudops OTel.
 // CloudOps OpenTelemetry logs helper for C++ services.
 //
 // Mirrors the Node.js / Python / Java / .NET / Go libraries' API surface and
@@ -22,6 +23,8 @@
 //     OTEL_LOG_LEVEL                 JSON array or CSV of info/error/debug/warn
 //     OTEL_LOGS_SAMPLING_RATE        percentage 0..100; errors always export
 //     OTEL_SSM_PARAMETERS            JSON object with otel.logs.{url,api_key}
+//     /tmp/otelExporterParams.json    original PE parameter file fallback
+//     OTEL_SSM_PARAMETERS_FILE        optional override for that file path
 //     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT  OTLP HTTP endpoint fallback
 //     OTEL_EXPORTER_OTLP_ENDPOINT       same, base URL (suffixed /v1/logs)
 //     OTEL_API_KEY / OTEL_EXPORTER_OTLP_HEADERS  bearer auth fallback

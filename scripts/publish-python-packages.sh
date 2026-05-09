@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#This script runs publish python packages automation for CloudOps.
 set -euo pipefail
 
 MODE="publish"
@@ -24,11 +25,13 @@ if [[ "${#MANIFESTS[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+#Reads pyproject field.
 read_pyproject_field() {
   local field="$1"
   python -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project'].get('$field',''))"
 }
 
+#Handles login codeartifact.
 login_codeartifact() {
   if [[ -z "${CODEARTIFACT_DOMAIN:-}" ]]; then
     echo "CODEARTIFACT_DOMAIN is required for Python publish" >&2
@@ -52,6 +55,7 @@ login_codeartifact() {
     --repository "$CODEARTIFACT_REPOSITORY"
 }
 
+#Handles version exists.
 version_exists() {
   local package_name="$1"
   local version="$2"

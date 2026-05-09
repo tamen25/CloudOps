@@ -1,3 +1,4 @@
+<!-- This document explains environment contract for CloudOps. -->
 # Environment Contract
 
 Backlog #46 source of truth. The goal is prod-shaped behavior at dev/staging

@@ -1,3 +1,4 @@
+// This file contains runtime resource attributes logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import java.util.Collections;
@@ -15,8 +16,10 @@ public final class RuntimeResourceAttributes {
   private static final String ATTR_K8S_NODE_NAME = "k8s.node.name";
   private static final String ATTR_K8S_POD_NAME = "k8s.pod.name";
 
+  // Handles runtime resource attributes.
   private RuntimeResourceAttributes() {}
 
+  // Creates the requested work.
   public static Map<String, String> create() {
     Map<String, String> attributes = new LinkedHashMap<>(parseResourceAttributes(env("OTEL_RESOURCE_ATTRIBUTES")));
     attributes.put(
@@ -28,6 +31,7 @@ public final class RuntimeResourceAttributes {
     return Collections.unmodifiableMap(attributes);
   }
 
+  // Adds runtime attributes.
   private static void addRuntimeAttributes(Map<String, String> attributes) {
     String lambdaName = env("AWS_LAMBDA_FUNCTION_NAME");
     if (hasValue(lambdaName)) {
@@ -62,6 +66,7 @@ public final class RuntimeResourceAttributes {
     putIfPresent(attributes, ATTR_CONTAINER_NAME, firstEnv("CONTAINER_NAME", "ECS_CONTAINER_NAME"));
   }
 
+  // Parses resource attributes.
   private static Map<String, String> parseResourceAttributes(String raw) {
     Map<String, String> attributes = new LinkedHashMap<>();
     if (!hasValue(raw)) return attributes;
@@ -80,10 +85,12 @@ public final class RuntimeResourceAttributes {
     return attributes;
   }
 
+  // Handles put if present.
   private static void putIfPresent(Map<String, String> attributes, String key, String value) {
     if (hasValue(value)) attributes.put(key, value);
   }
 
+  // Finds first env.
   private static String firstEnv(String... names) {
     for (String name : names) {
       String value = env(name);
@@ -93,6 +100,7 @@ public final class RuntimeResourceAttributes {
     return "";
   }
 
+  // Finds first env.
   private static String firstEnv(String firstName, String literalValue, String secondName, String fallback) {
     String first = env(firstName);
     if (hasValue(first)) return first;
@@ -101,10 +109,12 @@ public final class RuntimeResourceAttributes {
     return hasValue(second) ? second : fallback;
   }
 
+  // Handles env.
   private static String env(String name) {
     return System.getenv(name);
   }
 
+  // Handles has value.
   private static boolean hasValue(String value) {
     return value != null && !value.isBlank();
   }

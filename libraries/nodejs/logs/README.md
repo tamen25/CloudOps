@@ -1,3 +1,4 @@
+<!-- This document explains readme for CloudOps. -->
 # @cloudops/otel-logs
 
 Node.js/TypeScript OpenTelemetry logs helper for CloudOps services.
@@ -13,6 +14,18 @@ await logger.exportLogs();
 
 The logger supports console output by default and OTLP export when configured
 with `OTEL_BACKEND_EXPORTERS=["otel"]`.
+
+## OTLP configuration
+
+When OTLP export is enabled, configuration is resolved in this order:
+
+1. `OTEL_SSM_PARAMETERS` as JSON:
+   `{"otel":{"logs":{"url":"https://otel.example.com/v1/logs","api_key":"..."}}}`
+2. `/tmp/otelExporterParams.json`, matching the original PE library contract.
+   Set `OTEL_SSM_PARAMETERS_FILE` to override the path for tests or local runs.
+3. Direct OpenTelemetry env vars:
+   `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+   `OTEL_API_KEY`, and `OTEL_EXPORTER_OTLP_HEADERS`.
 
 ## Runtime resource attributes
 

@@ -1,3 +1,4 @@
+// This file contains rls test logic for order API test.
 'use strict';
 
 // Backlog #51 — verify the RLS transaction wrapper sets `app.tenant_id`
@@ -11,8 +12,10 @@ const assert = require('node:assert/strict');
 
 const { createApp } = require('../src/app');
 
+// Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
 
+// Builds recording pool.
 function makeRecordingPool() {
   const calls = [];
   let released = 0;
@@ -25,8 +28,12 @@ function makeRecordingPool() {
       if (/^SELECT \* FROM orders/i.test(sql)) {
         return { rows: [], rowCount: 0 };
       }
+      if (/^INSERT INTO audit_events/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
       return { rows: [], rowCount: 0 };
     },
+    // Handles release.
     release() { released += 1; },
   };
   const pool = {
@@ -36,6 +43,7 @@ function makeRecordingPool() {
   return { pool, calls, releasedRef: () => released };
 }
 
+// Handles start app.
 async function startApp({ pool }) {
   const { app } = createApp({
     pool,
@@ -63,12 +71,14 @@ test('POST /order opens a transaction and SET LOCAL app.tenant_id before INSERT'
     });
     assert.equal(res.status, 201);
 
-    // Ordered: BEGIN, set_config(app.tenant_id, acme), INSERT, COMMIT.
+    // Ordered: BEGIN, set_config(app.tenant_id, acme), INSERT orders,
+    // INSERT audit_events (closes #73), COMMIT.
     assert.equal(calls[0].sql, 'BEGIN');
     assert.match(calls[1].sql, /set_config/);
     assert.equal(calls[1].params[0], 'acme');
     assert.match(calls[2].sql, /INSERT INTO orders/);
-    assert.equal(calls[3].sql, 'COMMIT');
+    assert.match(calls[3].sql, /INSERT INTO audit_events/);
+    assert.equal(calls[4].sql, 'COMMIT');
 
     // Client released back to the pool.
     assert.equal(releasedRef(), 1);

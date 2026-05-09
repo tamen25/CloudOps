@@ -1,3 +1,4 @@
+#This file contains logger logic for src cloudops OTel logs.
 from __future__ import annotations
 
 import json
@@ -32,6 +33,7 @@ LogLevel = str
 DEFAULT_EXPORTERS = ["console"]
 DEFAULT_LOG_LEVELS = {"info", "error", "debug", "warn"}
 VALID_LOG_LEVELS = DEFAULT_LOG_LEVELS
+DEFAULT_SSM_PARAMETERS_FILE = "/tmp/otelExporterParams.json"
 
 
 @dataclass
@@ -49,9 +51,11 @@ class BackendConfig:
 class SsmParameters:
     otel: BackendConfig | None = None
 
+    #Checks whether empty.
     def is_empty(self) -> bool:
         return self.otel is None or self.otel.logs is None or not (self.otel.logs.url or self.otel.logs.api_key)
 
+    #Handles backend.
     def backend(self, name: str) -> BackendConfig | None:
         return self.otel if name == "otel" else None
 
@@ -69,6 +73,7 @@ class LogBatch:
     logs: list[LogEntry]
 
 
+#Parses string list.
 def _parse_string_list(raw: str | None, fallback: list[str]) -> list[str]:
     if not raw:
         return list(fallback)
@@ -85,15 +90,18 @@ def _parse_string_list(raw: str | None, fallback: list[str]) -> list[str]:
     return values or list(fallback)
 
 
+#Parses string set.
 def _parse_string_set(raw: str | None, fallback: set[str]) -> set[str]:
     return {item.lower() for item in _parse_string_list(raw, sorted(fallback))}
 
 
+#Parses log levels.
 def _parse_log_levels(raw: str | None) -> set[str]:
     levels = {item for item in _parse_string_set(raw, DEFAULT_LOG_LEVELS) if item in VALID_LOG_LEVELS}
     return levels or set(DEFAULT_LOG_LEVELS)
 
 
+#Parses resource attributes.
 def _parse_resource_attributes(raw: str | None) -> dict[str, str]:
     if not raw:
         return {}
@@ -107,6 +115,7 @@ def _parse_resource_attributes(raw: str | None) -> dict[str, str]:
     return attributes
 
 
+#Normalizes endpoint.
 def _normalize_endpoint(endpoint: str | None) -> str | None:
     if not endpoint:
         return None
@@ -115,20 +124,47 @@ def _normalize_endpoint(endpoint: str | None) -> str | None:
     return normalized if normalized.endswith("/v1/logs") else f"{normalized}/v1/logs"
 
 
+#Handles SSM parameters from JSON.
+def _ssm_parameters_from_json(parsed: Any) -> SsmParameters:
+    if not isinstance(parsed, Mapping):
+        return SsmParameters()
+
+    otel = parsed.get("otel", {})
+    logs = otel.get("logs", {}) if isinstance(otel, Mapping) else {}
+    logs = logs if isinstance(logs, Mapping) else {}
+    return SsmParameters(otel=BackendConfig(logs=LogsExporterConfig(
+        url=logs.get("url"),
+        api_key=logs.get("api_key"),
+    )))
+
+
+#Reads SSM parameters file.
+def _read_ssm_parameters_file(file_path: str | None = None) -> SsmParameters:
+    resolved_path = file_path or os.getenv("OTEL_SSM_PARAMETERS_FILE") or DEFAULT_SSM_PARAMETERS_FILE
+    try:
+        with open(resolved_path, encoding="utf-8") as params_file:
+            return _ssm_parameters_from_json(json.load(params_file))
+    except FileNotFoundError:
+        return SsmParameters()
+    except (OSError, json.JSONDecodeError) as error:
+        logging.getLogger(__name__).error("Error reading or parsing otelExporterParams.json: %s", error)
+        return SsmParameters()
+
+
+#Reads SSM parameters.
 def _read_ssm_parameters() -> SsmParameters:
     configured = os.getenv("OTEL_SSM_PARAMETERS")
     if configured:
         try:
-            parsed = json.loads(configured)
-            otel_logs = parsed.get("otel", {}).get("logs", {})
-            parameters = SsmParameters(otel=BackendConfig(logs=LogsExporterConfig(
-                url=otel_logs.get("url"),
-                api_key=otel_logs.get("api_key"),
-            )))
+            parameters = _ssm_parameters_from_json(json.loads(configured))
             if not parameters.is_empty():
                 return parameters
         except (json.JSONDecodeError, AttributeError):
             pass
+
+    file_parameters = _read_ssm_parameters_file()
+    if not file_parameters.is_empty():
+        return file_parameters
 
     logs_url = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") or _normalize_endpoint(os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
     api_key = os.getenv("OTEL_API_KEY") or os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
@@ -138,6 +174,7 @@ def _read_ssm_parameters() -> SsmParameters:
     return SsmParameters()
 
 
+#Finds first env.
 def _first_env(*names: str) -> str | None:
     for name in names:
         value = os.getenv(name)
@@ -147,6 +184,7 @@ def _first_env(*names: str) -> str | None:
     return None
 
 
+#Handles runtime resource attributes.
 def _runtime_resource_attributes() -> dict[str, str]:
     attributes = _parse_resource_attributes(os.getenv("OTEL_RESOURCE_ATTRIBUTES"))
     attributes["service.name"] = (
@@ -188,11 +226,13 @@ def _runtime_resource_attributes() -> dict[str, str]:
 
 
 class LogSampler:
+    #Initializes the requested work.
     def __init__(self, logger: CloudOpsLogger) -> None:
         self._logger = logger
         self._batch_map: dict[str, LogBatch] = {}
         self._probabilistic_sampling_rate = _sampling_rate()
 
+    #Adds log.
     def add_log(self, log_entry: LogEntry) -> None:
         if self._probabilistic_sampling_rate == 0:
             self._logger.process_log(log_entry)
@@ -210,6 +250,7 @@ class LogSampler:
         self.flush_one_batch()
         self._batch_map[invocation_id] = LogBatch(logs=[log_entry])
 
+    #Flushes one batch.
     def flush_one_batch(self) -> None:
         for invocation_id, batch in list(self._batch_map.items()):
             has_error = any(log.level == "error" for log in batch.logs)
@@ -219,12 +260,14 @@ class LogSampler:
 
             self._batch_map.pop(invocation_id, None)
 
+    #Decides whether to sample.
     def _should_sample(self) -> bool:
         threshold = max(0, min(100, self._probabilistic_sampling_rate)) / 100
         return random.random() <= threshold
 
 
 class CloudOpsLogger:
+    #Initializes the requested work.
     def __init__(self, name: str | None = None) -> None:
         self.resource_attributes = _runtime_resource_attributes()
         self.enabled_levels = _parse_log_levels(os.getenv("OTEL_LOG_LEVEL"))
@@ -241,25 +284,32 @@ class CloudOpsLogger:
         self._init()
 
     @classmethod
+    #Initializes logger.
     def initialise_logger(cls) -> "CloudOpsLogger":
         return logger
 
     @classmethod
+    #Initializes logger.
     def initialize_logger(cls) -> "CloudOpsLogger":
         return logger
 
+    #Handles info.
     def info(self, message: Any = None, *optional_params: Any) -> None:
         self.log("info", message, *optional_params)
 
+    #Handles error.
     def error(self, message: Any = None, *optional_params: Any) -> None:
         self.log("error", message, *optional_params)
 
+    #Handles debug.
     def debug(self, message: Any = None, *optional_params: Any) -> None:
         self.log("debug", message, *optional_params)
 
+    #Handles warn.
     def warn(self, message: Any = None, *optional_params: Any) -> None:
         self.log("warn", message, *optional_params)
 
+    #Logs the requested work.
     def log(self, level: LogLevel, message: Any = None, *optional_params: Any) -> None:
         current_trace_id = _current_trace_id()
         if current_trace_id != self._previous_trace_id:
@@ -273,6 +323,7 @@ class CloudOpsLogger:
             optional_params=optional_params,
         ))
 
+    #Processes log.
     def process_log(self, log_entry: LogEntry) -> None:
         if log_entry.level not in self.enabled_levels:
             return
@@ -290,6 +341,7 @@ class CloudOpsLogger:
                 extra=attributes,
             )
 
+    #Exports logs.
     def export_logs(self) -> None:
         self._sampler.flush_one_batch()
         if self._logger_provider:
@@ -298,6 +350,7 @@ class CloudOpsLogger:
             except TypeError:
                 self._logger_provider.force_flush()
 
+    #Initializes the requested work.
     def _init(self) -> None:
         if len(self.exporters_list) <= 1 and "console" in {item.lower() for item in self.exporters_list}:
             self._use_console = True
@@ -316,6 +369,7 @@ class CloudOpsLogger:
             else:
                 self._use_console = True
 
+    #Initializes OTel.
     def _initialise_otel(self, ssm_parameters: SsmParameters) -> None:
         config = ssm_parameters.backend("otel").logs if ssm_parameters.backend("otel") else None
         if not config or not _otel_available():
@@ -344,6 +398,7 @@ class CloudOpsLogger:
         self._otel_python_logger.addHandler(self._otel_logging_handler)
         self._use_otel = True
 
+    #Logs attributes.
     def _log_attributes(self, invocation_id: str) -> dict[str, Any]:
         attributes: dict[str, Any] = {"invocation.id": invocation_id or "unknown"}
 
@@ -358,6 +413,7 @@ class CloudOpsLogger:
 
         return attributes
 
+    #Renders the requested work.
     def _render(self, message: Any, optional_params: tuple[Any, ...]) -> str:
         rendered = self._stringify(message)
         if optional_params:
@@ -366,6 +422,7 @@ class CloudOpsLogger:
         return rendered
 
     @staticmethod
+    #Turns into text the requested work.
     def _stringify(value: Any) -> str:
         if isinstance(value, BaseException):
             return repr(value)
@@ -376,6 +433,7 @@ class CloudOpsLogger:
         return str(value)
 
 
+#Gets sampling rate.
 def _sampling_rate() -> float:
     try:
         return float(os.getenv("OTEL_LOGS_SAMPLING_RATE", "100"))
@@ -383,6 +441,7 @@ def _sampling_rate() -> float:
         return 100
 
 
+#Handles span context.
 def _span_context() -> Any:
     if trace is None:
         return None
@@ -394,6 +453,7 @@ def _span_context() -> Any:
     return span.get_span_context()
 
 
+#Gets current trace ID.
 def _current_trace_id() -> str:
     lambda_trace_id = os.getenv("_X_AMZN_TRACE_ID")
     if lambda_trace_id:
@@ -406,6 +466,7 @@ def _current_trace_id() -> str:
     return "unknown"
 
 
+#Handles python log level.
 def _python_log_level(level: LogLevel) -> int:
     if level == "error":
         return logging.ERROR
@@ -416,6 +477,7 @@ def _python_log_level(level: LogLevel) -> int:
     return logging.INFO
 
 
+#Handles OTel available.
 def _otel_available() -> bool:
     return all([
         set_logger_provider,

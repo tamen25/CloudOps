@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#This script runs terraform stacks automation for CloudOps.
 set -euo pipefail
 
 command="${1:-}"

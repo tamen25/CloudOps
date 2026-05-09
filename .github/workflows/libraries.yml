@@ -1,17 +1,18 @@
-# Required GitHub Actions secrets:
-#   AWS_GITHUB_ACTIONS_ROLE_ARN  - IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
-#   AWS_REGION                   - AWS region (e.g. us-east-1)
+#This manifest defines libraries for CloudOps.
+#Required GitHub Actions secrets:
+#AWS_GITHUB_ACTIONS_ROLE_ARN  - IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_REGION                   - AWS region (e.g. us-east-1)
 #
-# Optional GitHub Actions variables:
-#   CODEARTIFACT_DOMAIN          - defaults to cloudops-<environment>
-#   CODEARTIFACT_REPOSITORY      - backward-compatible Node.js repo override
-#   CODEARTIFACT_NODEJS_REPOSITORY - defaults to cloudops-nodejs
-#   CODEARTIFACT_JAVA_REPOSITORY   - defaults to cloudops-java
-#   CODEARTIFACT_DOTNET_REPOSITORY - defaults to cloudops-dotnet
-#   CODEARTIFACT_PYTHON_REPOSITORY - defaults to cloudops-python
-#   CODEARTIFACT_DOMAIN_OWNER    - AWS account ID; defaults to caller account
-#   LIBRARY_PUBLISH_LANGUAGES    - comma-separated publish list; defaults to all
-#                                  supported values: all, none, nodejs, java, dotnet, python
+#Optional GitHub Actions variables:
+#CODEARTIFACT_DOMAIN          - defaults to cloudops-<environment>
+#CODEARTIFACT_REPOSITORY      - backward-compatible Node.js repo override
+#CODEARTIFACT_NODEJS_REPOSITORY - defaults to cloudops-nodejs
+#CODEARTIFACT_JAVA_REPOSITORY   - defaults to cloudops-java
+#CODEARTIFACT_DOTNET_REPOSITORY - defaults to cloudops-dotnet
+#CODEARTIFACT_PYTHON_REPOSITORY - defaults to cloudops-python
+#CODEARTIFACT_DOMAIN_OWNER    - AWS account ID; defaults to caller account
+#LIBRARY_PUBLISH_LANGUAGES    - comma-separated publish list; defaults to all
+#supported values: all, none, nodejs, java, dotnet, python
 
 name: Library Pipeline
 
@@ -86,7 +87,7 @@ jobs:
           npm ci
           npm run test:coverage 2>&1 | tee coverage-summary.txt
 
-      # Backlog #66 — make coverage failures inspectable from the Actions UI.
+      #Backlog #66 — make coverage failures inspectable from the Actions UI.
       - name: Upload Node coverage report
         if: always()
         uses: actions/upload-artifact@v4

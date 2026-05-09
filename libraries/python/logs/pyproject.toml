@@ -1,3 +1,4 @@
+#This file defines pyproject package settings for CloudOps.
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#This script runs publish dotnet packages automation for CloudOps.
 set -euo pipefail
 
 MODE="publish"
@@ -25,11 +26,13 @@ if [[ "${#MANIFESTS[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+#Reads csproj field.
 read_csproj_field() {
   local field="$1"
   python -c "import xml.etree.ElementTree as ET; r=ET.parse('$PROJECT_FILE').getroot(); e=r.find('.//$field'); print(e.text.strip() if e is not None and e.text else '')"
 }
 
+#Ensures codeartifact source.
 ensure_codeartifact_source() {
   if [[ -z "${CODEARTIFACT_DOMAIN:-}" ]]; then
     echo "CODEARTIFACT_DOMAIN is required for .NET publish" >&2
@@ -70,6 +73,7 @@ ensure_codeartifact_source() {
     --store-password-in-clear-text
 }
 
+#Handles version exists.
 version_exists() {
   local package_id="$1"
   local version="$2"

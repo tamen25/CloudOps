@@ -1,3 +1,4 @@
+// This file contains migrations test logic for order API test.
 'use strict';
 
 const test = require('node:test');
@@ -5,10 +6,12 @@ const assert = require('node:assert/strict');
 
 const { withAdvisoryLock, LOCK_KEY_HIGH, LOCK_KEY_LOW, runMigrations } = require('../src/migrations');
 
+// Creates logger.
 function createLogger() {
   return { info() {}, warn() {}, error() {} };
 }
 
+// Creates pool.
 function createPool(client) {
   return {
     connect: async () => client,
@@ -65,8 +68,10 @@ test('runMigrations releases the client when no migrations are pending', async (
             { name: '001_initial.sql' },
             { name: '002_multitenancy.sql' },
             { name: '003_rls.sql' },
+            { name: '004_idempotency_keys.sql' },
+            { name: '005_audit_events.sql' },
           ],
-          rowCount: 3,
+          rowCount: 5,
         };
       }
       return { rows: [], rowCount: 0 };

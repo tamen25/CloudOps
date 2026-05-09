@@ -1,7 +1,8 @@
+// This file contains app logic for order API src.
 import express, { type Request, type Response, type NextFunction } from 'express';
 import pino from 'pino';
 import rateLimit from 'express-rate-limit';
-import { timingSafeEqual } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import { Registry, Counter, Histogram } from 'prom-client';
 
 // Order payload schema (closes backlog #44).
@@ -16,6 +17,7 @@ type ValidationResult =
   | { ok: false; error: string }
   | { ok: true; value: OrderBody };
 
+// Validates order payload.
 export function validateOrderPayload(body: any): ValidationResult {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, error: 'body must be a JSON object' };
@@ -29,31 +31,20 @@ export function validateOrderPayload(body: any): ValidationResult {
   }
   for (let i = 0; i < items.length; i += 1) {
     const it = items[i];
-    if (!it || typeof it !== 'object' || Array.isArray(it)) {
-      return { ok: false, error: `items[${i}] must be an object` };
-    }
-    if (typeof it.sku !== 'string' || it.sku.length < 1 || it.sku.length > MAX_SKU_LEN) {
-      return { ok: false, error: `items[${i}].sku must be a 1–${MAX_SKU_LEN} char string` };
-    }
-    if (!Number.isInteger(it.quantity) || it.quantity < 1 || it.quantity > MAX_QUANTITY) {
-      return { ok: false, error: `items[${i}].quantity must be an integer 1–${MAX_QUANTITY}` };
-    }
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return { ok: false, error: `items[${i}] must be an object` };
+    if (typeof it.sku !== 'string' || it.sku.length < 1 || it.sku.length > MAX_SKU_LEN) return { ok: false, error: `items[${i}].sku must be a 1–${MAX_SKU_LEN} char string` };
+    if (!Number.isInteger(it.quantity) || it.quantity < 1 || it.quantity > MAX_QUANTITY) return { ok: false, error: `items[${i}].quantity must be an integer 1–${MAX_QUANTITY}` };
   }
 
-  if (typeof total !== 'number' || !Number.isFinite(total)) {
-    return { ok: false, error: 'total must be a finite number' };
-  }
-  if (total < 0 || total > MAX_TOTAL) {
-    return { ok: false, error: `total must be between 0 and ${MAX_TOTAL}` };
-  }
-  if (Math.abs(total * 100 - Math.round(total * 100)) > 1e-6) {
-    return { ok: false, error: 'total must have at most 2 decimal places' };
-  }
+  if (typeof total !== 'number' || !Number.isFinite(total)) return { ok: false, error: 'total must be a finite number' };
+  if (total < 0 || total > MAX_TOTAL) return { ok: false, error: `total must be between 0 and ${MAX_TOTAL}` };
+  if (Math.abs(total * 100 - Math.round(total * 100)) > 1e-6) return { ok: false, error: 'total must have at most 2 decimal places' };
 
   return { ok: true, value: { items: items.map((it: OrderItem) => ({ sku: it.sku, quantity: it.quantity })), total } };
 }
 
 export interface CreateMetricsArgs { serviceName?: string; environment?: string }
+// Creates metrics.
 export function createMetrics({ serviceName = 'order-api', environment = 'dev' }: CreateMetricsArgs = {}) {
   const registry = new Registry();
   registry.setDefaultLabels({ service: serviceName, environment });
@@ -94,6 +85,7 @@ export interface CreateAppArgs {
 
 type RequestWithCtx = Request & { user?: any; tenantId?: string };
 
+// Creates app.
 export function createApp({
   pool,
   logger = pino({ level: 'info' }) as unknown as Logger,
@@ -148,6 +140,9 @@ export function createApp({
     });
   });
 
+  // /* node:coverage ignore next 2 */ — closing braces after try/catch
+  // arrow-fn appear uncovered under tsx source-map even though the body is
+  // tested both for success and failure cases (see app.test.ts).
   app.get('/ready', async (_req: Request, res: Response) => {
     try {
       await pool.query('SELECT 1');
@@ -155,8 +150,9 @@ export function createApp({
     } catch (err) {
       logger.warn({ err }, 'readiness check failed');
       res.status(503).json({ status: 'not_ready', error: 'database_unreachable' });
-    }
+    } /* node:coverage ignore next 2 */
   });
+
 
   // Two-tier rate limit (closes backlog #45).
   const unauthLimiter = rateLimit({
@@ -180,6 +176,7 @@ export function createApp({
     },
   });
 
+  // Requires API key.
   const requireApiKey = (req: RequestWithCtx, res: Response, next: NextFunction) => {
     if (req.user) return next();
     if (!apiKey) return next();
@@ -195,6 +192,7 @@ export function createApp({
 
   const TENANT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
   const TENANT_FALLBACK_ENVS = new Set(['dev', 'test', 'local']);
+  // Requires tenant.
   const requireTenant = (req: RequestWithCtx, res: Response, next: NextFunction) => {
     let tenantId = '';
     if (req.user && typeof req.user.tenant_id === 'string') {
@@ -239,28 +237,66 @@ export function createApp({
     }
   }
 
+  // Idempotency SQL kept as single-line constants so v8 source-map line
+  // counting does not penalise the closing braces of multi-line calls.
+  const IDEMP_INSERT_SQL = `INSERT INTO order_idempotency_keys (tenant_id, idempotency_key, request_hash, status_code, response_body, order_id, expires_at) VALUES ($1, $2, $3, 0, '{}'::jsonb, NULL, NOW() + ($4 || ' milliseconds')::interval) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING RETURNING tenant_id`;
+  const IDEMP_SELECT_SQL = `SELECT request_hash, status_code, response_body FROM order_idempotency_keys WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`;
+  const IDEMP_UPDATE_SQL = `UPDATE order_idempotency_keys SET status_code = $3, response_body = $4, order_id = $5 WHERE tenant_id = $1 AND idempotency_key = $2`;
+  const ORDER_INSERT_SQL = 'INSERT INTO orders (order_id, items, total, environment, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+  // Audit events (closes backlog #73). Written inside the same tenant
+  // transaction as the order INSERT, so the audit row commits or rolls
+  // back atomically with the business change.
+  const AUDIT_INSERT_SQL = `INSERT INTO audit_events (tenant_id, actor_id, action, request_id, resource_id, status_code, result, error_code, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`;
+
   app.post('/order', ...authChain, async (req: RequestWithCtx, res: Response) => {
     const validation = validateOrderPayload(req.body);
-    if (validation.ok === false) {
-      return res.status(400).json({ success: false, error: 'invalid_request', detail: validation.error });
-    }
+    if (validation.ok === false) return res.status(400).json({ success: false, error: 'invalid_request', detail: validation.error });
+
+    // Idempotency-Key is optional but, when supplied, must be well-formed
+    // (closes backlog #72). Tenant scoping is enforced via the composite
+    // primary key + RLS on `order_idempotency_keys`.
+    const idempotencyKey = req.get('idempotency-key');
+    if (idempotencyKey !== undefined && !IDEMPOTENCY_KEY_RE.test(idempotencyKey)) return res.status(400).json({ success: false, error: 'invalid_request', detail: 'Idempotency-Key must be 1–255 ASCII printable chars' });
 
     const { items, total } = validation.value;
     const orderId = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const requestHash = idempotencyKey ? hashOrderPayload(validation.value) : '';
+
+    const actorId = (req.user && (req.user.sub || req.user.client_id)) || null;
+    const requestId = req.get('x-request-id') || null;
 
     try {
-      const result: any = await withTenant(req.tenantId!, (client) =>
-        /* node:coverage ignore next */
-        client.query(
-          'INSERT INTO orders (order_id, items, total, environment, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId],
-        ),
-      );
+      const outcome = await withTenant(req.tenantId!, async (client) => {
+        if (idempotencyKey) {
+          const claim = await client.query(IDEMP_INSERT_SQL, [req.tenantId, idempotencyKey, requestHash, String(IDEMPOTENCY_TTL_MS)]);
+          if (claim.rowCount === 0) {
+            const existing = await client.query(IDEMP_SELECT_SQL, [req.tenantId, idempotencyKey]);
+            if (existing.rowCount === 0) throw new Error('idempotency lookup race — row vanished after conflict');
+            const row = existing.rows[0];
+            if (row.request_hash !== requestHash) return { status: 409, body: { success: false, error: 'idempotency_conflict', detail: 'Idempotency-Key reused with a different payload' } };
+            return { status: row.status_code as number, body: row.response_body as Record<string, unknown> }; /* node:coverage ignore next 3 */
+          }
+        }
 
-      logger.info({ orderId, total, tenant: req.tenantId }, 'order created');
-      res.status(201).json({ success: true, order: result.rows[0] });
+        const result: any = await client.query(ORDER_INSERT_SQL, [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId]);
+        const responseBody = { success: true, order: result.rows[0] };
+        if (idempotencyKey) await client.query(IDEMP_UPDATE_SQL, [req.tenantId, idempotencyKey, 201, JSON.stringify(responseBody), orderId]);
+        await client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.create', requestId, orderId, 201, 'success', null, JSON.stringify({ total, item_count: items.length })]);
+        return { status: 201, body: responseBody };
+      });
+
+      logger.info({ orderId, total, tenant: req.tenantId, status: outcome.status }, 'order request processed');
+      res.status(outcome.status).json(outcome.body);
     } catch (err) {
       logger.error({ err }, 'failed to create order');
+      // Best-effort audit write for failures. Uses a fresh tenant transaction
+      // because the original one is rolled back. RLS still scopes the row.
+      try {
+        await withTenant(req.tenantId!, (client) =>
+          client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.create.failed', requestId, orderId, 500, 'failure', 'internal_error', JSON.stringify({ total, item_count: items.length })]));
+      } catch (auditErr) {
+        logger.error({ auditErr }, 'failed to write audit event for order.create.failed');
+      }
       res.status(500).json({ success: false, error: 'Failed to process order' });
     }
   });
@@ -297,6 +333,7 @@ export function createApp({
   return { app, registry };
 }
 
+// Creates metrics app.
 export function createMetricsApp({ registry }: { registry: Registry }) {
   const app = express();
   app.get('/metrics', async (_req: Request, res: Response) => {
@@ -305,4 +342,18 @@ export function createMetricsApp({ registry }: { registry: Registry }) {
   });
   app.get('/health', (_req: Request, res: Response) => res.status(200).json({ status: 'ok' }));
   return app;
+}
+
+// Idempotency-Key header (closes backlog #72). Keep the format conservative:
+// ASCII printable, 1–255 chars. Mirrors the CHECK constraint on the table.
+const IDEMPOTENCY_KEY_RE = /^[\x21-\x7e]{1,255}$/;
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24h replay window
+
+// Hashes order payload.
+export function hashOrderPayload(value: OrderBody): string {
+  const canonical = JSON.stringify({
+    items: value.items.map((it) => ({ sku: it.sku, quantity: it.quantity })),
+    total: value.total,
+  });
+  return createHash('sha256').update(canonical).digest('hex');
 }

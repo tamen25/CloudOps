@@ -1,16 +1,17 @@
-# Grafana unified alerting — provisioned via ConfigMaps picked up by the
-# sidecar container (grafana.tf sidecar.alerts config).
+#This file defines alerting settings for CloudOps.
+#Grafana unified alerting — provisioned via ConfigMaps picked up by the
+#sidecar container (grafana.tf sidecar.alerts config).
 #
-# Scope:
-#   - Contact points: email to var.alert_email; SNS webhook if var.alert_sns_topic_arn set.
-#   - Notification policies: root policy routes by severity label.
-#   - Alert rules: re-uses the PrometheusRule CRDs in slo.tf as the source of
-#     truth. Grafana alerts only adds things the operator can't do — cross-
-#     datasource (Loki + Prom), RDS (CloudWatch), and SNS-bridged delivery.
+#Scope:
+#- Contact points: email to var.alert_email; SNS webhook if var.alert_sns_topic_arn set.
+#- Notification policies: root policy routes by severity label.
+#- Alert rules: re-uses the PrometheusRule CRDs in slo.tf as the source of
+#truth. Grafana alerts only adds things the operator can't do — cross-
+#datasource (Loki + Prom), RDS (CloudWatch), and SNS-bridged delivery.
 #
-# Prometheus-native alerts (slo.tf) continue to evaluate via the operator;
-# Grafana subscribes to them via the Alertmanager datasource so operators
-# have ONE alerts UI regardless of origin.
+#Prometheus-native alerts (slo.tf) continue to evaluate via the operator;
+#Grafana subscribes to them via the Alertmanager datasource so operators
+#have ONE alerts UI regardless of origin.
 
 locals {
   alerting_provisioning = {
@@ -43,9 +44,9 @@ locals {
               type                  = "webhook"
               disableResolveMessage = false
               settings = {
-                # The self-healing module already exposes the SNS topic;
-                # consumers connect to it via email/slack/pagerduty subscriptions.
-                # Grafana sends JSON; an API Gateway in front of SNS is typical.
+                #The self-healing module already exposes the SNS topic;
+                #consumers connect to it via email/slack/pagerduty subscriptions.
+                #Grafana sends JSON; an API Gateway in front of SNS is typical.
                 url        = var.alert_webhook_url
                 httpMethod = "POST"
                 maxAlerts  = 50
@@ -88,6 +89,7 @@ locals {
   }
 }
 
+#Creates the kubernetes config map resource named grafana alerting provisioning.
 resource "kubernetes_config_map" "grafana_alerting_provisioning" {
   count = var.alert_email != "" || var.alert_webhook_url != "" ? 1 : 0
 
@@ -104,12 +106,12 @@ resource "kubernetes_config_map" "grafana_alerting_provisioning" {
   depends_on = [helm_release.grafana]
 }
 
-# Alertmanager datasource — points Grafana at the kube-prometheus-stack
-# Alertmanager if it is enabled. When alertmanager.enabled=false (current
-# default in prometheus.tf), this ConfigMap is still created but the upstream
-# is non-functional until the operator's Alertmanager is turned on.
+#Alertmanager datasource — points Grafana at the kube-prometheus-stack
+#Alertmanager if it is enabled. When alertmanager.enabled=false (current
+#default in prometheus.tf), this ConfigMap is still created but the upstream
+#is non-functional until the operator's Alertmanager is turned on.
 #
-# The sidecar picks this up via the `grafana_datasource=1` label.
+#The sidecar picks this up via the `grafana_datasource=1` label.
 resource "kubernetes_config_map" "grafana_alertmanager_datasource" {
   metadata {
     name      = "grafana-alertmanager-datasource"

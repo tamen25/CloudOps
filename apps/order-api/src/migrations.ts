@@ -1,3 +1,4 @@
+// This file contains migrations logic for order API src.
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { PoolClient, Pool } from 'pg';
@@ -22,6 +23,7 @@ async function ensureTrackingTable(client: PoolClient): Promise<void> {
   `);
 }
 
+// Lists pending migrations.
 async function listPendingMigrations(client: PoolClient): Promise<string[]> {
   const applied = await client.query<{ name: string }>('SELECT name FROM schema_migrations');
   const appliedNames = new Set(applied.rows.map((r) => r.name));
@@ -33,6 +35,7 @@ async function listPendingMigrations(client: PoolClient): Promise<string[]> {
     .filter((f) => !appliedNames.has(f));
 }
 
+// Applies migration.
 async function applyMigration(client: PoolClient, name: string, logger: Logger): Promise<void> {
   const filePath = path.join(MIGRATIONS_DIR, name);
   const sql = await fs.readFile(filePath, 'utf8');
@@ -67,6 +70,7 @@ export interface RunMigrationsArgs {
   logger: Logger;
 }
 
+// Runs migrations.
 export async function runMigrations({ pool, logger }: RunMigrationsArgs): Promise<void> {
   const client = await pool.connect();
   try {

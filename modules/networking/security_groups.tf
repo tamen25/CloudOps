@@ -1,4 +1,5 @@
-# ALB security group — internet-facing, accepts HTTP/HTTPS from allowed CIDRs
+#This file defines security groups settings for CloudOps.
+#ALB security group — internet-facing, accepts HTTP/HTTPS from allowed CIDRs
 resource "aws_security_group" "alb" {
   name_prefix = "${var.name_prefix}-alb-sg-"
   description = "Security group for Application Load Balancer - ${var.environment}"
@@ -9,6 +10,7 @@ resource "aws_security_group" "alb" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-alb-sg", Tier = "loadbalancer" })
 }
 
+#Creates the AWS security group rule resource named alb ingress HTTPS.
 resource "aws_security_group_rule" "alb_ingress_https" {
   count             = var.enable_https ? 1 : 0
   type              = "ingress"
@@ -20,6 +22,7 @@ resource "aws_security_group_rule" "alb_ingress_https" {
   security_group_id = aws_security_group.alb.id
 }
 
+#Creates the AWS security group rule resource named alb ingress HTTP.
 resource "aws_security_group_rule" "alb_ingress_http" {
   #checkov:skip=CKV_AWS_260:Port 80 intentionally open on ALB for HTTP-to-HTTPS redirect
   count             = var.enable_http ? 1 : 0
@@ -32,6 +35,7 @@ resource "aws_security_group_rule" "alb_ingress_http" {
   security_group_id = aws_security_group.alb.id
 }
 
+#Creates the AWS security group rule resource named alb ingress custom.
 resource "aws_security_group_rule" "alb_ingress_custom" {
   count             = length(var.custom_alb_ports)
   type              = "ingress"
@@ -43,6 +47,7 @@ resource "aws_security_group_rule" "alb_ingress_custom" {
   security_group_id = aws_security_group.alb.id
 }
 
+#Creates the AWS security group rule resource named alb egress EKS nodes.
 resource "aws_security_group_rule" "alb_egress_eks_nodes" {
   type                     = "egress"
   from_port                = 0
@@ -53,6 +58,7 @@ resource "aws_security_group_rule" "alb_egress_eks_nodes" {
   security_group_id        = aws_security_group.alb.id
 }
 
+#Creates the AWS security group rule resource named alb egress HTTPS.
 resource "aws_security_group_rule" "alb_egress_https" {
   type              = "egress"
   from_port         = 443
@@ -63,7 +69,7 @@ resource "aws_security_group_rule" "alb_egress_https" {
   security_group_id = aws_security_group.alb.id
 }
 
-# EKS node security group
+#EKS node security group
 resource "aws_security_group" "eks_nodes" {
   name_prefix = "${var.name_prefix}-eks-nodes-sg-"
   description = "Security group for EKS worker nodes - ${var.environment}"
@@ -74,7 +80,7 @@ resource "aws_security_group" "eks_nodes" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-eks-nodes-sg", Tier = "application" })
 }
 
-# Node-to-node — required for pod-to-pod communication across nodes
+#Node-to-node — required for pod-to-pod communication across nodes
 resource "aws_security_group_rule" "eks_nodes_ingress_self" {
   type              = "ingress"
   from_port         = 0
@@ -85,6 +91,7 @@ resource "aws_security_group_rule" "eks_nodes_ingress_self" {
   security_group_id = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes ingress alb.
 resource "aws_security_group_rule" "eks_nodes_ingress_alb" {
   type                     = "ingress"
   from_port                = 0
@@ -95,6 +102,7 @@ resource "aws_security_group_rule" "eks_nodes_ingress_alb" {
   security_group_id        = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes egress HTTPS.
 resource "aws_security_group_rule" "eks_nodes_egress_https" {
   type              = "egress"
   from_port         = 443
@@ -105,6 +113,7 @@ resource "aws_security_group_rule" "eks_nodes_egress_https" {
   security_group_id = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes egress HTTP.
 resource "aws_security_group_rule" "eks_nodes_egress_http" {
   type              = "egress"
   from_port         = 80
@@ -115,6 +124,7 @@ resource "aws_security_group_rule" "eks_nodes_egress_http" {
   security_group_id = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes egress RDS.
 resource "aws_security_group_rule" "eks_nodes_egress_rds" {
   type                     = "egress"
   from_port                = var.rds_port
@@ -125,6 +135,7 @@ resource "aws_security_group_rule" "eks_nodes_egress_rds" {
   security_group_id        = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes egress DNS udp.
 resource "aws_security_group_rule" "eks_nodes_egress_dns_udp" {
   type              = "egress"
   from_port         = 53
@@ -135,6 +146,7 @@ resource "aws_security_group_rule" "eks_nodes_egress_dns_udp" {
   security_group_id = aws_security_group.eks_nodes.id
 }
 
+#Creates the AWS security group rule resource named EKS nodes egress DNS tcp.
 resource "aws_security_group_rule" "eks_nodes_egress_dns_tcp" {
   type              = "egress"
   from_port         = 53
@@ -145,7 +157,7 @@ resource "aws_security_group_rule" "eks_nodes_egress_dns_tcp" {
   security_group_id = aws_security_group.eks_nodes.id
 }
 
-# RDS security group — only accepts traffic from EKS nodes
+#RDS security group — only accepts traffic from EKS nodes
 resource "aws_security_group" "rds" {
   name_prefix = "${var.name_prefix}-rds-sg-"
   description = "Security group for RDS database - ${var.environment}"
@@ -156,6 +168,7 @@ resource "aws_security_group" "rds" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-rds-sg", Tier = "database" })
 }
 
+#Creates the AWS security group rule resource named RDS ingress EKS nodes.
 resource "aws_security_group_rule" "rds_ingress_eks_nodes" {
   type                     = "ingress"
   from_port                = var.rds_port
@@ -166,7 +179,7 @@ resource "aws_security_group_rule" "rds_ingress_eks_nodes" {
   security_group_id        = aws_security_group.rds.id
 }
 
-# VPC endpoints security group — allows HTTPS from within the VPC only
+#VPC endpoints security group — allows HTTPS from within the VPC only
 resource "aws_security_group" "vpc_endpoints" {
   name_prefix = "${var.name_prefix}-vpc-endpoints-sg-"
   description = "Security group for VPC endpoints - ${var.environment}"
@@ -177,6 +190,7 @@ resource "aws_security_group" "vpc_endpoints" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-vpc-endpoints-sg", Tier = "infrastructure" })
 }
 
+#Creates the AWS security group rule resource named VPC endpoints ingress HTTPS.
 resource "aws_security_group_rule" "vpc_endpoints_ingress_https" {
   type              = "ingress"
   from_port         = 443

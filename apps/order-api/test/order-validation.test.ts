@@ -1,15 +1,18 @@
+// This file contains order validation test logic for order API test.
 'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-// Validator is internal to app.js — exercise it through POST /order.
+// Validator is internal to app.ts — exercise it through POST /order.
 const { createApp } = require('../src/app');
 
+// Handles silent logger.
 function silentLogger() {
   return { info() {}, warn() {}, error() {} };
 }
 
+// Handles start server.
 async function startServer() {
   const pool = {
     query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }),
@@ -29,6 +32,7 @@ async function startServer() {
   });
 }
 
+// Handles post.
 async function post(baseUrl, body) {
   return fetch(`${baseUrl}/order`, {
     method: 'POST',
@@ -56,6 +60,30 @@ test('POST /order rejects items without sku/quantity', async () => {
     assert.equal(r.status, 400);
     const body = await r.json();
     assert.match(body.detail, /sku/);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /order rejects items where an entry is not an object (null)', async () => {
+  const { server, baseUrl } = await startServer();
+  try {
+    const r = await post(baseUrl, { items: [null], total: 1 });
+    assert.equal(r.status, 400);
+    const body = await r.json();
+    assert.match(body.detail, /must be an object/);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /order rejects non-finite total (NaN)', async () => {
+  const { server, baseUrl } = await startServer();
+  try {
+    const r = await post(baseUrl, { items: [{ sku: 'a', quantity: 1 }], total: 'not-a-number' });
+    assert.equal(r.status, 400);
+    const body = await r.json();
+    assert.match(body.detail, /finite number/);
   } finally {
     server.close();
   }

@@ -1,0 +1,14 @@
+#This manifest defines spectral for CloudOps.
+extends:
+  - spectral:oas
+rules:
+  #Disable info-contact (handled at the platform level, not per-API).
+  info-contact: off
+  #The repo's OAS sample data is small; keep noisy rules at warn.
+  oas3-unused-component: warn
+  operation-tag-defined: warn
+  #Built-in OAS rules: keep their default severity (warn) but escalate the
+  #ones we care about. Use only known rule names.
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-success-response: error

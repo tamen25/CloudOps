@@ -1,14 +1,18 @@
+// This file contains logs configuration logic for logs src.
 using System.Text.Json;
 
 namespace CloudOps.Otel.Logs;
 
 internal static class LogsConfiguration
 {
+    private const string DefaultSsmParametersFile = "/tmp/otelExporterParams.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
+    // Reads SSM parameters.
     public static SsmParameters ReadSsmParameters()
     {
         var configured = Environment.GetEnvironmentVariable("OTEL_SSM_PARAMETERS");
@@ -21,9 +25,12 @@ internal static class LogsConfiguration
             }
             catch (JsonException)
             {
-                // Fall through to direct OTEL env vars.
+                // Fall through to the params file and then direct OTEL env vars.
             }
         }
+
+        var fileParameters = ReadSsmParametersFile();
+        if (!fileParameters.IsEmpty()) return fileParameters;
 
         var logsUrl = FirstValue(
             Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"),
@@ -48,6 +55,30 @@ internal static class LogsConfiguration
         return parameters;
     }
 
+    // Reads SSM parameters file.
+    public static SsmParameters ReadSsmParametersFile(string? filePath = null)
+    {
+        var resolvedPath = HasValue(filePath)
+            ? filePath
+            : FirstValue(Environment.GetEnvironmentVariable("OTEL_SSM_PARAMETERS_FILE"), DefaultSsmParametersFile);
+
+        try
+        {
+            using var stream = File.OpenRead(resolvedPath!);
+            return JsonSerializer.Deserialize<SsmParameters>(stream, JsonOptions) ?? new SsmParameters();
+        }
+        catch (Exception error) when (
+            error is FileNotFoundException
+            || error is DirectoryNotFoundException
+            || error is IOException
+            || error is JsonException
+            || error is UnauthorizedAccessException)
+        {
+            return new SsmParameters();
+        }
+    }
+
+    // Parses string array.
     public static IReadOnlyList<string> ParseStringArray(string? raw, IReadOnlyList<string> fallback)
     {
         if (!HasValue(raw)) return fallback.ToArray();
@@ -70,6 +101,7 @@ internal static class LogsConfiguration
         return values.Length > 0 ? values : fallback.ToArray();
     }
 
+    // Gets sampling rate.
     public static double SamplingRate()
     {
         return double.TryParse(Environment.GetEnvironmentVariable("OTEL_LOGS_SAMPLING_RATE"), out var value)
@@ -77,16 +109,19 @@ internal static class LogsConfiguration
             : 100;
     }
 
+    // Handles has value.
     public static bool HasValue(string? value)
     {
         return !string.IsNullOrWhiteSpace(value);
     }
 
+    // Finds first value.
     public static string? FirstValue(params string?[] values)
     {
         return values.FirstOrDefault(HasValue);
     }
 
+    // Normalizes endpoint.
     private static string? NormalizeEndpoint(string? endpoint)
     {
         if (!HasValue(endpoint)) return null;

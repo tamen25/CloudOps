@@ -1,10 +1,11 @@
-# Read foundation outputs (closes backlog #16). `STACK=cluster
-# scripts/tf-init.sh` writes ignored backend.auto.tfvars values for the
-# foundation state bucket/key. They can also be supplied explicitly via
-# `foundation_state_bucket` + `foundation_state_key`.
+#This file defines remote state settings for CloudOps.
+#Read foundation outputs (closes backlog #16). `STACK=cluster
+#scripts/tf-init.sh` writes ignored backend.auto.tfvars values for the
+#foundation state bucket/key. They can also be supplied explicitly via
+#`foundation_state_bucket` + `foundation_state_key`.
 #
-# Disable by setting `use_remote_state_foundation = false` and supplying
-# `existing_*` vars instead (one-shot bring-your-own-networking case).
+#Disable by setting `use_remote_state_foundation = false` and supplying
+#`existing_*` vars instead (one-shot bring-your-own-networking case).
 
 data "terraform_remote_state" "foundation" {
   count = var.use_remote_state_foundation ? 1 : 0
@@ -18,6 +19,7 @@ data "terraform_remote_state" "foundation" {
   }
 }
 
+#Groups local values used by this Terraform file.
 locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
 
@@ -54,8 +56,10 @@ locals {
   database_secret_arn_pattern = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.name_prefix}-db-credentials-*"
 }
 
+#Reads the AWS caller identity data source named current.
 data "aws_caller_identity" "current" {}
 
+#Groups local values used by this Terraform file.
 locals {
   account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.current.account_id
 }

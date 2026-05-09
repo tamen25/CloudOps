@@ -1,3 +1,4 @@
+// This file contains runtime resource attributes logic for logs src.
 namespace CloudOps.Otel.Logs;
 
 public static class RuntimeResourceAttributes
@@ -12,6 +13,7 @@ public static class RuntimeResourceAttributes
     private const string AttrK8sNodeName = "k8s.node.name";
     private const string AttrK8sPodName = "k8s.pod.name";
 
+    // Creates the requested work.
     public static IReadOnlyDictionary<string, string> Create()
     {
         var attributes = ParseResourceAttributes(Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES"));
@@ -26,6 +28,7 @@ public static class RuntimeResourceAttributes
         return attributes;
     }
 
+    // Adds runtime attributes.
     private static void AddRuntimeAttributes(Dictionary<string, string> attributes)
     {
         var lambdaName = Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME");
@@ -65,6 +68,7 @@ public static class RuntimeResourceAttributes
         PutIfPresent(attributes, AttrContainerName, FirstEnv("CONTAINER_NAME", "ECS_CONTAINER_NAME"));
     }
 
+    // Parses resource attributes.
     private static Dictionary<string, string> ParseResourceAttributes(string? raw)
     {
         var attributes = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -86,11 +90,13 @@ public static class RuntimeResourceAttributes
         return attributes;
     }
 
+    // Handles put if present.
     private static void PutIfPresent(Dictionary<string, string> attributes, string key, string? value)
     {
         if (HasValue(value)) attributes[key] = value!;
     }
 
+    // Finds first env.
     private static string? FirstEnv(params string[] names)
     {
         foreach (var name in names)
@@ -102,11 +108,13 @@ public static class RuntimeResourceAttributes
         return null;
     }
 
+    // Finds first value.
     private static string FirstValue(params string?[] values)
     {
         return values.FirstOrDefault(HasValue) ?? "unknown_service";
     }
 
+    // Handles has value.
     private static bool HasValue(string? value)
     {
         return !string.IsNullOrWhiteSpace(value);

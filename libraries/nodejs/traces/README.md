@@ -1,3 +1,4 @@
+<!-- This document explains readme for CloudOps. -->
 # @cloudops/otel-traces
 
 Placeholder for the Node.js/TypeScript traces library.

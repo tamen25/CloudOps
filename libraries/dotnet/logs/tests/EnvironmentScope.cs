@@ -1,3 +1,4 @@
+// This file contains environment scope logic for logs tests.
 namespace CloudOps.Otel.Logs.Tests;
 
 internal sealed class EnvironmentScope : IDisposable
@@ -29,6 +30,7 @@ internal sealed class EnvironmentScope : IDisposable
         "OTEL_RESOURCE_ATTRIBUTES",
         "OTEL_SERVICE_NAME",
         "OTEL_SSM_PARAMETERS",
+        "OTEL_SSM_PARAMETERS_FILE",
         "POD_NAME",
         "POD_NAMESPACE",
         "_X_AMZN_TRACE_ID"
@@ -36,6 +38,7 @@ internal sealed class EnvironmentScope : IDisposable
 
     private readonly Dictionary<string, string?> previousValues = new(StringComparer.Ordinal);
 
+    // Handles environment scope.
     public EnvironmentScope(IReadOnlyDictionary<string, string?> values)
     {
         foreach (var key in TelemetryKeys.Concat(values.Keys).Distinct(StringComparer.Ordinal))
@@ -50,6 +53,7 @@ internal sealed class EnvironmentScope : IDisposable
         }
     }
 
+    // Handles dispose.
     public void Dispose()
     {
         foreach (var (key, value) in previousValues)

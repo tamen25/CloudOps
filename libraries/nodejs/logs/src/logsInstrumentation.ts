@@ -1,3 +1,4 @@
+// This file contains logs instrumentation logic for logs src.
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
@@ -50,6 +51,7 @@ const CLOUD_PLATFORM_VALUE_AWS_ECS = "aws_ecs";
 const CLOUD_PLATFORM_VALUE_AWS_EKS = "aws_eks";
 const CLOUD_PLATFORM_VALUE_AWS_LAMBDA = "aws_lambda";
 
+// Parses string array.
 export function parseStringArray(raw: string | undefined, fallback: string[]): string[] {
   if (!raw) return [...fallback];
 
@@ -66,6 +68,7 @@ export function parseStringArray(raw: string | undefined, fallback: string[]): s
   return [...fallback];
 }
 
+// Parses log levels.
 export function parseLogLevels(raw: string | undefined): LogLevel[] {
   const levels = parseStringArray(raw, DEFAULT_LOG_LEVELS)
     .map((item) => item.toLowerCase())
@@ -73,6 +76,7 @@ export function parseLogLevels(raw: string | undefined): LogLevel[] {
   return levels.length > 0 ? levels : [...DEFAULT_LOG_LEVELS];
 }
 
+// Parses resource attributes.
 export function parseResourceAttributes(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
 
@@ -88,11 +92,13 @@ export function parseResourceAttributes(raw: string | undefined): Record<string,
   }, {});
 }
 
+// Handles auth headers.
 function authHeaders(apiKey: string | undefined): Record<string, string> {
   if (!apiKey) return {};
   return { authorization: `Bearer ${apiKey}` };
 }
 
+// Finds first env.
 function firstEnv(...names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name];
@@ -102,6 +108,7 @@ function firstEnv(...names: string[]): string | undefined {
   return undefined;
 }
 
+// Adds runtime resource attributes.
 export function addRuntimeResourceAttributes(attributes: Record<string, string>): void {
   if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
     attributes[ATTR_CLOUD_PLATFORM] = CLOUD_PLATFORM_VALUE_AWS_LAMBDA;
@@ -140,6 +147,7 @@ export class LogSampler {
   private batchMap: Map<string, LogBatch> = new Map();
   private readonly probabilisticSamplingRate: number = parseFloat(process.env.OTEL_LOGS_SAMPLING_RATE || "100");
 
+  // Adds log.
   public addLog(logEntry: LogEntry): void {
     if (this.probabilisticSamplingRate === 0) {
       logger.processLog(logEntry);
@@ -162,6 +170,7 @@ export class LogSampler {
     this.batchMap.set(invocationId, { logs: [logEntry] });
   }
 
+  // Flushes one batch.
   public flushOneBatch(): void {
     diag.debug("LogSampler.flushOneBatch called");
 
@@ -200,6 +209,7 @@ export class LogSampler {
     }
   }
 
+  // Processes batch.
   private processBatch(batch: LogBatch): void {
     diag.debug(`LogSampler.processBatch called with ${batch.logs.length} logs`);
     batch.logs.forEach((log) => logger.processLog(log));
@@ -220,10 +230,12 @@ export class LogsInstrumentation {
   private uniqueId: string | undefined;
   private exportersList = parseStringArray(process.env.OTEL_BACKEND_EXPORTERS, ["console"]);
 
+  // function Object() { [native code] } the requested work.
   private constructor() {
     this.sampler = new LogSampler();
   }
 
+  // Initializes logger.
   public static initialiseLogger(): LogsInstrumentation {
     if (!this.instance) {
       this.instance = new LogsInstrumentation();
@@ -233,6 +245,7 @@ export class LogsInstrumentation {
     return this.instance;
   }
 
+  // Initializes the requested work.
   private init(): void {
     if (this.isInitialized) return;
 
@@ -282,6 +295,7 @@ export class LogsInstrumentation {
     }
   }
 
+  // Handles setup exporters.
   private setupExporters(): void {
     diag.debug("LogsInstrumentation.setupExporters called");
 
@@ -329,6 +343,7 @@ export class LogsInstrumentation {
     }));
   }
 
+  // Initializes winston.
   private initialiseWinston(): void {
     diag.debug("LogsInstrumentation.initialiseWinston called");
 
@@ -368,6 +383,7 @@ export class LogsInstrumentation {
     }
   }
 
+  // Handles merge log attributes.
   private mergeLogAttributes(extraAttributes?: Record<string, any>): Record<string, any> {
     let attributes: Record<string, any> = {};
 
@@ -388,6 +404,7 @@ export class LogsInstrumentation {
     return attributes;
   }
 
+  // Handles active baggage attributes.
   private activeBaggageAttributes(): Record<string, string> {
     const activeBaggage = propagation.getActiveBaggage();
     if (!activeBaggage) return {};
@@ -400,6 +417,7 @@ export class LogsInstrumentation {
     return attributes;
   }
 
+  // Processes log.
   public processLog(logEntry: LogEntry): void {
     diag.debug(`LogsInstrumentation.processLog called for level: ${logEntry.level}`);
 
@@ -451,6 +469,7 @@ export class LogsInstrumentation {
     }
   }
 
+  // Logs the requested work.
   public log(level: LogLevel, message?: any, ...optionalParams: any[]): void {
     diag.debug(`LogsInstrumentation.log called with level: ${level}, message: ${message}`);
     const currentTraceID = process.env._X_AMZN_TRACE_ID || trace.getActiveSpan()?.spanContext().traceId || "unknown";
@@ -464,22 +483,27 @@ export class LogsInstrumentation {
     this.sampler.addLog({ invocationId, level, message, optionalParams });
   }
 
+  // Handles info.
   public info(message?: any, ...optionalParams: any[]): void {
     this.log("info", message, ...optionalParams);
   }
 
+  // Handles error.
   public error(message?: any, ...optionalParams: any[]): void {
     this.log("error", message, ...optionalParams);
   }
 
+  // Handles debug.
   public debug(message?: any, ...optionalParams: any[]): void {
     this.log("debug", message, ...optionalParams);
   }
 
+  // Handles warn.
   public warn(message?: any, ...optionalParams: any[]): void {
     this.log("warn", message, ...optionalParams);
   }
 
+  // Exports logs.
   public async exportLogs(): Promise<void> {
     diag.debug("LogsInstrumentation.logs called");
 

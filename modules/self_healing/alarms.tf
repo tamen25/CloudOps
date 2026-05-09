@@ -1,19 +1,20 @@
-# Self-Healing Controller — CloudWatch Alarms
+#This file defines alarms settings for CloudOps.
+#Self-Healing Controller — CloudWatch Alarms
 #
-# All alarms publish to the cloudops-healing-triggers SNS topic.
-# The alarm name is the routing key in the Lambda handler.
-# ALB alarms are created only when alb_arn_suffix is provided.
-# RDS alarms are created only when rds_instance_id is provided.
+#All alarms publish to the cloudops-healing-triggers SNS topic.
+#The alarm name is the routing key in the Lambda handler.
+#ALB alarms are created only when alb_arn_suffix is provided.
+#RDS alarms are created only when rds_instance_id is provided.
 
 locals {
-  # Alarm name prefix — Lambda routes on contains() of these names
+  #Alarm name prefix — Lambda routes on contains() of these names
   alarm_prefix = "${var.project_name}-${var.environment}"
   create_alb   = var.alb_arn_suffix != "" && var.target_group_arn_suffix != ""
   create_rds   = var.rds_instance_id != ""
   create_eks   = var.eks_cluster_name != ""
 }
 
-# ── order-api: High Error Rate — triggers rollback ───────────────────────────
+#── order-api: High Error Rate — triggers rollback ───────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "order_api_high_error_rate" {
   count = local.create_alb ? 1 : 0
@@ -41,7 +42,7 @@ resource "aws_cloudwatch_metric_alarm" "order_api_high_error_rate" {
   tags = var.tags
 }
 
-# ── order-api: High Latency — triggers scale-out ─────────────────────────────
+#── order-api: High Latency — triggers scale-out ─────────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "order_api_high_latency" {
   count = local.create_alb ? 1 : 0
@@ -68,8 +69,8 @@ resource "aws_cloudwatch_metric_alarm" "order_api_high_latency" {
   tags = var.tags
 }
 
-# ── order-api: Pod count low — triggers ensure-minimum-pods ─────────────────
-# Uses Container Insights pod_number_of_running_pods in cloudops namespace.
+#── order-api: Pod count low — triggers ensure-minimum-pods ─────────────────
+#Uses Container Insights pod_number_of_running_pods in cloudops namespace.
 
 resource "aws_cloudwatch_metric_alarm" "order_api_pod_count_low" {
   count = local.create_eks ? 1 : 0
@@ -97,7 +98,7 @@ resource "aws_cloudwatch_metric_alarm" "order_api_pod_count_low" {
   tags = var.tags
 }
 
-# ── RDS: High Connections ─────────────────────────────────────────────────────
+#── RDS: High Connections ─────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "rds_high_connections" {
   count = local.create_rds ? 1 : 0
@@ -123,7 +124,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_high_connections" {
   tags = var.tags
 }
 
-# ── RDS: High CPU ─────────────────────────────────────────────────────────────
+#── RDS: High CPU ─────────────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "rds_high_cpu" {
   count = local.create_rds ? 1 : 0
@@ -149,7 +150,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_high_cpu" {
   tags = var.tags
 }
 
-# ── RDS: Low Storage ─────────────────────────────────────────────────────────
+#── RDS: Low Storage ─────────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "rds_low_storage" {
   count = local.create_rds ? 1 : 0
@@ -175,9 +176,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_low_storage" {
   tags = var.tags
 }
 
-# ── EKS: Node Not Ready ───────────────────────────────────────────────────────
-# Reads the NodeNotReady custom metric published by the kube-bench CronJob
-# and the self-healing Lambda itself. Triggers node cordon + replacement.
+#── EKS: Node Not Ready ───────────────────────────────────────────────────────
+#Reads the NodeNotReady custom metric published by the kube-bench CronJob
+#and the self-healing Lambda itself. Triggers node cordon + replacement.
 
 resource "aws_cloudwatch_metric_alarm" "eks_node_not_ready" {
   count = local.create_eks ? 1 : 0

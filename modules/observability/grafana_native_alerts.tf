@@ -1,30 +1,31 @@
-#  Grafana-native alert rules — provisioned via the sidecar (`grafana_alert=1`).
+#This file defines grafana native alerts settings for CloudOps.
+#Grafana-native alert rules — provisioned via the sidecar (`grafana_alert=1`).
 #
-#  These complement the Prometheus-operator-managed PrometheusRule CRDs in
-#  slo.tf. Use Grafana-native rules when:
-#   - the query crosses datasources (Loki + Prom) — operator can't,
-#   - the alert needs Grafana templating/contact-point routing the operator
-#     doesn't own,
-#   - the rule is high-signal but doesn't earn SLO-grade burn-rate machinery.
+#These complement the Prometheus-operator-managed PrometheusRule CRDs in
+#slo.tf. Use Grafana-native rules when:
+#- the query crosses datasources (Loki + Prom) — operator can't,
+#- the alert needs Grafana templating/contact-point routing the operator
+#doesn't own,
+#- the rule is high-signal but doesn't earn SLO-grade burn-rate machinery.
 #
-#  Three rules ship here:
-#   1. Loki log-volume spike  — error/warn lines in the app namespace exceed a
-#      threshold over 10m. Catches noisy regressions before they show up as 5xx.
-#   2. HTTP 5xx surge         — service-level 5xx ratio > 5% for 5m. More
-#      sensitive than the SLO availability fast-burn (>14.4x); fires earlier.
-#   3. HTTP request-volume drop — service went silent (rate ~ 0) while the same
-#      window was healthy 1h ago. Catches cases where SLO ratios stay 1.0
-#      because the denominator collapsed too.
+#Three rules ship here:
+#1. Loki log-volume spike  — error/warn lines in the app namespace exceed a
+#threshold over 10m. Catches noisy regressions before they show up as 5xx.
+#2. HTTP 5xx surge         — service-level 5xx ratio > 5% for 5m. More
+#sensitive than the SLO availability fast-burn (>14.4x); fires earlier.
+#3. HTTP request-volume drop — service went silent (rate ~ 0) while the same
+#window was healthy 1h ago. Catches cases where SLO ratios stay 1.0
+#because the denominator collapsed too.
 #
-#  CloudWatch-sourced alerts (RDS CPUCreditBalance, ALB 5xx) are out of scope
-#  here — Grafana doesn't have a CloudWatch datasource configured (no IRSA),
-#  so those rules can't evaluate yet. CloudWatch metric alarms in
-#  modules/database/cloudwatch.tf already cover the data plane; SNS wiring is
-#  a separate follow-up.
+#CloudWatch-sourced alerts (RDS CPUCreditBalance, ALB 5xx) are out of scope
+#here — Grafana doesn't have a CloudWatch datasource configured (no IRSA),
+#so those rules can't evaluate yet. CloudWatch metric alarms in
+#modules/database/cloudwatch.tf already cover the data plane; SNS wiring is
+#a separate follow-up.
 
 locals {
-  # Pin all three rules to the same group so Grafana evaluates them in lockstep
-  # and they share the same alertmanager pipeline.
+  #Pin all three rules to the same group so Grafana evaluates them in lockstep
+  #and they share the same alertmanager pipeline.
   grafana_alert_rules = {
     apiVersion = 1
     groups = [
@@ -34,7 +35,7 @@ locals {
         folder   = "cloudops"
         interval = "1m"
         rules = [
-          # ── 1. Loki log-volume spike ───────────────────────────────────────
+          #── 1. Loki log-volume spike ───────────────────────────────────────
           {
             uid       = "loki-error-log-spike"
             title     = "Application error log spike"
@@ -109,7 +110,7 @@ locals {
             }
           },
 
-          # ── 2. HTTP 5xx error-rate surge ───────────────────────────────────
+          #── 2. HTTP 5xx error-rate surge ───────────────────────────────────
           {
             uid       = "http-5xx-rate-surge"
             title     = "HTTP 5xx error-rate surge"
@@ -185,7 +186,7 @@ locals {
             }
           },
 
-          # ── 3. HTTP request-volume drop ────────────────────────────────────
+          #── 3. HTTP request-volume drop ────────────────────────────────────
           {
             uid       = "http-request-volume-drop"
             title     = "HTTP request volume dropped to zero"
@@ -266,6 +267,7 @@ locals {
   }
 }
 
+#Creates the kubernetes config map resource named grafana native alert rules.
 resource "kubernetes_config_map" "grafana_native_alert_rules" {
   metadata {
     name      = "grafana-native-alert-rules"

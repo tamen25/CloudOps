@@ -1,3 +1,4 @@
+<!-- This document explains SLO fast burn for CloudOps. -->
 # Runbook: SLO Availability Fast Burn
 
 ## Overview

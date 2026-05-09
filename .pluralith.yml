@@ -1,3 +1,4 @@
+#This manifest defines pluralith for CloudOps.
 title: CloudOps Infrastructure
 version: 1.0
 show_costs: true

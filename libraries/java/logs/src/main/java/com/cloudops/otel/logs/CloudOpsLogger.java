@@ -1,3 +1,4 @@
+// This file contains cloud ops logger logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import io.opentelemetry.api.OpenTelemetry;
@@ -48,10 +49,12 @@ public final class CloudOpsLogger {
     init();
   }
 
+  // Initializes logger.
   public static CloudOpsLogger initialiseLogger() {
     return initializeLogger();
   }
 
+  // Initializes logger.
   public static CloudOpsLogger initializeLogger() {
     CloudOpsLogger localInstance = instance;
     if (localInstance == null) {
@@ -67,26 +70,32 @@ public final class CloudOpsLogger {
     return localInstance;
   }
 
+  // Handles resource attributes.
   public Map<String, String> resourceAttributes() {
     return resourceAttributes;
   }
 
+  // Handles info.
   public void info(Object message, Object... optionalParams) {
     log(LogLevel.INFO, message, optionalParams);
   }
 
+  // Handles error.
   public void error(Object message, Object... optionalParams) {
     log(LogLevel.ERROR, message, optionalParams);
   }
 
+  // Handles debug.
   public void debug(Object message, Object... optionalParams) {
     log(LogLevel.DEBUG, message, optionalParams);
   }
 
+  // Handles warn.
   public void warn(Object message, Object... optionalParams) {
     log(LogLevel.WARN, message, optionalParams);
   }
 
+  // Exports logs.
   public void exportLogs() {
     sampler.flushOneBatch();
     if (useOtel && loggerProvider != null) {
@@ -95,6 +104,7 @@ public final class CloudOpsLogger {
     }
   }
 
+  // Logs the requested work.
   private void log(LogLevel level, Object message, Object... optionalParams) {
     String currentTraceId = currentTraceId();
     if (!currentTraceId.equals(previousTraceId)) {
@@ -125,6 +135,7 @@ public final class CloudOpsLogger {
     }
   }
 
+  // Initializes the requested work.
   private void init() {
     if (exportersList.length <= 1 && containsExporter("console")) {
       useConsole = true;
@@ -146,6 +157,7 @@ public final class CloudOpsLogger {
     }
   }
 
+  // Initializes OTel.
   private void initialiseOtel(SsmParameters ssmParameters) {
     BackendConfig backendConfig = ssmParameters.backend("otel");
     if (backendConfig == null || backendConfig.logs == null) {
@@ -174,12 +186,14 @@ public final class CloudOpsLogger {
     useOtel = true;
   }
 
+  // Handles resource.
   private Resource resource() {
     io.opentelemetry.sdk.resources.ResourceBuilder builder = Resource.builder();
     resourceAttributes.forEach(builder::put);
     return builder.build();
   }
 
+  // Logs attributes.
   private Attributes logAttributes(String invocationId) {
     AttributesBuilder builder = Attributes.builder().put("invocation.id", invocationId == null ? "unknown" : invocationId);
 
@@ -194,6 +208,7 @@ public final class CloudOpsLogger {
     return builder.build();
   }
 
+  // Converts severity.
   private static Severity toSeverity(LogLevel level) {
     return switch (level) {
       case ERROR -> Severity.ERROR;
@@ -203,6 +218,7 @@ public final class CloudOpsLogger {
     };
   }
 
+  // Parses log levels.
   static Set<LogLevel> parseLogLevels(String raw) {
     if (raw == null || raw.isBlank()) return EnumSet.allOf(LogLevel.class);
 
@@ -221,6 +237,7 @@ public final class CloudOpsLogger {
     return levels.isEmpty() ? EnumSet.allOf(LogLevel.class) : levels;
   }
 
+  // Renders the requested work.
   private static String render(Object message, Object[] optionalParams) {
     String rendered = message instanceof Throwable throwable
         ? throwable.toString()
@@ -233,6 +250,7 @@ public final class CloudOpsLogger {
     return rendered;
   }
 
+  // Handles contains exporter.
   private boolean containsExporter(String expected) {
     for (String exporter : exportersList) {
       if (expected.equalsIgnoreCase(exporter.trim())) return true;
@@ -241,6 +259,7 @@ public final class CloudOpsLogger {
     return false;
   }
 
+  // Gets current trace ID.
   private static String currentTraceId() {
     String lambdaTraceId = System.getenv("_X_AMZN_TRACE_ID");
     if (LogsConfiguration.hasValue(lambdaTraceId)) return lambdaTraceId;

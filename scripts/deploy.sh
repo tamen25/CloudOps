@@ -1,17 +1,18 @@
 #!/bin/bash
-# CloudOps Deployment Script
-# Deploy order: bootstrap → networking → eks → ingress → observability → security → database → slo → final sync
+#This script runs deploy automation for CloudOps.
+#CloudOps Deployment Script
+#Deploy order: bootstrap → networking → eks → ingress → observability → security → database → slo → final sync
 
 set -e
 
-# Backlog #62 — script moved from repo root to scripts/. Resolve repo root
-# from this script's location so the bare `terraform` and `terraform.tfvars`
-# references below behave the same regardless of caller cwd.
+#Backlog #62 — script moved from repo root to scripts/. Resolve repo root
+#from this script's location so the bare `terraform` and `terraform.tfvars`
+#references below behave the same regardless of caller cwd.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$REPO_ROOT"
 
-# Colors
+#Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
@@ -24,7 +25,7 @@ echo "   CloudOps Infrastructure Deployment"
 echo "=========================================="
 echo ""
 
-# Validate dependencies
+#Validate dependencies
 if ! command -v terraform &> /dev/null; then
     echo "Error: terraform not found in PATH"
     exit 1
@@ -34,11 +35,12 @@ if ! command -v aws &> /dev/null; then
     exit 1
 fi
 
-# Read enabled modules from terraform.tfvars
+#Read enabled modules from terraform.tfvars
 get_tfvar_bool() {
     grep "^$1" terraform.tfvars 2>/dev/null | grep -o 'true\|false' | head -1
 }
 
+#Gets tfvar string.
 get_tfvar_string() {
     grep "^$1" terraform.tfvars 2>/dev/null | sed 's/.*= *"\(.*\)".*/\1/' | head -1
 }
@@ -61,25 +63,25 @@ echo "  slo           = ${ENABLE_SLO:-false}"
 echo "  security      = ${ENABLE_SECURITY:-false}"
 echo ""
 
-# ---------------------------------------------------------------------------
-# Step 1: S3 bucket for Terraform remote state (idempotent)
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 1: S3 bucket for Terraform remote state (idempotent)
+#---------------------------------------------------------------------------
 echo "Step 1: Ensuring Terraform state S3 bucket exists"
 echo "=================================================="
 bash ./modules/bootstrap/create-s3-bucket.sh
 echo ""
 
-# ---------------------------------------------------------------------------
-# Step 2: Terraform init
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 2: Terraform init
+#---------------------------------------------------------------------------
 echo "Step 2: Initializing Terraform"
 echo "=============================="
 terraform init
 echo ""
 
-# ---------------------------------------------------------------------------
-# Step 3: Bootstrap + Networking
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 3: Bootstrap + Networking
+#---------------------------------------------------------------------------
 if [ "$ENABLE_NETWORKING" = "true" ]; then
     echo "Step 3: Deploying Bootstrap + Networking (~2 minutes)"
     echo "======================================================"
@@ -94,9 +96,9 @@ else
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 4: EKS cluster (~15 minutes)
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 4: EKS cluster (~15 minutes)
+#---------------------------------------------------------------------------
 if [ "$ENABLE_EKS" = "true" ]; then
     echo "Step 4: Deploying EKS cluster (~15 minutes, please wait)"
     echo "========================================================="
@@ -106,10 +108,10 @@ if [ "$ENABLE_EKS" = "true" ]; then
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 5: Ingress (ACM + Route 53 + AWS Load Balancer Controller)
-# Requires EKS cluster to be running first.
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 5: Ingress (ACM + Route 53 + AWS Load Balancer Controller)
+#Requires EKS cluster to be running first.
+#---------------------------------------------------------------------------
 if [ "$ENABLE_INGRESS" = "true" ]; then
     echo "Step 5: Deploying Ingress (ACM + LBC + Route 53)"
     echo "=================================================="
@@ -118,10 +120,10 @@ if [ "$ENABLE_INGRESS" = "true" ]; then
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 6: Observability (LGTM stack)
-# Requires EKS + Ingress (for ACM cert ARN).
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 6: Observability (LGTM stack)
+#Requires EKS + Ingress (for ACM cert ARN).
+#---------------------------------------------------------------------------
 if [ "$ENABLE_OBSERVABILITY" = "true" ]; then
     echo "Step 6: Deploying Observability stack (~10 minutes)"
     echo "===================================================="
@@ -131,10 +133,10 @@ if [ "$ENABLE_OBSERVABILITY" = "true" ]; then
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 7: Security (Falco + compliance scanner + kube-bench)
-# Requires EKS + Observability (OTel Collector must be running for Falcosidekick).
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 7: Security (Falco + compliance scanner + kube-bench)
+#Requires EKS + Observability (OTel Collector must be running for Falcosidekick).
+#---------------------------------------------------------------------------
 if [ "$ENABLE_SECURITY" = "true" ]; then
     echo "Step 7: Deploying Security module (Falco + compliance scanner + kube-bench)"
     echo "============================================================================"
@@ -144,9 +146,9 @@ if [ "$ENABLE_SECURITY" = "true" ]; then
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 8: Database (RDS takes 5-10 minutes)
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 8: Database (RDS takes 5-10 minutes)
+#---------------------------------------------------------------------------
 if [ "$ENABLE_DATABASE" = "true" ]; then
     echo "Step 8: Deploying Database (RDS ~5-10 minutes)"
     echo "==============================================="
@@ -156,21 +158,21 @@ if [ "$ENABLE_DATABASE" = "true" ]; then
     echo ""
 fi
 
-# ---------------------------------------------------------------------------
-# Step 9: Final synchronization (catches any inter-module dependencies)
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 9: Final synchronization (catches any inter-module dependencies)
+#---------------------------------------------------------------------------
 echo "Step 9: Final synchronization"
 echo "=============================="
 terraform apply -auto-approve
 echo -e "${GREEN}✓ All resources in sync${NC}"
 echo ""
 
-# ---------------------------------------------------------------------------
-# Step 10: Deploy sample app (order-api)
-# order-api is treated as a smoke-test / demo workload, not the primary product.
-# If local prerequisites for app deployment are missing, warn and continue so the
-# platform itself can still come up in one run.
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 10: Deploy sample app (order-api)
+#order-api is treated as a smoke-test / demo workload, not the primary product.
+#If local prerequisites for app deployment are missing, warn and continue so the
+#platform itself can still come up in one run.
+#---------------------------------------------------------------------------
 if [ "$ENABLE_EKS" = "true" ] && [ "$ENABLE_INGRESS" = "true" ] && [ "$ENABLE_OBSERVABILITY" = "true" ] && [ "$ENABLE_DATABASE" = "true" ]; then
     echo "Step 10: Deploying sample app (order-api)"
     echo "========================================="
@@ -257,12 +259,12 @@ if [ "$ENABLE_EKS" = "true" ] && [ "$ENABLE_INGRESS" = "true" ] && [ "$ENABLE_OB
     fi
 fi
 
-# ---------------------------------------------------------------------------
-# Step 11: SLO status (only when slo module is enabled)
-# Invokes the error budget Lambda once to force a fresh calculation,
-# waits 10 seconds for CloudWatch metrics to propagate, then prints a
-# formatted summary of the current SLO health.
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 11: SLO status (only when slo module is enabled)
+#Invokes the error budget Lambda once to force a fresh calculation,
+#waits 10 seconds for CloudWatch metrics to propagate, then prints a
+#formatted summary of the current SLO health.
+#---------------------------------------------------------------------------
 if [ "$ENABLE_SLO" = "true" ]; then
     echo "Step 11: SLO Status Check"
     echo "========================="
@@ -286,12 +288,13 @@ if [ "$ENABLE_SLO" = "true" ]; then
     echo "Waiting 10 seconds for CloudWatch metrics to propagate..."
     sleep 10
 
-    # Query CloudWatch for the latest SLO metrics published by the Lambda
+    #Query CloudWatch for the latest SLO metrics published by the Lambda
     START_TIME=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
         || date -u -v-15M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
         || echo "")
     END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+    #Gets cw metric.
     get_cw_metric() {
         local METRIC_NAME="$1"
         aws cloudwatch get-metric-statistics \
@@ -312,7 +315,7 @@ if [ "$ENABLE_SLO" = "true" ]; then
     BUDGET_REM=$(get_cw_metric "ErrorBudgetRemaining")
     BURN_1H=$(get_cw_metric "BurnRate1h")
 
-    # Read projected exhaustion hours from the Lambda's JSON response body
+    #Read projected exhaustion hours from the Lambda's JSON response body
     PROJ_HOURS=""
     if [ -f /tmp/slo-response.json ]; then
         PROJ_HOURS=$(python3 -c "
@@ -331,7 +334,7 @@ except Exception:
 " 2>/dev/null || echo "")
     fi
 
-    # Format helpers
+    #Format helpers
     fmt_pct() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ] || [ "$v" = "N/A" ]; then
@@ -341,6 +344,7 @@ except Exception:
         fi
     }
 
+    #Handles fmt rate.
     fmt_rate() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ] || [ "$v" = "N/A" ]; then
@@ -350,6 +354,7 @@ except Exception:
         fi
     }
 
+    #Handles fmt exhaustion.
     fmt_exhaustion() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ] || [ "$v" = "N/A" ]; then
@@ -376,7 +381,7 @@ else:
     echo "=================="
     echo ""
 
-    # Warn if budget is low
+    #Warn if budget is low
     if [ -n "$BUDGET_REM" ] && [ "$BUDGET_REM" != "None" ] && [ "$BUDGET_REM" != "null" ]; then
         BUDGET_INT=$(python3 -c "print(int(float('$BUDGET_REM')))" 2>/dev/null || echo "100")
         if [ "$BUDGET_INT" -lt 10 ]; then
@@ -390,11 +395,11 @@ else:
     fi
 fi
 
-# ---------------------------------------------------------------------------
-# Step 11: Security posture summary (only when security module is enabled)
-# Triggers a fresh compliance scan, waits for results to propagate to
-# CloudWatch, then prints findings by severity and lists any CRITICAL findings.
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Step 11: Security posture summary (only when security module is enabled)
+#Triggers a fresh compliance scan, waits for results to propagate to
+#CloudWatch, then prints findings by severity and lists any CRITICAL findings.
+#---------------------------------------------------------------------------
 if [ "$ENABLE_SECURITY" = "true" ]; then
     echo "Step 11: Security Posture Summary"
     echo "=================================="
@@ -426,7 +431,7 @@ if [ "$ENABLE_SECURITY" = "true" ]; then
         || date -u -v-20M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
         || echo "")
 
-    # Helper: query a single FindingsOpen metric from CloudWatch by Severity dimension
+    #Helper: query a single FindingsOpen metric from CloudWatch by Severity dimension
     get_security_count() {
         local SEV="$1"
         aws cloudwatch get-metric-statistics \
@@ -441,7 +446,7 @@ if [ "$ENABLE_SECURITY" = "true" ]; then
             --output text 2>/dev/null || echo "0"
     }
 
-    # Normalize None/null/empty → 0
+    #Normalize None/null/empty → 0
     norm_int() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ]; then
@@ -463,7 +468,7 @@ if [ "$ENABLE_SECURITY" = "true" ]; then
     printf "  %-18s %s\n" "MEDIUM:"   "$MED"
     printf "  %-18s %s\n" "LOW:"      "$LOW"
 
-    # Auto-remediation status from invoke metadata
+    #Auto-remediation status from invoke metadata
     LAMBDA_STATUS=$(python3 -c "
 import json
 try:
@@ -477,7 +482,7 @@ except Exception:
     echo "========================"
     echo ""
 
-    # Surface CRITICAL findings detail from the Lambda response body
+    #Surface CRITICAL findings detail from the Lambda response body
     if [ "$CRIT" -gt 0 ] 2>/dev/null; then
         echo -e "${BOLD}${RED}⚠  $CRIT CRITICAL finding(s) require immediate attention:${NC}"
         python3 -c "
@@ -488,7 +493,7 @@ try:
     body = data.get('body', '{}')
     if isinstance(body, str):
         body = json.loads(body)
-    # Try common response shapes
+    #Try common response shapes
     findings = (body.get('criticalFindings')
              or body.get('newFindings')
              or body.get('findings')
@@ -519,9 +524,9 @@ except Exception as e:
     fi
 fi
 
-# ---------------------------------------------------------------------------
-# Deployment summary
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------
+#Deployment summary
+#---------------------------------------------------------------------------
 echo ""
 echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}${CYAN}║              CloudOps Deployment Summary                     ║${NC}"

@@ -1,3 +1,4 @@
+// This file contains test sampler logic for logs tests.
 #include <cstdio>
 
 #include "cloudops/otel/logs.hpp"
@@ -5,6 +6,7 @@
 namespace logs = cloudops::otel::logs;
 
 namespace {
+// Checks the requested work.
 int check(bool condition, const char* msg) {
   if (!condition) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
@@ -14,6 +16,7 @@ int check(bool condition, const char* msg) {
 }
 }  // namespace
 
+// Runs sampler tests.
 int run_sampler_tests() {
   int failures = 0;
 

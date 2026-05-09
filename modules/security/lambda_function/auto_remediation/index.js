@@ -1,3 +1,4 @@
+// This file contains index logic for lambda function auto remediation.
 'use strict';
 
 const {
@@ -55,6 +56,7 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), dryRun: DRY_RUN, ...data }));
 }
 
+// Gets git hub token.
 async function getGitHubToken() {
   if (cachedGitHubToken) return cachedGitHubToken;
   if (!GITHUB_TOKEN_SECRET_ARN) throw new Error('GITHUB_TOKEN_SECRET_ARN is not set');
@@ -86,6 +88,7 @@ async function findOpenFinding(checkName, resource) {
   return null;
 }
 
+// Handles mark remediated.
 async function markRemediated(item, remediationAction) {
   if (!item) return;
   await ddb.send(new UpdateCommand({
@@ -147,10 +150,12 @@ async function createGitHubIssue({ title, body, labels = [] }) {
   return res.json();
 }
 
+// Handles evidence block.
 function evidenceBlock(evidence) {
   return `\`\`\`json\n${JSON.stringify(evidence, null, 2)}\n\`\`\``;
 }
 
+// Handles finding issue body.
 function findingIssueBody(finding, extraSteps = '') {
   return [
     `## Security Finding`,
@@ -183,6 +188,7 @@ function findingIssueBody(finding, extraSteps = '') {
 // ── Issue handlers — findings that require human approval ─────────────────────
 
 const ISSUE_HANDLERS = {
+  // Handles IAM wildcard admin policy.
   async iam_wildcard_admin_policy(finding) {
     const body = findingIssueBody(finding, [
       '1. Identify all principals using this policy (`aws iam list-entities-for-policy --policy-arn <arn>`)',
@@ -198,6 +204,7 @@ const ISSUE_HANDLERS = {
     });
   },
 
+  // Handles RDS publicly accessible.
   async rds_publicly_accessible(finding) {
     const body = findingIssueBody(finding, [
       '1. Identify all clients connecting to the RDS endpoint',
@@ -213,6 +220,7 @@ const ISSUE_HANDLERS = {
     });
   },
 
+  // Handles EKS public endpoint open.
   async eks_public_endpoint_open(finding) {
     const body = findingIssueBody(finding, [
       '1. Collect all CIDR ranges that legitimately need API access (CI/CD IPs, bastion, VPN)',
@@ -227,6 +235,7 @@ const ISSUE_HANDLERS = {
     });
   },
 
+  // Handles IAM role unused 90 days.
   async iam_role_unused_90_days(finding) {
     const body = findingIssueBody(finding, [
       '1. Check if the role is still referenced in any Terraform or CloudFormation',
@@ -241,6 +250,7 @@ const ISSUE_HANDLERS = {
     });
   },
 
+  // Handles secrets manager rotation disabled.
   async secrets_manager_rotation_disabled(finding) {
     const body = findingIssueBody(finding, [
       '1. Identify what service/user this secret belongs to',
@@ -255,6 +265,7 @@ const ISSUE_HANDLERS = {
     });
   },
 
+  // Handles secrets manager not accessed 30d.
   async secrets_manager_not_accessed_30d(finding) {
     const body = findingIssueBody(finding, [
       '1. Check CloudTrail for the last GetSecretValue call: filter by `secretsmanager.amazonaws.com`',
@@ -295,6 +306,7 @@ async function remediateS3PublicAccess(finding) {
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, result: 'success' });
 }
 
+// Handles remediate s3 encryption.
 async function remediateS3Encryption(finding) {
   const bucket = finding.resource.replace('s3:::', '');
   log('info', { action: 'remediate_s3_encryption', bucket });
@@ -318,6 +330,7 @@ async function remediateS3Encryption(finding) {
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, result: 'success' });
 }
 
+// Handles remediate sgingress.
 async function remediateSGIngress(finding, port) {
   // Resource format: ec2:security-group:sg-XXXX (name)
   const sgId = finding.resource.match(/ec2:security-group:(sg-[a-z0-9]+)/)?.[1];
@@ -362,6 +375,7 @@ async function remediateSGIngress(finding, port) {
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, port, result: 'success' });
 }
 
+// Handles remediate rdsdeletion protection.
 async function remediateRDSDeletionProtection(finding) {
   // Only auto-fix in production — other environments don't block deployment anyway
   if (ENVIRONMENT !== 'prod') {
@@ -569,6 +583,7 @@ const GITHUB_ISSUE = {
   secrets_manager_not_accessed_30d: (f) => ISSUE_HANDLERS.secrets_manager_not_accessed_30d(f),
 };
 
+// Handles route finding.
 async function routeFinding(finding) {
   const { checkName, severity, findingSource } = finding;
 

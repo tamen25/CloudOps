@@ -1,10 +1,11 @@
-# FinOps Module — AWS Budgets + SNS cost alerts
+#This file defines budget settings for CloudOps.
+#FinOps Module — AWS Budgets + SNS cost alerts
 #
-# SNS topic receives budget threshold notifications and Lambda anomaly alerts.
-# A resource policy allows budgets.amazonaws.com to publish to the topic.
-# Budget notifications:
-#   80%  of monthly limit → WARNING
-#   100% of monthly limit → CRITICAL
+#SNS topic receives budget threshold notifications and Lambda anomaly alerts.
+#A resource policy allows budgets.amazonaws.com to publish to the topic.
+#Budget notifications:
+#80%  of monthly limit → WARNING
+#100% of monthly limit → CRITICAL
 
 resource "aws_sns_topic" "cost_alerts" {
   name              = "${var.project_name}-cost-alerts"
@@ -12,7 +13,7 @@ resource "aws_sns_topic" "cost_alerts" {
   tags              = var.tags
 }
 
-# Allow AWS Budgets to publish notifications to this topic
+#Allow AWS Budgets to publish notifications to this topic
 resource "aws_sns_topic_policy" "cost_alerts" {
   arn = aws_sns_topic.cost_alerts.arn
 
@@ -37,6 +38,7 @@ resource "aws_sns_topic_policy" "cost_alerts" {
   })
 }
 
+#Creates the AWS sns topic subscription resource named cost alerts email.
 resource "aws_sns_topic_subscription" "cost_alerts_email" {
   count     = var.cost_alert_email != "" ? 1 : 0
   topic_arn = aws_sns_topic.cost_alerts.arn
@@ -44,6 +46,7 @@ resource "aws_sns_topic_subscription" "cost_alerts_email" {
   endpoint  = var.cost_alert_email
 }
 
+#Creates the AWS budgets budget resource named monthly.
 resource "aws_budgets_budget" "monthly" {
   name         = "${var.project_name}-monthly-budget"
   budget_type  = "COST"
@@ -51,7 +54,7 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  # WARNING at 80% actual spend
+  #WARNING at 80% actual spend
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 80
@@ -61,7 +64,7 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_email_addresses = var.cost_alert_email != "" ? [var.cost_alert_email] : []
   }
 
-  # CRITICAL at 100% actual spend
+  #CRITICAL at 100% actual spend
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 100

@@ -1,9 +1,11 @@
+// This file contains resource attributes logic for logs src.
 #include "cloudops/otel/detail/sampler.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -12,6 +14,9 @@
 namespace cloudops::otel::logs {
 
 namespace {
+constexpr const char* default_ssm_parameters_file = "/tmp/otelExporterParams.json";
+
+// Handles trim.
 std::string trim(std::string s) {
   auto not_space = [](unsigned char c) { return !std::isspace(c); };
   s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
@@ -19,11 +24,13 @@ std::string trim(std::string s) {
   return s;
 }
 
+// Handles getenv str.
 std::string getenv_str(const char* name) {
   const char* v = std::getenv(name);
   return v == nullptr ? std::string{} : std::string{v};
 }
 
+// Finds first env.
 std::string first_env(std::initializer_list<const char*> names) {
   for (const char* n : names) {
     auto v = getenv_str(n);
@@ -32,11 +39,14 @@ std::string first_env(std::initializer_list<const char*> names) {
   return {};
 }
 
+// Converts lower.
 std::string to_lower(std::string s) {
+  // Handles transform.
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
   return s;
 }
 
+// Handles JSON string field.
 std::optional<std::string> json_string_field(const std::string& raw, const std::string& field) {
   const std::string needle = "\"" + field + "\"";
   auto pos = raw.find(needle);
@@ -77,10 +87,25 @@ std::optional<std::string> json_string_field(const std::string& raw, const std::
   }
   return std::nullopt;
 }
+
+// Handles SSM parameters from JSON.
+SsmParameters ssm_parameters_from_json(const std::string& raw) {
+  SsmParameters params;
+  LogsExporterConfig cfg;
+  auto url = json_string_field(raw, "url");
+  auto api_key = json_string_field(raw, "api_key");
+  if (url.has_value() && !url.value().empty()) cfg.url = url.value();
+  if (api_key.has_value() && !api_key.value().empty()) cfg.api_key = api_key.value();
+  if (cfg.url.has_value() || cfg.api_key.has_value()) {
+    params.otel_logs = cfg;
+  }
+  return params;
+}
 }  // namespace
 
 namespace detail {
 
+// Parses resource attributes.
 std::map<std::string, std::string> parse_resource_attributes(const std::string& raw) {
   std::map<std::string, std::string> out;
   if (raw.empty()) return out;
@@ -144,6 +169,7 @@ std::unordered_set<LogLevel> parse_level_set(const std::string& raw,
   return out.empty() ? fallback : out;
 }
 
+// Normalizes endpoint.
 std::string normalize_endpoint(const std::string& endpoint) {
   if (endpoint.empty()) return {};
   std::string e = endpoint;
@@ -155,22 +181,20 @@ std::string normalize_endpoint(const std::string& endpoint) {
   return e + suffix;
 }
 
+// Reads SSM parameters.
 SsmParameters read_ssm_parameters() {
-  SsmParameters params;
-
   std::string configured = getenv_str("OTEL_SSM_PARAMETERS");
   if (!configured.empty()) {
-    LogsExporterConfig cfg;
-    auto url = json_string_field(configured, "url");
-    auto api_key = json_string_field(configured, "api_key");
-    if (url.has_value() && !url.value().empty()) cfg.url = url.value();
-    if (api_key.has_value() && !api_key.value().empty()) cfg.api_key = api_key.value();
-    if (cfg.url.has_value() || cfg.api_key.has_value()) {
-      params.otel_logs = cfg;
-      return params;
-    }
+    auto params = ssm_parameters_from_json(configured);
+    if (!params.is_empty()) return params;
   }
 
+  auto file_params = read_ssm_parameters_file();
+  if (!file_params.is_empty()) {
+    return file_params;
+  }
+
+  SsmParameters params;
   std::string logs_url = getenv_str("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT");
   if (logs_url.empty()) {
     logs_url = normalize_endpoint(getenv_str("OTEL_EXPORTER_OTLP_ENDPOINT"));
@@ -188,6 +212,25 @@ SsmParameters read_ssm_parameters() {
   return params;
 }
 
+// Reads SSM parameters file.
+SsmParameters read_ssm_parameters_file(const std::string& file_path) {
+  auto resolved_path = file_path;
+  if (resolved_path.empty()) {
+    resolved_path = first_env({"OTEL_SSM_PARAMETERS_FILE"});
+  }
+  if (resolved_path.empty()) {
+    resolved_path = default_ssm_parameters_file;
+  }
+
+  std::ifstream input(resolved_path);
+  if (!input) return {};
+
+  std::stringstream buffer;
+  buffer << input.rdbuf();
+  return ssm_parameters_from_json(buffer.str());
+}
+
+// Handles runtime resource attributes.
 std::map<std::string, std::string> runtime_resource_attributes() {
   auto attrs = parse_resource_attributes(getenv_str("OTEL_RESOURCE_ATTRIBUTES"));
 
@@ -236,6 +279,7 @@ std::map<std::string, std::string> runtime_resource_attributes() {
   return attrs;
 }
 
+// Gets sampling rate.
 double sampling_rate() {
   auto raw = getenv_str("OTEL_LOGS_SAMPLING_RATE");
   if (raw.empty()) return 100.0;
@@ -248,6 +292,7 @@ double sampling_rate() {
 
 }  // namespace detail
 
+// Logs level to string.
 std::string log_level_to_string(LogLevel level) {
   switch (level) {
     case LogLevel::Info:  return "info";
@@ -258,6 +303,7 @@ std::string log_level_to_string(LogLevel level) {
   return "info";
 }
 
+// Logs level from string.
 LogLevel log_level_from_string(const std::string& s) {
   if (s == "error") return LogLevel::Error;
   if (s == "debug") return LogLevel::Debug;
@@ -265,6 +311,7 @@ LogLevel log_level_from_string(const std::string& s) {
   return LogLevel::Info;
 }
 
+// Checks whether empty.
 bool SsmParameters::is_empty() const {
   if (!otel_logs.has_value()) return true;
   const auto& cfg = otel_logs.value();

@@ -1,6 +1,7 @@
-# AWS Backup vault + plan + selection.
-# CRITICAL: vault_lock_enabled=true makes the vault undeletable until
-# min_retention_days expires. Use ONLY in real prod.
+#This file defines main settings for CloudOps.
+#AWS Backup vault + plan + selection.
+#CRITICAL: vault_lock_enabled=true makes the vault undeletable until
+#min_retention_days expires. Use ONLY in real prod.
 
 terraform {
   required_version = ">= 1.5"
@@ -9,11 +10,12 @@ terraform {
   }
 }
 
+#Groups local values used by this Terraform file.
 locals {
   name = var.name_prefix
 }
 
-# ── Vault ────────────────────────────────────────────────────────────────────
+#── Vault ────────────────────────────────────────────────────────────────────
 
 resource "aws_backup_vault" "main" {
   name        = "${local.name}-vault"
@@ -22,6 +24,7 @@ resource "aws_backup_vault" "main" {
   tags = merge(var.tags, { Name = "${local.name}-vault" })
 }
 
+#Creates the AWS backup vault lock configuration resource named main.
 resource "aws_backup_vault_lock_configuration" "main" {
   count = var.vault_lock_enabled ? 1 : 0
 
@@ -31,7 +34,7 @@ resource "aws_backup_vault_lock_configuration" "main" {
   max_retention_days  = var.vault_lock_max_retention_days
 }
 
-# ── Plan ─────────────────────────────────────────────────────────────────────
+#── Plan ─────────────────────────────────────────────────────────────────────
 
 resource "aws_backup_plan" "main" {
   name = "${local.name}-plan"
@@ -69,7 +72,7 @@ resource "aws_backup_plan" "main" {
   tags = var.tags
 }
 
-# ── IAM service role ─────────────────────────────────────────────────────────
+#── IAM service role ─────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "backup" {
   name = "${local.name}-backup-role"
@@ -86,12 +89,13 @@ resource "aws_iam_role" "backup" {
   tags = var.tags
 }
 
+#Creates the AWS IAM role policy attachment resource named backup.
 resource "aws_iam_role_policy_attachment" "backup" {
   role       = aws_iam_role.backup.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
 
-# ── Selection ────────────────────────────────────────────────────────────────
+#── Selection ────────────────────────────────────────────────────────────────
 
 resource "aws_backup_selection" "rds" {
   count = length(var.rds_instance_arns) > 0 ? 1 : 0
@@ -102,6 +106,7 @@ resource "aws_backup_selection" "rds" {
   resources    = var.rds_instance_arns
 }
 
+#Creates the AWS backup selection resource named ebs tagged.
 resource "aws_backup_selection" "ebs_tagged" {
   iam_role_arn = aws_iam_role.backup.arn
   name         = "${local.name}-ebs-tagged-selection"

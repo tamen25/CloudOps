@@ -1,3 +1,4 @@
+// This file contains render Kubernetes logic for order API scripts.
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -10,6 +11,7 @@ if (!inputDir || !outputDir) {
 
 const missingVariables = new Set<string>();
 
+// Renders template.
 function renderTemplate(content: string): string {
   return content.replace(/\$\{([A-Z0-9_]+)\}/g, (match, variableName: string) => {
     const value = process.env[variableName];
@@ -21,6 +23,7 @@ function renderTemplate(content: string): string {
   });
 }
 
+// Renders directory.
 async function renderDirectory(sourceDir: string, targetDir: string): Promise<void> {
   await fs.mkdir(targetDir, { recursive: true });
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });

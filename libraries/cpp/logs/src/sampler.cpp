@@ -1,3 +1,4 @@
+// This file contains sampler logic for logs src.
 #include "cloudops/otel/detail/sampler.hpp"
 
 #include <chrono>
@@ -9,8 +10,10 @@ LogSampler::LogSampler(CloudOpsLogger& logger, double rate)
       rate_(rate),
       rng_(static_cast<std::mt19937::result_type>(
           std::chrono::system_clock::now().time_since_epoch().count())),
+      // Handles dist.
       dist_(0.0, 1.0) {}
 
+// Adds the requested work.
 void LogSampler::add(LogEntry entry) {
   if (rate_ == 0.0) {
     logger_.process_log(entry);
@@ -36,6 +39,7 @@ void LogSampler::add(LogEntry entry) {
   batch_[entry.invocation_id].logs.push_back(std::move(entry));
 }
 
+// Flushes one batch.
 void LogSampler::flush_one_batch() {
   std::map<std::string, LogBatch> current;
   {
@@ -57,6 +61,7 @@ void LogSampler::flush_one_batch() {
   }
 }
 
+// Decides whether to sample.
 bool LogSampler::should_sample() {
   double threshold = rate_;
   if (threshold < 0.0)   threshold = 0.0;

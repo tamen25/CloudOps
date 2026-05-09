@@ -1,30 +1,32 @@
-# Backlog #61 — publish OTel ingestion config to SSM Parameter Store so
-# producer accounts (custom SDK clients, off-cluster shipping pipelines,
-# operator scripts) have a single, discoverable contract for endpoint URLs
-# and the auth token. This is intentionally a thin distribution layer; we
-# do not ship a custom telemetry library.
+#This file defines SSM OTel config settings for CloudOps.
+#Backlog #61 — publish OTel ingestion config to SSM Parameter Store so
+#producer accounts (custom SDK clients, off-cluster shipping pipelines,
+#operator scripts) have a single, discoverable contract for endpoint URLs
+#and the auth token. This is intentionally a thin distribution layer; we
+#do not ship a custom telemetry library.
 #
-# Path layout (env-scoped so a single account can host multiple envs):
-#   /cloudops/<env>/otel/endpoint           (String — base host, e.g. https://otel.example.com)
-#   /cloudops/<env>/otel/endpoint/metrics   (String — full /v1/metrics URL)
-#   /cloudops/<env>/otel/endpoint/traces    (String — full /v1/traces URL)
-#   /cloudops/<env>/otel/endpoint/logs      (String — full /v1/logs URL)
-#   /cloudops/<env>/otel/api-key            (SecureString — same value as the
-#                                            cloudops-otel-api-key secret;
-#                                            rotates with var.otel_token_rotation_days)
+#Path layout (env-scoped so a single account can host multiple envs):
+#/cloudops/<env>/otel/endpoint           (String — base host, e.g. https://otel.example.com)
+#/cloudops/<env>/otel/endpoint/metrics   (String — full /v1/metrics URL)
+#/cloudops/<env>/otel/endpoint/traces    (String — full /v1/traces URL)
+#/cloudops/<env>/otel/endpoint/logs      (String — full /v1/logs URL)
+#/cloudops/<env>/otel/api-key            (SecureString — same value as the
+#cloudops-otel-api-key secret;
+#rotates with var.otel_token_rotation_days)
 #
-# Producer IAM (minimum):
-#   ssm:GetParameter / ssm:GetParameters on /cloudops/<env>/otel/*
-#   kms:Decrypt on the AWS-managed alias/aws/ssm key (or a CMK if you
-#     supply `var.ssm_kms_key_id`)
+#Producer IAM (minimum):
+#ssm:GetParameter / ssm:GetParameters on /cloudops/<env>/otel/*
+#kms:Decrypt on the AWS-managed alias/aws/ssm key (or a CMK if you
+#supply `var.ssm_kms_key_id`)
 #
-# When `var.publish_otel_ssm_config = false` (default), nothing is created —
-# operators opt in once they have producers ready to consume the contract.
+#When `var.publish_otel_ssm_config = false` (default), nothing is created —
+#operators opt in once they have producers ready to consume the contract.
 
 locals {
   ssm_otel_base_path = "/${var.name_prefix}/${var.environment}/otel"
 }
 
+#Creates the AWS SSM parameter resource named OTel endpoint.
 resource "aws_ssm_parameter" "otel_endpoint" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -36,6 +38,7 @@ resource "aws_ssm_parameter" "otel_endpoint" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
+#Creates the AWS SSM parameter resource named OTel endpoint metrics.
 resource "aws_ssm_parameter" "otel_endpoint_metrics" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -47,6 +50,7 @@ resource "aws_ssm_parameter" "otel_endpoint_metrics" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
+#Creates the AWS SSM parameter resource named OTel endpoint traces.
 resource "aws_ssm_parameter" "otel_endpoint_traces" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -58,6 +62,7 @@ resource "aws_ssm_parameter" "otel_endpoint_traces" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
+#Creates the AWS SSM parameter resource named OTel endpoint logs.
 resource "aws_ssm_parameter" "otel_endpoint_logs" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -69,9 +74,9 @@ resource "aws_ssm_parameter" "otel_endpoint_logs" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
-# SecureString — encrypted with the AWS-managed KMS alias by default. Pass
-# `ssm_kms_key_id` to use a CMK. Value rotates whenever the upstream
-# random_password.otel_api_key keepers change (#38).
+#SecureString — encrypted with the AWS-managed KMS alias by default. Pass
+#`ssm_kms_key_id` to use a CMK. Value rotates whenever the upstream
+#random_password.otel_api_key keepers change (#38).
 resource "aws_ssm_parameter" "otel_api_key" {
   count = var.publish_otel_ssm_config ? 1 : 0
 

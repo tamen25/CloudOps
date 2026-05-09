@@ -1,17 +1,18 @@
-# FinOps Module — Idle Resource Detector Lambda
+#This file defines idle detector settings for CloudOps.
+#FinOps Module — Idle Resource Detector Lambda
 #
-# Runs every 6 hours and checks:
-#   1. EKS node utilization (Container Insights — cluster-aggregate CPU + memory)
-#   2. RDS utilization (CPU + connection count)
-#   3. EKS pod rightsizing (pod_cpu_utilization < 20% of limit in cloudops ns)
+#Runs every 6 hours and checks:
+#1. EKS node utilization (Container Insights — cluster-aggregate CPU + memory)
+#2. RDS utilization (CPU + connection count)
+#3. EKS pod rightsizing (pod_cpu_utilization < 20% of limit in cloudops ns)
 #
-# Stores findings in the shared cloudops-cost-data DynamoDB table under
-# service=idle-detection / date=YYYY-MM-DD and alerts via SNS when estimated
-# wasted cost exceeds $5/day.
+#Stores findings in the shared cloudops-cost-data DynamoDB table under
+#service=idle-detection / date=YYYY-MM-DD and alerts via SNS when estimated
+#wasted cost exceeds $5/day.
 #
-# Install Lambda dependencies BEFORE terraform apply via:
-#   ./scripts/build-lambdas.sh
-# Closes backlog #20.
+#Install Lambda dependencies BEFORE terraform apply via:
+#./scripts/build-lambdas.sh
+#Closes backlog #20.
 
 data "archive_file" "idle_detector" {
   type        = "zip"
@@ -19,6 +20,7 @@ data "archive_file" "idle_detector" {
   output_path = "${path.module}/lambda_function/idle_detector.zip"
 }
 
+#Creates the AWS lambda function resource named idle detector.
 resource "aws_lambda_function" "idle_detector" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -65,6 +67,7 @@ resource "aws_lambda_function" "idle_detector" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch log group resource named idle detector.
 resource "aws_cloudwatch_log_group" "idle_detector" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${aws_lambda_function.idle_detector.function_name}"
@@ -72,7 +75,7 @@ resource "aws_cloudwatch_log_group" "idle_detector" {
   tags              = var.tags
 }
 
-# ── EventBridge trigger — every 6 hours ──────────────────────────────────────
+#── EventBridge trigger — every 6 hours ──────────────────────────────────────
 
 resource "aws_cloudwatch_event_rule" "idle_detector_schedule" {
   name                = "${var.project_name}-idle-detector-schedule"
@@ -81,12 +84,14 @@ resource "aws_cloudwatch_event_rule" "idle_detector_schedule" {
   tags                = var.tags
 }
 
+#Creates the AWS cloudwatch event target resource named idle detector.
 resource "aws_cloudwatch_event_target" "idle_detector" {
   rule      = aws_cloudwatch_event_rule.idle_detector_schedule.name
   target_id = "IdleDetectorLambda"
   arn       = aws_lambda_function.idle_detector.arn
 }
 
+#Creates the AWS lambda permission resource named idle detector eventbridge.
 resource "aws_lambda_permission" "idle_detector_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
@@ -95,7 +100,7 @@ resource "aws_lambda_permission" "idle_detector_eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.idle_detector_schedule.arn
 }
 
-# ── IAM role ──────────────────────────────────────────────────────────────────
+#── IAM role ──────────────────────────────────────────────────────────────────
 
 data "aws_iam_policy_document" "idle_detector_assume" {
   statement {
@@ -108,15 +113,17 @@ data "aws_iam_policy_document" "idle_detector_assume" {
   }
 }
 
+#Creates the AWS IAM role resource named idle detector.
 resource "aws_iam_role" "idle_detector" {
   name               = "${var.project_name}-idle-detector-role"
   assume_role_policy = data.aws_iam_policy_document.idle_detector_assume.json
   tags               = var.tags
 }
 
+#Reads the AWS IAM policy document data source named idle detector.
 data "aws_iam_policy_document" "idle_detector" {
   #checkov:skip=CKV_AWS_356:Idle detector requires read access across EC2/EKS/RDS services
-  # CloudWatch Logs
+  #CloudWatch Logs
   statement {
     sid    = "CloudWatchLogs"
     effect = "Allow"
@@ -128,7 +135,7 @@ data "aws_iam_policy_document" "idle_detector" {
     resources = ["arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}-idle-detector:*"]
   }
 
-  # CloudWatch metrics (read + write)
+  #CloudWatch metrics (read + write)
   statement {
     sid    = "CloudWatchMetrics"
     effect = "Allow"
@@ -141,7 +148,7 @@ data "aws_iam_policy_document" "idle_detector" {
     resources = ["*"]
   }
 
-  # RDS — describe instance for class + cost lookup
+  #RDS — describe instance for class + cost lookup
   statement {
     sid       = "RDSDescribe"
     effect    = "Allow"
@@ -149,7 +156,7 @@ data "aws_iam_policy_document" "idle_detector" {
     resources = ["*"]
   }
 
-  # EKS — describe cluster + nodegroups for node count + instance type
+  #EKS — describe cluster + nodegroups for node count + instance type
   statement {
     sid    = "EKSDescribe"
     effect = "Allow"
@@ -161,7 +168,7 @@ data "aws_iam_policy_document" "idle_detector" {
     resources = ["*"]
   }
 
-  # DynamoDB — cost history table
+  #DynamoDB — cost history table
   statement {
     sid    = "DynamoDB"
     effect = "Allow"
@@ -176,7 +183,7 @@ data "aws_iam_policy_document" "idle_detector" {
     ]
   }
 
-  # SNS — cost alerts topic
+  #SNS — cost alerts topic
   statement {
     sid       = "SNSPublish"
     effect    = "Allow"
@@ -185,6 +192,7 @@ data "aws_iam_policy_document" "idle_detector" {
   }
 }
 
+#Creates the AWS IAM role policy resource named idle detector.
 resource "aws_iam_role_policy" "idle_detector" {
   name   = "${var.project_name}-idle-detector-policy"
   role   = aws_iam_role.idle_detector.id

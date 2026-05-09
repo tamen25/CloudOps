@@ -1,5 +1,6 @@
+/* This migration prepares 001 initial database changes for CloudOps. */
 -- Initial schema for order-api.
--- Applied by src/migrations.js on startup via the `migrations` tracking table.
+-- Applied by src/migrations.ts on startup via the `schema_migrations` tracking table.
 
 CREATE TABLE IF NOT EXISTS orders (
   id          SERIAL         PRIMARY KEY,
@@ -10,4 +11,5 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
+/* Creates the index named orders created at idx. */
 CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders (created_at DESC);

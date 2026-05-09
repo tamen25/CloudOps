@@ -1,7 +1,8 @@
-# CloudOps Networking Module - Variables
-# Input variables for VPC and networking configuration
+#This file defines variables settings for CloudOps.
+#CloudOps Networking Module - Variables
+#Input variables for VPC and networking configuration
 
-# General Configuration
+#General Configuration
 
 variable "environment" {
   description = "Environment name (e.g., dev, staging, prod)"
@@ -13,6 +14,7 @@ variable "environment" {
   }
 }
 
+#Defines the name prefix input value.
 variable "name_prefix" {
   description = "Prefix for resource names (e.g., cloudops-dev, myapp-prod)"
   type        = string
@@ -23,14 +25,14 @@ variable "name_prefix" {
   }
 }
 
-# EKS Configuration
+#EKS Configuration
 
 variable "eks_cluster_name" {
   description = "EKS cluster name used for subnet tags (kubernetes.io/cluster/<name>=shared). Must match the cluster name in the compute module."
   type        = string
 }
 
-# Availability Zone Configuration
+#Availability Zone Configuration
 
 variable "az_count" {
   description = "Number of Availability Zones to use (will be capped at 3 for cost optimization)"
@@ -43,7 +45,7 @@ variable "az_count" {
   }
 }
 
-# VPC and Subnet Configuration
+#VPC and Subnet Configuration
 
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
@@ -56,6 +58,7 @@ variable "vpc_cidr" {
   }
 }
 
+#Defines the public subnet cidrs input value.
 variable "public_subnet_cidrs" {
   description = "List of CIDR blocks for public subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -69,6 +72,7 @@ variable "public_subnet_cidrs" {
   }
 }
 
+#Defines the private subnet cidrs input value.
 variable "private_subnet_cidrs" {
   description = "List of CIDR blocks for private subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -82,6 +86,7 @@ variable "private_subnet_cidrs" {
   }
 }
 
+#Defines the database subnet cidrs input value.
 variable "db_subnet_cidrs" {
   description = "List of CIDR blocks for database subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -95,7 +100,7 @@ variable "db_subnet_cidrs" {
   }
 }
 
-# NAT Gateway Configuration
+#NAT Gateway Configuration
 
 variable "enable_nat_gateway" {
   description = <<-EOT
@@ -107,7 +112,7 @@ variable "enable_nat_gateway" {
   default     = true
 }
 
-# VPC Flow Logs Configuration
+#VPC Flow Logs Configuration
 
 variable "enable_flow_logs" {
   description = "Enable VPC Flow Logs for network monitoring and troubleshooting"
@@ -115,6 +120,7 @@ variable "enable_flow_logs" {
   default     = false
 }
 
+#Defines the flow logs destination input value.
 variable "flow_logs_destination" {
   description = "Where to send VPC flow logs. \"cloudwatch\" = quick + queryable, more expensive at scale. \"s3\" = cheaper, parquet + Athena partitioning."
   type        = string
@@ -126,18 +132,21 @@ variable "flow_logs_destination" {
   }
 }
 
+#Defines the AWS account ID input value.
 variable "aws_account_id" {
   description = "AWS account ID — used for globally unique flow-logs S3 bucket name."
   type        = string
   default     = ""
 }
 
+#Defines the buckets force destroy input value.
 variable "buckets_force_destroy" {
   description = "Allow `terraform destroy` to nuke flow-logs S3 bucket even if it contains objects. Set true in test envs only."
   type        = bool
   default     = true
 }
 
+#Defines the flow logs retention days input value.
 variable "flow_logs_retention_days" {
   description = "Number of days to retain VPC Flow Logs in CloudWatch"
   type        = number
@@ -149,7 +158,7 @@ variable "flow_logs_retention_days" {
   }
 }
 
-# Security Group Configuration
+#Security Group Configuration
 
 variable "allowed_cidr_blocks" {
   description = "List of CIDR blocks allowed to access ALB (e.g., ['0.0.0.0/0'] for public access)"
@@ -164,18 +173,21 @@ variable "allowed_cidr_blocks" {
   }
 }
 
+#Defines the enable HTTPS input value.
 variable "enable_https" {
   description = "Enable HTTPS (port 443) on the ALB security group"
   type        = bool
   default     = true
 }
 
+#Defines the enable HTTP input value.
 variable "enable_http" {
   description = "Enable HTTP (port 80) on the ALB security group"
   type        = bool
   default     = true
 }
 
+#Defines the custom alb ports input value.
 variable "custom_alb_ports" {
   description = "Additional custom ports to open on the ALB security group"
   type        = list(number)
@@ -189,6 +201,7 @@ variable "custom_alb_ports" {
   }
 }
 
+#Defines the RDS port input value.
 variable "rds_port" {
   description = "Port for RDS database (default 5432 for PostgreSQL)"
   type        = number
@@ -200,7 +213,7 @@ variable "rds_port" {
   }
 }
 
-# Tagging
+#Tagging
 
 variable "tags" {
   description = "Additional tags to apply to all resources"

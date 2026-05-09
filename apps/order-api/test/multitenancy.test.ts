@@ -1,3 +1,4 @@
+// This file contains multitenancy test logic for order API test.
 'use strict';
 
 const test = require('node:test');
@@ -5,10 +6,12 @@ const assert = require('node:assert/strict');
 
 const { createApp } = require('../src/app');
 
+// Handles silent logger.
 function silentLogger() {
   return { info() {}, warn() {}, error() {} };
 }
 
+// Builds pool.
 function makePool({ store }) {
   return {
     query: async (sql, params) => {
@@ -23,11 +26,15 @@ function makePool({ store }) {
         const rows = store.filter((r) => r.tenant_id === tenant_id);
         return { rows, rowCount: rows.length };
       }
+      if (/^INSERT INTO audit_events/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
       throw new Error(`unexpected SQL: ${sql}`);
     },
   };
 }
 
+// Handles start app.
 async function startApp({ store }) {
   const pool = makePool({ store });
   const { app } = createApp({
@@ -128,6 +135,7 @@ test('rate limit is per-tenant (closes backlog #45)', async () => {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
+    // Handles post.
     const post = async (tenant) => fetch(`${baseUrl}/order`, {
       method: 'POST',
       headers: {

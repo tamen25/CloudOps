@@ -1,11 +1,13 @@
-# Retrieves the AWS account ID and ARN for the current AWS account
+#This file defines locals settings for CloudOps.
+#Retrieves the AWS account ID and ARN for the current AWS account
 data "aws_caller_identity" "current" {}
 
-# References the existing S3 bucket used for Terraform state storage
+#References the existing S3 bucket used for Terraform state storage
 data "aws_s3_bucket" "terraform_state" {
   bucket = local.bucket_name
 }
 
+#Groups local values used by this Terraform file.
 locals {
   common_tags = {
     Project     = var.project_name

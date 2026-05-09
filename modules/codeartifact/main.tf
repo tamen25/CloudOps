@@ -1,7 +1,9 @@
+#This file defines main settings for CloudOps.
 locals {
   repositories = toset(var.repository_names)
 }
 
+#Creates the AWS codeartifact domain resource named this.
 resource "aws_codeartifact_domain" "this" {
   domain         = var.domain_name
   encryption_key = var.kms_key_arn != "" ? var.kms_key_arn : null
@@ -12,6 +14,7 @@ resource "aws_codeartifact_domain" "this" {
   })
 }
 
+#Creates the AWS codeartifact repository resource named this.
 resource "aws_codeartifact_repository" "this" {
   for_each = local.repositories
 

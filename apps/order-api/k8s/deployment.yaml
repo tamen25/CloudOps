@@ -1,3 +1,4 @@
+#This manifest defines deployment for CloudOps.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,9 +15,9 @@ spec:
         app: order-api
     spec:
       serviceAccountName: "${ORDER_API_SERVICE_ACCOUNT}"
-      # Closes backlog #36 — Gatekeeper K8sNoRootContainers requires
-      # runAsNonRoot=true or runAsUser>0. UID 1001 matches the `nodejs` user
-      # created in the Dockerfile.
+      #Closes backlog #36 — Gatekeeper K8sNoRootContainers requires
+      #runAsNonRoot=true or runAsUser>0. UID 1001 matches the `nodejs` user
+      #created in the Dockerfile.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -27,14 +28,14 @@ spec:
       volumes:
         - name: rds-ca
           emptyDir: {}
-        # Backlog #56 — readOnlyRootFilesystem requires a writable tmp dir
-        # for any libraries that write scratch files (pino transports,
-        # tempfiles in the AWS SDK).
+        #Backlog #56 — readOnlyRootFilesystem requires a writable tmp dir
+        #for any libraries that write scratch files (pino transports,
+        #tempfiles in the AWS SDK).
         - name: tmp
           emptyDir: {}
-      # Backlog #57 — fetch the RDS global CA bundle once per pod start. The
-      # bundle is published at a stable URL by AWS; no IAM required. The
-      # main container reads `/etc/rds/global-bundle.pem` via DB_SSL_CA_BUNDLE.
+      #Backlog #57 — fetch the RDS global CA bundle once per pod start. The
+      #bundle is published at a stable URL by AWS; no IAM required. The
+      #main container reads `/etc/rds/global-bundle.pem` via DB_SSL_CA_BUNDLE.
       initContainers:
         - name: fetch-rds-ca
           image: curlimages/curl:8.10.1
@@ -58,8 +59,8 @@ spec:
           image: "${ORDER_API_IMAGE}"
           securityContext:
             allowPrivilegeEscalation: false
-            # Backlog #56 — read-only root filesystem; writable scratch via
-            # the `tmp` emptyDir mount.
+            #Backlog #56 — read-only root filesystem; writable scratch via
+            #the `tmp` emptyDir mount.
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
@@ -92,9 +93,9 @@ spec:
               value: "${DB_NAME}"
             - name: DB_SECRET_ARN
               value: "${DB_SECRET_ARN}"
-            # Backlog #57 — TLS to RDS. Bundle is fetched by the
-            # `fetch-rds-ca` initContainer; pg.Pool is configured with
-            # rejectUnauthorized=true.
+            #Backlog #57 — TLS to RDS. Bundle is fetched by the
+            #`fetch-rds-ca` initContainer; pg.Pool is configured with
+            #rejectUnauthorized=true.
             - name: DB_SSL_CA_BUNDLE
               value: "/etc/rds/global-bundle.pem"
             - name: DB_SSL_DISABLED
@@ -128,13 +129,13 @@ spec:
               value: "order-api"
             - name: METRICS_PORT
               value: "9090"
-            # Optional: set to a Secrets Manager ARN to enforce X-Api-Key on
-            # /order and /orders. Leave empty to run unauthenticated.
+            #Optional: set to a Secrets Manager ARN to enforce X-Api-Key on
+            #/order and /orders. Leave empty to run unauthenticated.
             - name: API_KEY_SECRET_ARN
               value: "${API_KEY_SECRET_ARN}"
-            # OIDC / JWKS bearer-token auth (closes backlog #7). Set all
-            # three to enable JWT validation in addition to (or instead of)
-            # the X-Api-Key path. Leave empty to disable.
+            #OIDC / JWKS bearer-token auth (closes backlog #7). Set all
+            #three to enable JWT validation in addition to (or instead of)
+            #the X-Api-Key path. Leave empty to disable.
             - name: OIDC_ISSUER
               value: "${OIDC_ISSUER}"
             - name: OIDC_AUDIENCE

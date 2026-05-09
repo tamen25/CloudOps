@@ -1,14 +1,15 @@
-# Required GitHub Actions secrets:
-#   AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
-#   AWS_REGION                   — AWS region (e.g. us-east-1)
-#   INFRACOST_API_KEY            — From https://www.infracost.io/docs/#2-get-api-key
-#   PLURALITH_API_KEY            — From https://app.pluralith.com (free account)
-#   TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
-#                                  — Full contents of each environment's terraform.tfvars
-#   TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
+#This manifest defines infra for CloudOps.
+#Required GitHub Actions secrets:
+#AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_REGION                   — AWS region (e.g. us-east-1)
+#INFRACOST_API_KEY            — From https://www.infracost.io/docs/#2-get-api-key
+#PLURALITH_API_KEY            — From https://app.pluralith.com (free account)
+#TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
+#— Full contents of each environment's terraform.tfvars
+#TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
 #
-# GitHub Environment required:
-#   production  — Settings → Environments → production; add required reviewers as the approval gate
+#GitHub Environment required:
+#production  — Settings → Environments → production; add required reviewers as the approval gate
 
 name: Infra Pipeline
 
@@ -58,9 +59,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: Static quality — formatting, validation, lint, tfsec, lock file check
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 1: Static quality — formatting, validation, lint, tfsec, lock file check
+  #─────────────────────────────────────────────────────────────────────────────
   quality:
     runs-on: ubuntu-latest
     permissions:
@@ -81,7 +82,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Build Lambda dependencies
-        # Closes backlog #20 — Terraform no longer runs npm install during apply.
+        #Closes backlog #20 — Terraform no longer runs npm install during apply.
         run: bash scripts/build-lambdas.sh
 
       - name: Check formatting
@@ -112,26 +113,26 @@ jobs:
         run: tflint --init
 
       - name: tflint
-        # --config is required when running --recursive so the root .tflint.hcl
-        # (e.g. the disable for terraform_required_providers) is honored inside
-        # every child module. Closes backlog #31 — without it, child modules
-        # re-enable the recommended preset and emit ~30 noisy warnings.
+        #--config is required when running --recursive so the root .tflint.hcl
+        #(e.g. the disable for terraform_required_providers) is honored inside
+        #every child module. Closes backlog #31 — without it, child modules
+        #re-enable the recommended preset and emit ~30 noisy warnings.
         run: tflint --recursive --config="$(pwd)/.tflint.hcl" --minimum-failure-severity=error
 
       - name: actionlint — workflow lint
-        # Closes backlog #23 — catches typos / wrong action input names /
-        # shellcheck violations in run: blocks before they ship.
+        #Closes backlog #23 — catches typos / wrong action input names /
+        #shellcheck violations in run: blocks before they ship.
         run: |
           curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
             | bash -s -- 1.7.4
           ./actionlint -color
 
-      # Closes backlog #39 — pinned version (was unpinned `@v1.0.0` is fine
-      # but documenting the digest pin policy here) and made tfsec a hard gate
-      # for HIGH/CRITICAL findings. Documented suppressions live in `.tfsec/`
-      # config (`exclude` keys per check); no findings should slip through
-      # silently anymore. `soft_fail: false` is the default; making it
-      # explicit so a future contributor can't flip it back without reviewing.
+      #Closes backlog #39 — pinned version (was unpinned `@v1.0.0` is fine
+      #but documenting the digest pin policy here) and made tfsec a hard gate
+      #for HIGH/CRITICAL findings. Documented suppressions live in `.tfsec/`
+      #config (`exclude` keys per check); no findings should slip through
+      #silently anymore. `soft_fail: false` is the default; making it
+      #explicit so a future contributor can't flip it back without reviewing.
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
@@ -147,10 +148,10 @@ jobs:
           path: results.sarif
           retention-days: 30
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Cost estimation — PR events only
-  # Compares base branch vs PR branch; fails if monthly cost increases > $50.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 2: Cost estimation — PR events only
+  #Compares base branch vs PR branch; fails if monthly cost increases > $50.
+  #─────────────────────────────────────────────────────────────────────────────
   cost:
     runs-on: ubuntu-latest
     needs: quality
@@ -203,9 +204,9 @@ jobs:
           path: /tmp/infracost-diff.json
           behavior: update
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 3: Terraform plan — all triggers
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 3: Terraform plan — all triggers
+  #─────────────────────────────────────────────────────────────────────────────
   plan:
     runs-on: ubuntu-latest
     needs: quality
@@ -213,9 +214,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # On a fresh deploy the EKS cluster doesn't exist yet, so data sources
-    # for EKS endpoint/auth fail during plan. The apply stages deploy in the
-    # correct order and succeed regardless; plan is informational only.
+    #On a fresh deploy the EKS cluster doesn't exist yet, so data sources
+    #for EKS endpoint/auth fail during plan. The apply stages deploy in the
+    #correct order and succeed regardless; plan is informational only.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -226,8 +227,8 @@ jobs:
           node-version: '22'
 
       - name: Build Lambda dependencies
-        # Closes backlog #20 — Lambda zips need node_modules in place before
-        # `terraform plan` so `data.archive_file` builds the correct artifact.
+        #Closes backlog #20 — Lambda zips need node_modules in place before
+        #`terraform plan` so `data.archive_file` builds the correct artifact.
         run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
@@ -255,7 +256,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          # Plan foundation -> cluster -> platform against separate state keys.
+          #Plan foundation -> cluster -> platform against separate state keys.
           bash scripts/terraform-stacks.sh plan -lock=false -out=tfplan -no-color \
             2>&1 | tee plan-output.txt
 
@@ -266,10 +267,10 @@ jobs:
           path: stacks/**/tfplan
           retention-days: 5
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 4: PR Terraform plan — no AWS credentials or production secrets.
-  # Posts an informational plan comment from terraform.tfvars.example.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 4: PR Terraform plan — no AWS credentials or production secrets.
+  #Posts an informational plan comment from terraform.tfvars.example.
+  #─────────────────────────────────────────────────────────────────────────────
   plan-pr:
     runs-on: ubuntu-latest
     needs: quality
@@ -360,7 +361,7 @@ jobs:
               });
             }
 
-  # Job 5: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov.
+  #Job 5: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov.
   security-scan:
     runs-on: ubuntu-latest
     needs: quality
@@ -371,11 +372,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Closes backlog #39 — Trivy was previously pinned to the mutable
-      # `@master` ref. Now pinned to a tagged release; HIGH/CRITICAL findings
-      # are a hard gate (continue-on-error removed). To suppress an
-      # intentional finding, add a `# trivy:ignore:<id>` comment in the TF
-      # source and document the reason in PROJECT_EXPLAINER or a runbook.
+      #Closes backlog #39 — Trivy was previously pinned to the mutable
+      #`@master` ref. Now pinned to a tagged release; HIGH/CRITICAL findings
+      #are a hard gate (continue-on-error removed). To suppress an
+      #intentional finding, add a `# trivy:ignore:<id>` comment in the TF
+      #source and document the reason in PROJECT_EXPLAINER or a runbook.
       - name: Run Trivy on Terraform config
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -395,22 +396,22 @@ jobs:
           retention-days: 30
 
       - name: Install Checkov
-        # Pin checkov so a midnight upstream release can't change scan results.
+        #Pin checkov so a midnight upstream release can't change scan results.
         run: pip install checkov==3.2.298 --quiet
 
       - name: Run Checkov (HIGH/CRITICAL hard gate)
-        # Closes backlog #39 — was previously `|| true` (informational).
-        # Now fails the job on HIGH/CRITICAL. Use a `.checkov.yml` skip-check
-        # entry to document any intentional suppressions.
+        #Closes backlog #39 — was previously `|| true` (informational).
+        #Now fails the job on HIGH/CRITICAL. Use a `.checkov.yml` skip-check
+        #entry to document any intentional suppressions.
         run: |
           checkov -d . --framework terraform --output github_failed_only --check HIGH,CRITICAL
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 5: Manifest validation — kubeconform schema validation
-  # Validates all Kubernetes manifests in apps/order-api/k8s/ against the
-  # upstream JSON schemas. CRD kinds (ServiceMonitor) are skipped, not errored.
-  # Runs in parallel with plan.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 5: Manifest validation — kubeconform schema validation
+  #Validates all Kubernetes manifests in apps/order-api/k8s/ against the
+  #upstream JSON schemas. CRD kinds (ServiceMonitor) are skipped, not errored.
+  #Runs in parallel with plan.
+  #─────────────────────────────────────────────────────────────────────────────
   manifest-validation:
     runs-on: ubuntu-latest
     needs: quality
@@ -430,14 +431,14 @@ jobs:
         run: |
           kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 6: Architecture diagram — Pluralith
-  # Generates an infrastructure diagram from the Terraform plan.
-  # On PRs: posts a comment with a change summary table and diagram link.
-  # On push to main: commits architecture/current-architecture.png to the repo.
-  # Runs in parallel with plan. continue-on-error so a missing PLURALITH_API_KEY
-  # or CLI failure does not block the approve gate.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 6: Architecture diagram — Pluralith
+  #Generates an infrastructure diagram from the Terraform plan.
+  #On PRs: posts a comment with a change summary table and diagram link.
+  #On push to main: commits architecture/current-architecture.png to the repo.
+  #Runs in parallel with plan. continue-on-error so a missing PLURALITH_API_KEY
+  #or CLI failure does not block the approve gate.
+  #─────────────────────────────────────────────────────────────────────────────
   diagram:
     runs-on: ubuntu-latest
     needs: quality
@@ -515,12 +516,12 @@ jobs:
         with:
           terraform-path: ${{ github.workspace }}
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 7: Manual approval gate — push to main only
-  # Gate also waits for security-scan and manifest-validation to pass.
-  # Configure the "production" GitHub Environment with required reviewers in
-  # repo Settings → Environments → production.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 7: Manual approval gate — push to main only
+  #Gate also waits for security-scan and manifest-validation to pass.
+  #Configure the "production" GitHub Environment with required reviewers in
+  #repo Settings → Environments → production.
+  #─────────────────────────────────────────────────────────────────────────────
   approve:
     runs-on: ubuntu-latest
     needs: [plan, security-scan, manifest-validation]
@@ -530,11 +531,11 @@ jobs:
       - name: Awaiting approval
         run: echo "Waiting for ${{ env.TARGET_ENVIRONMENT }} approval via GitHub environment protection"
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 8: Terraform apply — staged to match scripts/deploy.sh order
-  # Runs fresh targeted applies (saved plan files are incompatible with -target).
-  # After final apply, key outputs are posted to the step summary.
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 8: Terraform apply — staged to match scripts/deploy.sh order
+  #Runs fresh targeted applies (saved plan files are incompatible with -target).
+  #After final apply, key outputs are posted to the step summary.
+  #─────────────────────────────────────────────────────────────────────────────
   apply:
     runs-on: ubuntu-latest
     needs: approve
@@ -549,8 +550,8 @@ jobs:
           node-version: '22'
 
       - name: Build Lambda dependencies
-        # Closes backlog #20 — Lambda zips need node_modules in place before
-        # any `terraform apply` so the zips are deterministic + complete.
+        #Closes backlog #20 — Lambda zips need node_modules in place before
+        #any `terraform apply` so the zips are deterministic + complete.
         run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
@@ -576,14 +577,14 @@ jobs:
       - name: Apply layered Terraform stacks
         run: bash scripts/terraform-stacks.sh apply -auto-approve
 
-      # Legacy root recovery/import path. Kept gated off so normal applies use
-      # layered states only; enable by editing LEGACY_ROOT_APPLY for a one-off
-      # migration recovery run.
+      #Legacy root recovery/import path. Kept gated off so normal applies use
+      #layered states only; enable by editing LEGACY_ROOT_APPLY for a one-off
+      #migration recovery run.
       - name: Release stale state lock
         if: env.LEGACY_ROOT_APPLY == '1'
-        # Terraform 1.11 S3 native locking stores the lock as <key>.tflock.
-        # A cancelled plan or apply leaves this file behind and blocks the next run.
-        # Safe to delete here because apply steps are sequential within this job.
+        #Terraform 1.11 S3 native locking stores the lock as <key>.tflock.
+        #A cancelled plan or apply leaves this file behind and blocks the next run.
+        #Safe to delete here because apply steps are sequential within this job.
         run: |
           BOOTSTRAP_BUCKET=$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
           if [ -z "$BOOTSTRAP_BUCKET" ]; then
@@ -600,10 +601,10 @@ jobs:
             echo "No stale lock present"
           fi
 
-      # Import OIDC provider and GitHub Actions IAM role if they were pre-created
-      # by scripts/oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
-      # a live EKS cluster) stays unconfigured during import of IAM resources.
-      # Checks state first — skips import if resource is already tracked.
+      #Import OIDC provider and GitHub Actions IAM role if they were pre-created
+      #by scripts/oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
+      #a live EKS cluster) stays unconfigured during import of IAM resources.
+      #Checks state first — skips import if resource is already tracked.
       - name: Import pre-existing OIDC bootstrap resources
         if: env.LEGACY_ROOT_APPLY == '1'
         run: |
@@ -671,15 +672,15 @@ jobs:
             echo "DB subnet group does not exist in AWS — skipping import"
           fi
 
-      # Staged applies match scripts/deploy.sh ordering.
-      # Each stage runs a fresh plan+apply for the targeted modules.
-      # terraform apply -target cannot be combined with a saved plan file.
+      #Staged applies match scripts/deploy.sh ordering.
+      #Each stage runs a fresh plan+apply for the targeted modules.
+      #terraform apply -target cannot be combined with a saved plan file.
       - name: Apply bootstrap + networking + dns
         if: env.LEGACY_ROOT_APPLY == '1'
-        # Disable ingress/observability vars so the EKS data source (count guard)
-        # stays at 0 — EKS cluster doesn't exist yet at this stage.
-        # module.dns is included here so the Route53 zone exists before module.ingress
-        # references module.dns[0].zone_id in the ingress apply step.
+        #Disable ingress/observability vars so the EKS data source (count guard)
+        #stays at 0 — EKS cluster doesn't exist yet at this stage.
+        #module.dns is included here so the Route53 zone exists before module.ingress
+        #references module.dns[0].zone_id in the ingress apply step.
         run: |
           terraform apply \
             -target=module.bootstrap -target=module.networking -target=module.dns \
@@ -688,7 +689,7 @@ jobs:
 
       - name: Apply EKS
         if: env.LEGACY_ROOT_APPLY == '1'
-        # Same guard — EKS cluster is being created here, not yet queryable.
+        #Same guard — EKS cluster is being created here, not yet queryable.
         run: |
           terraform apply \
             -target=module.eks \
@@ -730,16 +731,16 @@ jobs:
         if: env.LEGACY_ROOT_APPLY == '1'
         run: terraform apply -auto-approve
 
-      # NOTE: order-api is deployed by .github/workflows/app.yml — that
-      # workflow owns build, sign, scan, render, apply, rollout, integration
-      # tests, and rollback. infra.yml only provisions platform prerequisites
-      # (cluster, IRSA, ACM, DNS, observability, security, database, OTel).
-      # Closes backlog #18.
+      #NOTE: order-api is deployed by .github/workflows/app.yml — that
+      #workflow owns build, sign, scan, render, apply, rollout, integration
+      #tests, and rollback. infra.yml only provisions platform prerequisites
+      #(cluster, IRSA, ACM, DNS, observability, security, database, OTel).
+      #Closes backlog #18.
 
       - name: Capture and summarize outputs
         if: always()
         run: |
-          # Capture outputs — suppress error if no outputs exist yet
+          #Capture outputs — suppress error if no outputs exist yet
           terraform -chdir=stacks/foundation output -json > foundation-outputs.json 2>/dev/null || echo '{}' > foundation-outputs.json
           terraform -chdir=stacks/cluster output -json > cluster-outputs.json 2>/dev/null || echo '{}' > cluster-outputs.json
           terraform -chdir=stacks/platform output -json > platform-outputs.json 2>/dev/null || echo '{}' > platform-outputs.json
@@ -752,7 +753,7 @@ jobs:
           SCANNER_ARN=$(jq -r   '.compliance_scanner_function_arn.value // "not deployed"' platform-outputs.json)
           SNS_ARN=$(jq -r       '.security_alerts_topic_arn.value       // "not deployed"' platform-outputs.json)
 
-          # Sensitive outputs — never print values, only indicate whether they were set
+          #Sensitive outputs — never print values, only indicate whether they were set
           GRAFANA_PASS_SET=$(jq -r 'if .grafana_admin_password.value and .grafana_admin_password.value != "" then "✓ set" else "not deployed" end' platform-outputs.json)
           OTEL_KEY_SET=$(jq -r     'if .otel_api_key.value and .otel_api_key.value != "" then "✓ set" else "not deployed" end' platform-outputs.json)
 
@@ -785,13 +786,13 @@ jobs:
           | OTel API Key | ${OTEL_KEY_SET} — \`terraform -chdir=stacks/platform output -raw otel_api_key\` |
           EOF
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 9: Compliance scan — runs after apply on push to main.
-  # Invokes the compliance scanner Lambda, waits for results, then queries
-  # DynamoDB for CRITICAL findings detected in the last 30 minutes.
-  # Fails the pipeline if any new CRITICAL findings were introduced.
-  # Skipped gracefully when security module is not deployed (Lambda not found).
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 9: Compliance scan — runs after apply on push to main.
+  #Invokes the compliance scanner Lambda, waits for results, then queries
+  #DynamoDB for CRITICAL findings detected in the last 30 minutes.
+  #Fails the pipeline if any new CRITICAL findings were introduced.
+  #Skipped gracefully when security module is not deployed (Lambda not found).
+  #─────────────────────────────────────────────────────────────────────────────
   compliance-scan:
     runs-on: ubuntu-latest
     needs: apply
@@ -856,9 +857,9 @@ jobs:
 
       - name: Check for new CRITICAL findings
         run: |
-          # Pull the Grafana hostname out of the tfvars secret so the dashboard
-          # link in the step summary renders as a real URL. Falls back to a
-          # placeholder if domain_name is not set.
+          #Pull the Grafana hostname out of the tfvars secret so the dashboard
+          #link in the step summary renders as a real URL. Falls back to a
+          #placeholder if domain_name is not set.
           SELECTED_TF_VARS="${TF_VARS}"
           if [ "${TARGET_ENVIRONMENT}" = "dev" ] && [ -n "${TF_VARS_DEV}" ]; then SELECTED_TF_VARS="${TF_VARS_DEV}"; fi
           if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ -n "${TF_VARS_STAGING}" ]; then SELECTED_TF_VARS="${TF_VARS_STAGING}"; fi
@@ -870,8 +871,8 @@ jobs:
             | head -1)
           DOMAIN="${DOMAIN:-example.com}"
 
-          # Findings detected in the last 30 minutes are considered potentially
-          # introduced by or coincident with this Terraform apply.
+          #Findings detected in the last 30 minutes are considered potentially
+          #introduced by or coincident with this Terraform apply.
           SCAN_START=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
             || date -u -v-30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
             || python3 -c "from datetime import datetime, timedelta; print((datetime.utcnow()-timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
@@ -893,7 +894,7 @@ jobs:
           print(d.get('Count', len(d.get('Items', []))))
           " 2>/dev/null || echo "0")
 
-          # Build findings list for summary (max 10 items)
+          #Build findings list for summary (max 10 items)
           FINDINGS_TABLE=$(echo "$RESULT" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
@@ -947,9 +948,9 @@ jobs:
             echo "Compliance scan passed — no new CRITICAL findings."
           fi
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 10: Notify — always runs after apply
-  # ─────────────────────────────────────────────────────────────────────────────
+  #─────────────────────────────────────────────────────────────────────────────
+  #Job 10: Notify — always runs after apply
+  #─────────────────────────────────────────────────────────────────────────────
   notify:
     runs-on: ubuntu-latest
     needs: [apply, compliance-scan]

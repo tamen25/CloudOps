@@ -1,3 +1,4 @@
+// This file contains log sampler logic for logs src.
 namespace CloudOps.Otel.Logs;
 
 internal sealed class LogSampler
@@ -7,11 +8,13 @@ internal sealed class LogSampler
     private readonly CloudOpsLogger logger;
     private readonly object syncRoot = new();
 
+    // Logs sampler.
     public LogSampler(CloudOpsLogger logger)
     {
         this.logger = logger;
     }
 
+    // Adds log.
     public void AddLog(LogEntry logEntry)
     {
         lock (syncRoot)
@@ -39,6 +42,7 @@ internal sealed class LogSampler
         }
     }
 
+    // Flushes one batch.
     public void FlushOneBatch()
     {
         lock (syncRoot)
@@ -59,6 +63,7 @@ internal sealed class LogSampler
         }
     }
 
+    // Decides whether to sample.
     private bool ShouldSample()
     {
         var threshold = Math.Clamp(probabilisticSamplingRate, 0, 100) / 100;

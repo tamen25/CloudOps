@@ -1,3 +1,4 @@
+// This file contains auth config logic for order API src.
 // Fail-closed auth check. Only local unit/integration test runners boot with
 // no auth; every deployed environment (dev, staging, prod) must present
 // either an API key or an OIDC JWT verifier.
@@ -16,6 +17,7 @@ export interface AssertAuthConfiguredArgs {
   logger: AuthLogger;
 }
 
+// Checks auth configured.
 export function assertAuthConfigured({
   apiKey,
   jwtVerifier = null,

@@ -1,3 +1,4 @@
+// This file contains runtime resource attributes tests logic for logs tests.
 using Xunit;
 
 namespace CloudOps.Otel.Logs.Tests;
@@ -5,6 +6,7 @@ namespace CloudOps.Otel.Logs.Tests;
 public sealed class RuntimeResourceAttributesTests
 {
     [Fact]
+    // Handles service name environment overrides resource attributes.
     public void ServiceNameEnvironmentOverridesResourceAttributes()
     {
         using var env = new EnvironmentScope(new Dictionary<string, string?>
@@ -20,6 +22,7 @@ public sealed class RuntimeResourceAttributesTests
     }
 
     [Fact]
+    // Handles lambda attributes are detected.
     public void LambdaAttributesAreDetected()
     {
         using var env = new EnvironmentScope(new Dictionary<string, string?>

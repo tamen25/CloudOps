@@ -1,3 +1,4 @@
+// This file contains auth JWT test logic for order API test.
 'use strict';
 
 const test = require('node:test');
@@ -30,6 +31,7 @@ async function startJwks(jwk) {
   };
 }
 
+// Handles new signer.
 async function newSigner({ issuer, audience, kid = 'test-key' }) {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = await exportJWK(publicKey);
@@ -53,6 +55,7 @@ async function newSigner({ issuer, audience, kid = 'test-key' }) {
   };
 }
 
+// Handles start app.
 async function startApp({ issuer, audience, jwksUrl, requiredScopes = [], apiKey = '' }) {
   const pool = { query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }) };
   const jwtVerifier = createJwtVerifier({
@@ -80,6 +83,7 @@ async function startApp({ issuer, audience, jwksUrl, requiredScopes = [], apiKey
   });
 }
 
+// Handles stop server.
 function stopServer(server) {
   return new Promise((resolve, reject) => {
     server.close((err) => {

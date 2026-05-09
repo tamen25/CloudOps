@@ -1,3 +1,4 @@
+<!-- This document explains library publishing for CloudOps. -->
 # Library Publishing
 
 CloudOps client libraries are published to AWS CodeArtifact.

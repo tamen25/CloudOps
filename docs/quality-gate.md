@@ -1,3 +1,4 @@
+<!-- This document explains quality gate for CloudOps. -->
 # Static Quality Gate
 
 Backlog #70 source of truth. Every PR runs the same set of checks below
@@ -22,6 +23,7 @@ for this repo.
 | order-api tests | `npm test` (node:test) + `npm run test:coverage` gate | `app.yml` test | test failure or coverage below threshold (`docs/coverage-gates.md`) |
 | Library tests | per-language test runner + coverage gate | `libraries.yml` per language | test failure or coverage below threshold |
 | Contract check | `npm run contract-check` (env-var drift app↔manifest) | `app.yml` test | missing env var in `deployment.yaml` |
+| API contract | `npm run openapi:lint` (Spectral against `apps/order-api/openapi.yaml`) | `app.yml` test | OpenAPI syntax error or `error`-severity lint rule |
 
 ## PR vs. push behavior
 

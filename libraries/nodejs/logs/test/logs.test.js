@@ -1,4 +1,7 @@
+// This file contains logs test logic for logs test.
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -6,6 +9,7 @@ const originalEnv = { ...process.env };
 const instrumentationPath = path.resolve(__dirname, "../dist/logsInstrumentation.js");
 const utilsPath = path.resolve(__dirname, "../dist/utils.js");
 
+// Resets env.
 function resetEnv(overrides = {}) {
   for (const key of Object.keys(process.env)) {
     delete process.env[key];
@@ -31,6 +35,7 @@ function resetEnv(overrides = {}) {
   Object.assign(process.env, overrides);
 }
 
+// Handles fresh require.
 function freshRequire(modulePath) {
   delete require.cache[require.resolve(modulePath)];
   return require(modulePath);
@@ -66,6 +71,54 @@ test("readSSMParameters prefers configured JSON and falls back to OTEL env vars"
   assert.deepEqual(freshRequire(utilsPath).readSSMParameters(), {
     otel: { logs: { url: "https://collector.example.com/v1/logs", api_key: "direct-secret" } },
   });
+});
+
+test("readSSMParameters supports the original otelExporterParams file path", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudops-otel-logs-"));
+  const paramsFile = path.join(tempDir, "otelExporterParams.json");
+
+  try {
+    fs.writeFileSync(paramsFile, JSON.stringify({
+      otel: { logs: { url: "https://file.example.com/v1/logs", api_key: "file-secret" } },
+    }));
+
+    resetEnv({
+      OTEL_BACKEND_EXPORTERS: "console",
+      OTEL_SSM_PARAMETERS_FILE: paramsFile,
+      OTEL_EXPORTER_OTLP_ENDPOINT: "https://fallback.example.com",
+      OTEL_API_KEY: "fallback-secret",
+    });
+
+    const { readSSMParameters } = freshRequire(utilsPath);
+    assert.deepEqual(readSSMParameters(), {
+      otel: { logs: { url: "https://file.example.com/v1/logs", api_key: "file-secret" } },
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("readSSMParameters falls back to OTEL env vars when the file is invalid", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudops-otel-logs-"));
+  const paramsFile = path.join(tempDir, "otelExporterParams.json");
+
+  try {
+    fs.writeFileSync(paramsFile, "{not-json");
+
+    resetEnv({
+      OTEL_BACKEND_EXPORTERS: "console",
+      OTEL_SSM_PARAMETERS_FILE: paramsFile,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: "https://fallback.example.com/v1/logs",
+      OTEL_API_KEY: "fallback-secret",
+    });
+
+    const { readSSMParameters } = freshRequire(utilsPath);
+    assert.deepEqual(readSSMParameters(), {
+      otel: { logs: { url: "https://fallback.example.com/v1/logs", api_key: "fallback-secret" } },
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("configuration parsers trim values and reject unknown log levels", () => {

@@ -1,3 +1,4 @@
+// This file contains log sampler logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import java.util.Iterator;
@@ -51,6 +52,7 @@ final class LogSampler {
     }
   }
 
+  // Decides whether to sample.
   private boolean shouldSample() {
     double threshold = Math.max(0, Math.min(100, probabilisticSamplingRate)) / 100.0;
     return Math.random() <= threshold;

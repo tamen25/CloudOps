@@ -1,4 +1,5 @@
-# GuardDuty — single-account detector with optional protection plans.
+#This file defines guardduty settings for CloudOps.
+#GuardDuty — single-account detector with optional protection plans.
 
 resource "aws_guardduty_detector" "main" {
   count  = var.enable_guardduty ? 1 : 0
@@ -29,7 +30,7 @@ resource "aws_guardduty_detector" "main" {
   tags = merge(var.tags, { Name = "${var.name_prefix}-guardduty" })
 }
 
-# EKS Runtime Monitoring is a feature toggle (separate API).
+#EKS Runtime Monitoring is a feature toggle (separate API).
 resource "aws_guardduty_detector_feature" "eks_runtime" {
   count = var.enable_guardduty && var.guardduty_eks_protection ? 1 : 0
 

@@ -1,11 +1,15 @@
+// This file contains test resource attributes logic for logs tests.
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 
 #include "cloudops/otel/detail/sampler.hpp"
 
 namespace logs = cloudops::otel::logs;
 
 namespace {
+// Checks the requested work.
 int check(bool condition, const char* msg) {
   if (!condition) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
@@ -15,6 +19,7 @@ int check(bool condition, const char* msg) {
 }
 }  // namespace
 
+// Runs resource attribute tests.
 int run_resource_attribute_tests() {
   int failures = 0;
 
@@ -59,11 +64,55 @@ int run_resource_attribute_tests() {
   failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->url.value_or("") == "https://collector.example.com/v1/logs", "ssm url");
   failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->api_key.value_or("") == "secret", "ssm api key");
 
+  auto params_file = std::filesystem::temp_directory_path() / "cloudops-otel-logs-otelExporterParams.json";
+  {
+    std::ofstream out(params_file);
+    out << "{\"otel\":{\"logs\":{\"url\":\"https://file.example.com/v1/logs\",\"api_key\":\"file-secret\"}}}";
+  }
 #ifdef _WIN32
   _putenv_s("OTEL_SSM_PARAMETERS", "");
+  _putenv_s("OTEL_SSM_PARAMETERS_FILE", params_file.string().c_str());
+  _putenv_s("OTEL_EXPORTER_OTLP_ENDPOINT", "https://fallback.example.com");
+  _putenv_s("OTEL_API_KEY", "fallback-secret");
 #else
   unsetenv("OTEL_SSM_PARAMETERS");
+  setenv("OTEL_SSM_PARAMETERS_FILE", params_file.string().c_str(), 1);
+  setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://fallback.example.com", 1);
+  setenv("OTEL_API_KEY", "fallback-secret", 1);
 #endif
+  ssm = logs::detail::read_ssm_parameters();
+  failures += check(!ssm.is_empty(), "ssm parameters file parsed");
+  failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->url.value_or("") == "https://file.example.com/v1/logs", "ssm file url");
+  failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->api_key.value_or("") == "file-secret", "ssm file api key");
+
+  {
+    std::ofstream out(params_file);
+    out << "{not-json";
+  }
+#ifdef _WIN32
+  _putenv_s("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "https://fallback.example.com/v1/logs");
+  _putenv_s("OTEL_API_KEY", "fallback-secret");
+#else
+  setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "https://fallback.example.com/v1/logs", 1);
+  setenv("OTEL_API_KEY", "fallback-secret", 1);
+#endif
+  ssm = logs::detail::read_ssm_parameters();
+  failures += check(!ssm.is_empty(), "ssm invalid file fallback parsed");
+  failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->url.value_or("") == "https://fallback.example.com/v1/logs", "ssm invalid file fallback url");
+  failures += check(ssm.otel_logs.has_value() && ssm.otel_logs->api_key.value_or("") == "fallback-secret", "ssm invalid file fallback api key");
+
+#ifdef _WIN32
+  _putenv_s("OTEL_SSM_PARAMETERS_FILE", "");
+  _putenv_s("OTEL_EXPORTER_OTLP_ENDPOINT", "");
+  _putenv_s("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "");
+  _putenv_s("OTEL_API_KEY", "");
+#else
+  unsetenv("OTEL_SSM_PARAMETERS_FILE");
+  unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT");
+  unsetenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT");
+  unsetenv("OTEL_API_KEY");
+#endif
+  std::filesystem::remove(params_file);
 
   // Lambda path.
 #ifdef _WIN32

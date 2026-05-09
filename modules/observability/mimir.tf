@@ -1,18 +1,20 @@
-# Mimir — long-term Prometheus storage backend (default for prod).
-# Deployed only when var.metrics_long_term_storage = "mimir".
+#This file defines mimir settings for CloudOps.
+#Mimir — long-term Prometheus storage backend (default for prod).
+#Deployed only when var.metrics_long_term_storage = "mimir".
 #
-# Architecture:
-#   Prometheus -- remote_write --> Mimir distributor
-#   Mimir ingester -- TSDB blocks --> S3 (mimir bucket)
-#   Mimir querier <-- query path -- Grafana datasource
+#Architecture:
+#Prometheus -- remote_write --> Mimir distributor
+#Mimir ingester -- TSDB blocks --> S3 (mimir bucket)
+#Mimir querier <-- query path -- Grafana datasource
 #
-# Same hardening flags as Loki/Tempo buckets (versioning, KMS CMK, lifecycle,
-# replication, force_destroy).
+#Same hardening flags as Loki/Tempo buckets (versioning, KMS CMK, lifecycle,
+#replication, force_destroy).
 
 locals {
   mimir_bucket_name = "${var.name_prefix}-mimir-blocks-${var.aws_account_id}"
 }
 
+#Creates the AWS s3 bucket resource named mimir.
 resource "aws_s3_bucket" "mimir" {
   count = var.metrics_long_term_storage == "mimir" ? 1 : 0
 
@@ -22,6 +24,7 @@ resource "aws_s3_bucket" "mimir" {
   tags = merge(local.common_tags, { Name = local.mimir_bucket_name, Domain = "observability-mimir" })
 }
 
+#Creates the AWS s3 bucket server side encryption configuration resource named mimir.
 resource "aws_s3_bucket_server_side_encryption_configuration" "mimir" {
   count  = var.metrics_long_term_storage == "mimir" ? 1 : 0
   bucket = aws_s3_bucket.mimir[0].id
@@ -35,6 +38,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "mimir" {
   }
 }
 
+#Creates the AWS s3 bucket public access block resource named mimir.
 resource "aws_s3_bucket_public_access_block" "mimir" {
   count                   = var.metrics_long_term_storage == "mimir" ? 1 : 0
   bucket                  = aws_s3_bucket.mimir[0].id
@@ -44,6 +48,7 @@ resource "aws_s3_bucket_public_access_block" "mimir" {
   restrict_public_buckets = true
 }
 
+#Creates the AWS s3 bucket versioning resource named mimir.
 resource "aws_s3_bucket_versioning" "mimir" {
   count  = var.metrics_long_term_storage == "mimir" ? 1 : 0
   bucket = aws_s3_bucket.mimir[0].id
@@ -53,6 +58,7 @@ resource "aws_s3_bucket_versioning" "mimir" {
   }
 }
 
+#Creates the AWS s3 bucket lifecycle configuration resource named mimir.
 resource "aws_s3_bucket_lifecycle_configuration" "mimir" {
   count  = var.metrics_long_term_storage == "mimir" ? 1 : 0
   bucket = aws_s3_bucket.mimir[0].id
@@ -104,6 +110,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "mimir" {
   }
 }
 
+#Creates the AWS s3 bucket replication configuration resource named mimir.
 resource "aws_s3_bucket_replication_configuration" "mimir" {
   count = var.metrics_long_term_storage == "mimir" && var.buckets_replication_destination_arn != "" ? 1 : 0
 
@@ -127,7 +134,7 @@ resource "aws_s3_bucket_replication_configuration" "mimir" {
   depends_on = [aws_s3_bucket_versioning.mimir]
 }
 
-# ── IRSA ─────────────────────────────────────────────────────────────────────
+#── IRSA ─────────────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "mimir" {
   count = var.metrics_long_term_storage == "mimir" ? 1 : 0
@@ -152,6 +159,7 @@ resource "aws_iam_role" "mimir" {
   tags = merge(local.common_tags, { Name = "${local.name}-mimir-irsa" })
 }
 
+#Creates the AWS IAM role policy resource named mimir.
 resource "aws_iam_role_policy" "mimir" {
   count = var.metrics_long_term_storage == "mimir" ? 1 : 0
 
@@ -184,7 +192,7 @@ resource "aws_iam_role_policy" "mimir" {
   })
 }
 
-# ── Helm release ─────────────────────────────────────────────────────────────
+#── Helm release ─────────────────────────────────────────────────────────────
 
 resource "helm_release" "mimir" {
   count = var.metrics_long_term_storage == "mimir" ? 1 : 0
@@ -233,7 +241,7 @@ resource "helm_release" "mimir" {
           )
         }
 
-        # Multi-tenant disabled — single-tenant via X-Scope-OrgID = "anonymous"
+        #Multi-tenant disabled — single-tenant via X-Scope-OrgID = "anonymous"
         multitenancy_enabled = false
 
         limits = {
@@ -243,13 +251,13 @@ resource "helm_release" "mimir" {
       }
     }
 
-    # Disable bundled MinIO — using AWS S3.
+    #Disable bundled MinIO — using AWS S3.
     minio = {
       enabled = false
     }
 
-    # Microservices mode: distributor / ingester / querier / store-gateway / compactor.
-    # Defaults are conservative; bump replicas via tfvars overrides for prod.
+    #Microservices mode: distributor / ingester / querier / store-gateway / compactor.
+    #Defaults are conservative; bump replicas via tfvars overrides for prod.
     distributor = {
       replicas = 1
     }

@@ -1,3 +1,4 @@
+<!-- This document explains complete architecture for CloudOps. -->
 # CloudOps Complete Architecture Diagram
 
 Create a complete AWS architecture across 2 availability zones (us-east-1a, us-east-1b).

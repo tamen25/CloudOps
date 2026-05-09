@@ -1,18 +1,22 @@
+#This file defines outputs settings for CloudOps.
 output "lambda_arn" {
   description = "ARN of the cost ingestion Lambda function"
   value       = aws_lambda_function.cost_ingestion.arn
 }
 
+#Exposes the dynamodb table name output value.
 output "dynamodb_table_name" {
   description = "Name of the DynamoDB cost history table"
   value       = aws_dynamodb_table.cost_data.name
 }
 
+#Exposes the sns topic arn output value.
 output "sns_topic_arn" {
   description = "ARN of the cost alerts SNS topic"
   value       = aws_sns_topic.cost_alerts.arn
 }
 
+#Exposes the budget name output value.
 output "budget_name" {
   description = "Name of the AWS Budget"
   value       = aws_budgets_budget.monthly.name

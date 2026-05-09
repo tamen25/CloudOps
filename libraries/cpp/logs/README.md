@@ -1,3 +1,4 @@
+<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-logs (C++)
 
 C++ logging helper for CloudOps services. Mirrors the Node.js / Python /
@@ -23,6 +24,7 @@ Same env-var contract as the other libraries:
 - `OTEL_LOG_LEVEL` — JSON array or CSV of `info`, `error`, `debug`, `warn`.
 - `OTEL_LOGS_SAMPLING_RATE` — percentage `0`–`100`. Errors always export.
 - `OTEL_SSM_PARAMETERS` — JSON `{"otel":{"logs":{"url":"...","api_key":"..."}}}`.
+- `/tmp/otelExporterParams.json` — original PE parameter file fallback. Set `OTEL_SSM_PARAMETERS_FILE` to override the path.
 - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_ENDPOINT` — fallback.
 - `OTEL_API_KEY` / `OTEL_EXPORTER_OTLP_HEADERS` — bearer-auth fallback.
 

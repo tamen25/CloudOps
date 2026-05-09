@@ -1,4 +1,5 @@
-# Creates a KMS key for encrypting Terraform state files in S3
+#This file defines KMS settings for CloudOps.
+#Creates a KMS key for encrypting Terraform state files in S3
 resource "aws_kms_key" "terraform_state" {
   count = var.create_kms ? 1 : 0
 
@@ -14,7 +15,7 @@ resource "aws_kms_key" "terraform_state" {
   )
 }
 
-# Creates a human-readable alias for the Terraform state KMS key
+#Creates a human-readable alias for the Terraform state KMS key
 resource "aws_kms_alias" "terraform_state" {
   count = var.create_kms ? 1 : 0
 

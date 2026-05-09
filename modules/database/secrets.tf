@@ -1,4 +1,5 @@
-# Create a Secrets Manager secret to securely store database connection credentials
+#This file defines secrets settings for CloudOps.
+#Create a Secrets Manager secret to securely store database connection credentials
 resource "aws_secretsmanager_secret" "db_credentials" {
   #checkov:skip=CKV_AWS_149:CMK use is gated by var.kms_key_id — caller decides per environment
   name                    = "${var.name_prefix}-db-credentials"
@@ -14,10 +15,10 @@ resource "aws_secretsmanager_secret" "db_credentials" {
   )
 }
 
-# Automatic rotation. Two paths:
-#   - rotation_lambda_arn set explicitly: use it (caller-managed Lambda).
-#   - rotation_lambda_arn empty + rotation_lambda_auto_deploy = true: this
-#     module deploys the SAR app and feeds the resulting ARN here.
+#Automatic rotation. Two paths:
+#- rotation_lambda_arn set explicitly: use it (caller-managed Lambda).
+#- rotation_lambda_arn empty + rotation_lambda_auto_deploy = true: this
+#module deploys the SAR app and feeds the resulting ARN here.
 resource "aws_secretsmanager_secret_rotation" "db_credentials" {
   count = var.rotation_enabled && local.resolved_rotation_lambda_arn != "" ? 1 : 0
 
@@ -31,7 +32,7 @@ resource "aws_secretsmanager_secret_rotation" "db_credentials" {
   depends_on = [aws_lambda_permission.rotation_secretsmanager]
 }
 
-# Store the database connection details and credentials as a JSON-encoded secret version
+#Store the database connection details and credentials as a JSON-encoded secret version
 resource "aws_secretsmanager_secret_version" "db_credentials" {
   secret_id = aws_secretsmanager_secret.db_credentials.id
 

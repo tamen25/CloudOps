@@ -1,3 +1,4 @@
+// This file contains migrate logic for order API src.
 // Standalone migration entrypoint — invoked as a Kubernetes Job before each
 // deploy so application pods never race each other on schema changes.
 // Closes backlog #21.
@@ -17,6 +18,7 @@ const DB_SSL_DISABLED = process.env.DB_SSL_DISABLED === 'true';
 
 const logger = pino({ level: 'info' });
 
+// Runs the main workflow for the requested work.
 async function main(): Promise<void> {
   if (!DB_SECRET_ARN) {
     throw new Error('DB_SECRET_ARN is required');
@@ -26,7 +28,7 @@ async function main(): Promise<void> {
   const response = await smClient.send(new GetSecretValueCommand({ SecretId: DB_SECRET_ARN }));
   const secret = JSON.parse(response.SecretString || '{}');
 
-  // Backlog #57 — match server.js TLS config so migrations also talk TLS.
+  // Backlog #57 — match server.ts TLS config so migrations also talk TLS.
   let ssl: PoolConfig['ssl'] = false;
   if (!DB_SSL_DISABLED && NODE_ENV !== 'test' && NODE_ENV !== 'local') {
     const sslOptions: { rejectUnauthorized: boolean; ca?: string } = { rejectUnauthorized: true };

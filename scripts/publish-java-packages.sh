@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#This script runs publish java packages automation for CloudOps.
 set -euo pipefail
 
 MODE="publish"
@@ -24,11 +25,13 @@ if [[ "${#MANIFESTS[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+#Reads pom field.
 read_pom_field() {
   local field="$1"
   python -c "import xml.etree.ElementTree as ET; field='$field'; r=ET.parse('pom.xml').getroot(); matches=[e for e in r.iter() if e.tag.rsplit('}',1)[-1] == field]; e=matches[0] if matches else None; print(e.text.strip() if e is not None and e.text else '')"
 }
 
+#Ensures codeartifact config.
 ensure_codeartifact_config() {
   if [[ -z "${CODEARTIFACT_DOMAIN:-}" ]]; then
     echo "CODEARTIFACT_DOMAIN is required for Java publish" >&2
@@ -76,6 +79,7 @@ ensure_codeartifact_config() {
 EOF
 }
 
+#Handles version exists.
 version_exists() {
   local group_id="$1"
   local artifact_id="$2"

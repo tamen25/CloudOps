@@ -1,4 +1,5 @@
-# IRSA role for the AWS Load Balancer Controller
+#This file defines IAM settings for CloudOps.
+#IRSA role for the AWS Load Balancer Controller
 resource "aws_iam_role" "lb_controller" {
   name = "${local.name}-lb-controller"
 
@@ -20,7 +21,7 @@ resource "aws_iam_role" "lb_controller" {
   tags = local.common_tags
 }
 
-# Full official AWS Load Balancer Controller IAM policy (v2.8)
+#Full official AWS Load Balancer Controller IAM policy (v2.8)
 resource "aws_iam_policy" "lb_controller" {
   #checkov:skip=CKV_AWS_355:ALB controller requires broad EC2/ELB permissions by AWS design
   #checkov:skip=CKV_AWS_290:ALB controller requires write access to manage load balancers
@@ -227,6 +228,7 @@ resource "aws_iam_policy" "lb_controller" {
   tags = local.common_tags
 }
 
+#Creates the AWS IAM role policy attachment resource named lb controller.
 resource "aws_iam_role_policy_attachment" "lb_controller" {
   role       = aws_iam_role.lb_controller.name
   policy_arn = aws_iam_policy.lb_controller.arn

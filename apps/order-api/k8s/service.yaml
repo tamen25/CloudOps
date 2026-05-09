@@ -1,3 +1,4 @@
+#This manifest defines service for CloudOps.
 apiVersion: v1
 kind: Service
 metadata:

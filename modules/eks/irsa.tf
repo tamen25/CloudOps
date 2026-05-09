@@ -1,4 +1,5 @@
-# IRSA role for the EBS CSI driver controller (kube-system/ebs-csi-controller-sa)
+#This file defines irsa settings for CloudOps.
+#IRSA role for the EBS CSI driver controller (kube-system/ebs-csi-controller-sa)
 resource "aws_iam_role" "ebs_csi_driver" {
   name = "${local.name}-ebs-csi-driver"
 
@@ -20,13 +21,14 @@ resource "aws_iam_role" "ebs_csi_driver" {
   tags = local.common_tags
 }
 
+#Creates the AWS IAM role policy attachment resource named ebs csi driver.
 resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
   role       = aws_iam_role.ebs_csi_driver.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
-# IRSA role for order-api pods — annotate the service account with:
-#   eks.amazonaws.com/role-arn: <order_api_irsa_role_arn>
+#IRSA role for order-api pods — annotate the service account with:
+#eks.amazonaws.com/role-arn: <order_api_irsa_role_arn>
 resource "aws_iam_role" "order_api" {
   name = "${local.name}-order-api-irsa"
 
@@ -51,10 +53,10 @@ resource "aws_iam_role" "order_api" {
   })
 }
 
-# Grants order-api access to Secrets Manager (DB credentials) and CloudWatch metrics.
-# Resource list MUST be supplied via var.order_api_secret_arns in non-dev envs
-# (closes backlog #37). Empty list in dev keeps the "*" bootstrap convenience;
-# in staging/prod the precondition below fails plan with a clear message.
+#Grants order-api access to Secrets Manager (DB credentials) and CloudWatch metrics.
+#Resource list MUST be supplied via var.order_api_secret_arns in non-dev envs
+#(closes backlog #37). Empty list in dev keeps the "*" bootstrap convenience;
+#in staging/prod the precondition below fails plan with a clear message.
 resource "aws_iam_role_policy" "order_api" {
   #checkov:skip=CKV_AWS_288:Order API IRSA role requires SecretsManager access for DB credentials
   #checkov:skip=CKV_AWS_355:Order API IRSA role requires Secrets Manager access by resource pattern

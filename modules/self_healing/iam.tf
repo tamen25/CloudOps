@@ -1,8 +1,9 @@
-# Self-Healing Controller — IAM
+#This file defines IAM settings for CloudOps.
+#Self-Healing Controller — IAM
 #
-# Lambda execution role with least-privilege access to the AWS services
-# needed for each healing action (CloudWatch, EKS, Auto Scaling, RDS,
-# Secrets Manager, SNS, CloudWatch Logs).
+#Lambda execution role with least-privilege access to the AWS services
+#needed for each healing action (CloudWatch, EKS, Auto Scaling, RDS,
+#Secrets Manager, SNS, CloudWatch Logs).
 
 data "aws_iam_policy_document" "self_healing_assume" {
   statement {
@@ -15,16 +16,18 @@ data "aws_iam_policy_document" "self_healing_assume" {
   }
 }
 
+#Creates the AWS IAM role resource named self healing.
 resource "aws_iam_role" "self_healing" {
   name               = "${var.project_name}-self-healing-controller"
   assume_role_policy = data.aws_iam_policy_document.self_healing_assume.json
   tags               = var.tags
 }
 
+#Reads the AWS IAM policy document data source named self healing.
 data "aws_iam_policy_document" "self_healing" {
   #checkov:skip=CKV_AWS_356:Self-healing controller requires broad EKS/EC2/Lambda access for remediation
   #checkov:skip=CKV_AWS_111:Self-healing controller requires write access for scaling and rollback operations
-  # ── CloudWatch Logs ──────────────────────────────────────────────────────────
+  #── CloudWatch Logs ──────────────────────────────────────────────────────────
   statement {
     sid    = "CloudWatchLogs"
     effect = "Allow"
@@ -36,7 +39,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = ["arn:aws:logs:${var.region}:${var.aws_account_id}:log-group:/aws/lambda/${var.project_name}-self-healing-controller:*"]
   }
 
-  # ── CloudWatch Metrics — read alarms + publish healing metrics ───────────────
+  #── CloudWatch Metrics — read alarms + publish healing metrics ───────────────
   statement {
     sid    = "CloudWatchMetrics"
     effect = "Allow"
@@ -50,7 +53,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = ["*"]
   }
 
-  # ── CloudWatch Events — create one-time scale-in rules ────────────────────────
+  #── CloudWatch Events — create one-time scale-in rules ────────────────────────
   statement {
     sid    = "CloudWatchEvents"
     effect = "Allow"
@@ -64,7 +67,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = ["arn:aws:events:${var.region}:${var.aws_account_id}:rule/${var.project_name}-scale-in-*"]
   }
 
-  # ── EKS — describe cluster for endpoint/CA and manage node groups ─────────────
+  #── EKS — describe cluster for endpoint/CA and manage node groups ─────────────
   statement {
     sid    = "EKS"
     effect = "Allow"
@@ -80,7 +83,7 @@ data "aws_iam_policy_document" "self_healing" {
     ] : ["*"]
   }
 
-  # ── Auto Scaling — scale node group ASG for node replacement ─────────────────
+  #── Auto Scaling — scale node group ASG for node replacement ─────────────────
   statement {
     sid    = "AutoScaling"
     effect = "Allow"
@@ -94,7 +97,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = ["*"]
   }
 
-  # ── RDS — describe instances and reboot ──────────────────────────────────────
+  #── RDS — describe instances and reboot ──────────────────────────────────────
   statement {
     sid    = "RDS"
     effect = "Allow"
@@ -109,7 +112,7 @@ data "aws_iam_policy_document" "self_healing" {
     ] : ["*"]
   }
 
-  # ── Secrets Manager — GitHub token + any other secrets ──────────────────────
+  #── Secrets Manager — GitHub token + any other secrets ──────────────────────
   statement {
     sid    = "SecretsManager"
     effect = "Allow"
@@ -119,7 +122,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = compact([var.github_token_secret_arn])
   }
 
-  # ── SNS — publish healing summaries and alerts ────────────────────────────────
+  #── SNS — publish healing summaries and alerts ────────────────────────────────
   statement {
     sid    = "SNS"
     effect = "Allow"
@@ -129,7 +132,7 @@ data "aws_iam_policy_document" "self_healing" {
     resources = [aws_sns_topic.healing_triggers.arn]
   }
 
-  # ── Lambda — allow scale-in scheduler to add this Lambda as an EventBridge target
+  #── Lambda — allow scale-in scheduler to add this Lambda as an EventBridge target
   statement {
     sid    = "LambdaAddPermission"
     effect = "Allow"
@@ -143,6 +146,7 @@ data "aws_iam_policy_document" "self_healing" {
   }
 }
 
+#Creates the AWS IAM policy resource named self healing.
 resource "aws_iam_policy" "self_healing" {
   name        = "${var.project_name}-self-healing-controller"
   description = "Self-healing controller Lambda execution policy"
@@ -150,12 +154,13 @@ resource "aws_iam_policy" "self_healing" {
   tags        = var.tags
 }
 
+#Creates the AWS IAM role policy attachment resource named self healing.
 resource "aws_iam_role_policy_attachment" "self_healing" {
   role       = aws_iam_role.self_healing.name
   policy_arn = aws_iam_policy.self_healing.arn
 }
 
-# ── Scale-in scheduler Lambda role ───────────────────────────────────────────
+#── Scale-in scheduler Lambda role ───────────────────────────────────────────
 
 data "aws_iam_policy_document" "scale_in_assume" {
   statement {
@@ -168,12 +173,14 @@ data "aws_iam_policy_document" "scale_in_assume" {
   }
 }
 
+#Creates the AWS IAM role resource named scale in scheduler.
 resource "aws_iam_role" "scale_in_scheduler" {
   name               = "${var.project_name}-scale-in-scheduler"
   assume_role_policy = data.aws_iam_policy_document.scale_in_assume.json
   tags               = var.tags
 }
 
+#Reads the AWS IAM policy document data source named scale in scheduler.
 data "aws_iam_policy_document" "scale_in_scheduler" {
   statement {
     sid    = "CloudWatchLogs"
@@ -205,12 +212,14 @@ data "aws_iam_policy_document" "scale_in_scheduler" {
   }
 }
 
+#Creates the AWS IAM policy resource named scale in scheduler.
 resource "aws_iam_policy" "scale_in_scheduler" {
   name   = "${var.project_name}-scale-in-scheduler"
   policy = data.aws_iam_policy_document.scale_in_scheduler.json
   tags   = var.tags
 }
 
+#Creates the AWS IAM role policy attachment resource named scale in scheduler.
 resource "aws_iam_role_policy_attachment" "scale_in_scheduler" {
   role       = aws_iam_role.scale_in_scheduler.name
   policy_arn = aws_iam_policy.scale_in_scheduler.arn

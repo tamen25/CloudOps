@@ -1,3 +1,4 @@
+// This file contains log entry logic for OTel logs.
 package com.cloudops.otel.logs;
 
 final class LogEntry {

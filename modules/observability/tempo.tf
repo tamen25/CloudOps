@@ -1,4 +1,5 @@
-# Tempo — distributed tracing backend with S3 storage and IRSA
+#This file defines tempo settings for CloudOps.
+#Tempo — distributed tracing backend with S3 storage and IRSA
 resource "helm_release" "tempo" {
   name       = "tempo"
   repository = "https://grafana.github.io/helm-charts"
@@ -39,7 +40,7 @@ resource "helm_release" "tempo" {
         )
       }
 
-      # OTLP receivers for both gRPC and HTTP
+      #OTLP receivers for both gRPC and HTTP
       receivers = {
         otlp = {
           protocols = {
@@ -53,13 +54,13 @@ resource "helm_release" "tempo" {
         }
       }
 
-      # Expose tempo query API on 3100 (used by Grafana datasource)
+      #Expose tempo query API on 3100 (used by Grafana datasource)
       server = {
         http_listen_port = 3100
       }
 
-      # Metrics generator derives RED metrics (rate/errors/duration) from spans
-      # and remote-writes them to Prometheus. Useful for service maps in Grafana.
+      #Metrics generator derives RED metrics (rate/errors/duration) from spans
+      #and remote-writes them to Prometheus. Useful for service maps in Grafana.
       metricsGenerator = var.tempo_metrics_generator_enabled ? {
         enabled        = true
         remoteWriteUrl = "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/write"

@@ -1,3 +1,4 @@
+// This file contains index logic for self healing lambda function.
 'use strict';
 
 const {
@@ -57,6 +58,7 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), dryRun: DRY_RUN, ...data }));
 }
 
+// Gets git hub token.
 async function getGitHubToken() {
   if (cachedGitHubToken) return cachedGitHubToken;
   if (!GITHUB_TOKEN_SECRET_ARN) throw new Error('GITHUB_TOKEN_SECRET_ARN is not set');
@@ -65,6 +67,7 @@ async function getGitHubToken() {
   return cachedGitHubToken;
 }
 
+// Gets cluster info.
 async function getClusterInfo() {
   if (cachedClusterInfo) return cachedClusterInfo;
   const r = await eks.send(new DescribeClusterCommand({ name: EKS_CLUSTER_NAME }));
@@ -75,6 +78,7 @@ async function getClusterInfo() {
   return cachedClusterInfo;
 }
 
+// Gets eksbearer token.
 async function getEKSBearerToken() {
   const credentials = await fromNodeProviderChain()();
   const signer = new SignatureV4({ credentials, region: REGION, service: 'sts', sha256: Sha256 });
@@ -92,6 +96,7 @@ async function getEKSBearerToken() {
   return 'k8s-aws-v1.' + Buffer.from(`https://${hostname}${path}?${qs}`).toString('base64url');
 }
 
+// Handles Kubernetes get.
 async function k8sGet(path) {
   const { endpoint } = await getClusterInfo();
   const token = await getEKSBearerToken();
@@ -105,6 +110,7 @@ async function k8sGet(path) {
   return res.json();
 }
 
+// Handles Kubernetes patch.
 async function k8sPatch(path, body, contentType = 'application/strategic-merge-patch+json') {
   const { endpoint } = await getClusterInfo();
   const token = await getEKSBearerToken();
@@ -124,6 +130,7 @@ async function k8sPatch(path, body, contentType = 'application/strategic-merge-p
   return res.json();
 }
 
+// Handles publish healing metric.
 async function publishHealingMetric(action) {
   await cw.send(new PutMetricDataCommand({
     Namespace:  'CloudOps/SelfHealing',
@@ -140,6 +147,7 @@ async function publishHealingMetric(action) {
   }));
 }
 
+// Handles publish summary.
 async function publishSummary(payload) {
   if (!SNS_TOPIC_ARN) return;
   await sns.send(new PublishCommand({
@@ -153,6 +161,7 @@ async function publishSummary(payload) {
   }));
 }
 
+// Creates git hub issue.
 async function createGitHubIssue({ title, body, labels = [] }) {
   const token = await getGitHubToken();
   log('info', { action: 'github_issue_create', title, labels });
@@ -231,6 +240,7 @@ async function findPreviousReplicaSet(deployment) {
   return byRevision[0]?.rs || null;
 }
 
+// Handles rollout undo.
 async function rolloutUndo(deployment) {
   const prevRs = await findPreviousReplicaSet(deployment);
   if (!prevRs) {
@@ -490,6 +500,7 @@ async function handlePodCountLow(alarmName) {
   await publishSummary(payload);
 }
 
+// Handles trigger node group scale out.
 async function triggerNodeGroupScaleOut() {
   try {
     const ngs = await eks.send(new ListNodegroupsCommand({ clusterName: EKS_CLUSTER_NAME }));

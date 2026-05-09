@@ -1,3 +1,4 @@
+// This file contains server logic for order API src.
 // tracing must be imported first — it patches modules before they are loaded
 import './tracing';
 
@@ -32,6 +33,7 @@ const logger = pino({ level: 'info' });
 
 let pool: Pool;
 
+// Initializes database.
 async function initDatabase(): Promise<void> {
   const smClient = new SecretsManagerClient({ region: AWS_REGION });
   const response = await smClient.send(new GetSecretValueCommand({ SecretId: DB_SECRET_ARN }));
@@ -70,6 +72,7 @@ async function initDatabase(): Promise<void> {
 let server: Server;
 let metricsServer: Server | undefined;
 
+// Handles shutdown.
 function shutdown(): void {
   logger.info('SIGTERM received, starting graceful shutdown');
   server.close(() => {
@@ -89,6 +92,7 @@ function shutdown(): void {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
+// Handles resolve API key.
 async function resolveApiKey(): Promise<string> {
   if (API_KEY) return API_KEY;
   if (!API_KEY_SECRET_ARN) return '';

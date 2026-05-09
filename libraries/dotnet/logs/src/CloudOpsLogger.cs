@@ -1,3 +1,4 @@
+// This file contains cloud ops logger logic for logs src.
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public sealed class CloudOpsLogger
     private string? previousTraceId;
     private string? uniqueId;
 
+    // Handles cloud ops logger.
     internal CloudOpsLogger()
     {
         ResourceAttributes = RuntimeResourceAttributes.Create();
@@ -32,36 +34,43 @@ public sealed class CloudOpsLogger
 
     public IReadOnlyDictionary<string, string> ResourceAttributes { get; }
 
+    // Initializes logger.
     public static CloudOpsLogger InitialiseLogger()
     {
         return Instance.Value;
     }
 
+    // Initializes logger.
     public static CloudOpsLogger InitializeLogger()
     {
         return Instance.Value;
     }
 
+    // Handles info.
     public void Info(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Info, message, optionalParams);
     }
 
+    // Handles error.
     public void Error(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Error, message, optionalParams);
     }
 
+    // Handles debug.
     public void Debug(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Debug, message, optionalParams);
     }
 
+    // Handles warn.
     public void Warn(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Warn, message, optionalParams);
     }
 
+    // Exports logs.
     public void ExportLogs()
     {
         sampler.FlushOneBatch();
@@ -75,6 +84,7 @@ public sealed class CloudOpsLogger
         }
     }
 
+    // Logs the requested work.
     private void Log(LogLevel level, object? message, object?[] optionalParams)
     {
         var currentTraceId = CurrentTraceId();
@@ -87,6 +97,7 @@ public sealed class CloudOpsLogger
         sampler.AddLog(new LogEntry(uniqueId ?? "unknown", level, message, optionalParams));
     }
 
+    // Processes log.
     internal void ProcessLog(LogEntry logEntry)
     {
         if (!enabledLevels.Contains(logEntry.Level)) return;
@@ -111,6 +122,7 @@ public sealed class CloudOpsLogger
         }
     }
 
+    // Initializes the requested work.
     private void Init()
     {
         if (exportersList.Count <= 1 && exportersList.Contains("console", StringComparer.OrdinalIgnoreCase))
@@ -143,6 +155,7 @@ public sealed class CloudOpsLogger
         }
     }
 
+    // Initializes OTel logger.
     private void InitOtelLogger(SsmParameters? ssmParameters = null)
     {
         ssmParameters ??= LogsConfiguration.ReadSsmParameters();
@@ -182,6 +195,7 @@ public sealed class CloudOpsLogger
         useOtel = true;
     }
 
+    // Logs attributes.
     private static IReadOnlyDictionary<string, object> LogAttributes(string invocationId)
     {
         var attributes = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -204,6 +218,7 @@ public sealed class CloudOpsLogger
         return attributes;
     }
 
+    // Gets current trace ID.
     private static string CurrentTraceId()
     {
         var lambdaTraceId = Environment.GetEnvironmentVariable("_X_AMZN_TRACE_ID");
@@ -213,6 +228,7 @@ public sealed class CloudOpsLogger
         return activity?.TraceId.ToString() ?? "unknown";
     }
 
+    // Converts microsoft level.
     private static Microsoft.Extensions.Logging.LogLevel ToMicrosoftLevel(LogLevel level)
     {
         return level switch
@@ -224,11 +240,13 @@ public sealed class CloudOpsLogger
         };
     }
 
+    // Converts exception.
     private static Exception? ToException(object? message)
     {
         return message as Exception;
     }
 
+    // Renders the requested work.
     private static string Render(object? message, object?[] optionalParams)
     {
         var builder = new StringBuilder()
@@ -242,6 +260,7 @@ public sealed class CloudOpsLogger
         return builder.ToString();
     }
 
+    // Turns into text the requested work.
     private static string Stringify(object? value)
     {
         return value switch
@@ -254,6 +273,7 @@ public sealed class CloudOpsLogger
         };
     }
 
+    // Checks whether simple value.
     private static bool IsSimpleValue(object value)
     {
         return value switch
@@ -263,6 +283,7 @@ public sealed class CloudOpsLogger
         };
     }
 
+    // Parses log levels.
     internal static HashSet<LogLevel> ParseLogLevels(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return Enum.GetValues<LogLevel>().ToHashSet();

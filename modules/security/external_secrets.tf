@@ -1,8 +1,9 @@
-# External Secrets Operator (ESO) — pulls AWS Secrets Manager values into k8s
-# Secret resources without ever putting plaintext in TF state or git.
+#This file defines external secrets settings for CloudOps.
+#External Secrets Operator (ESO) — pulls AWS Secrets Manager values into k8s
+#Secret resources without ever putting plaintext in TF state or git.
 #
-# Pattern: define an `ExternalSecret` referencing a Secrets Manager ARN; the
-# operator creates / refreshes a k8s Secret. Apps mount the Secret normally.
+#Pattern: define an `ExternalSecret` referencing a Secrets Manager ARN; the
+#operator creates / refreshes a k8s Secret. Apps mount the Secret normally.
 
 resource "aws_iam_role" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
@@ -27,16 +28,17 @@ resource "aws_iam_role" "external_secrets" {
   tags = var.tags
 }
 
+#Creates the AWS IAM role policy resource named external secrets.
 resource "aws_iam_role_policy" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
 
   name = "external-secrets-read"
   role = aws_iam_role.external_secrets[0].id
 
-  # Resource scoping (closes backlog #22 + #37):
-  # - GetSecretValue / DescribeSecret are limited to var.external_secrets_allowed_arns when set.
-  # - ListSecrets cannot be resource-scoped by the Secrets Manager API and stays "*".
-  # - Non-dev environments MUST provide an explicit ARN list (precondition below).
+  #Resource scoping (closes backlog #22 + #37):
+  #- GetSecretValue / DescribeSecret are limited to var.external_secrets_allowed_arns when set.
+  #- ListSecrets cannot be resource-scoped by the Secrets Manager API and stays "*".
+  #- Non-dev environments MUST provide an explicit ARN list (precondition below).
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -66,6 +68,7 @@ resource "aws_iam_role_policy" "external_secrets" {
   }
 }
 
+#Creates the helm release resource named external secrets.
 resource "helm_release" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
 
@@ -89,8 +92,8 @@ resource "helm_release" "external_secrets" {
   }
 }
 
-# Default ClusterSecretStore — backed by AWS Secrets Manager via IRSA.
-# Pre-installed so app teams can write `kind: ExternalSecret` immediately.
+#Default ClusterSecretStore — backed by AWS Secrets Manager via IRSA.
+#Pre-installed so app teams can write `kind: ExternalSecret` immediately.
 resource "kubernetes_manifest" "cluster_secret_store" {
   count = var.enable_external_secrets ? 1 : 0
 

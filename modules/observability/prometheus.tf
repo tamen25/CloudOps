@@ -1,4 +1,5 @@
-# gp3 StorageClass — requires the EBS CSI driver addon (installed by the eks module)
+#This file defines prometheus settings for CloudOps.
+#gp3 StorageClass — requires the EBS CSI driver addon (installed by the eks module)
 resource "kubernetes_storage_class" "gp3" {
   metadata {
     name = "gp3"
@@ -18,8 +19,8 @@ resource "kubernetes_storage_class" "gp3" {
   }
 }
 
-# kube-prometheus-stack — Prometheus + Alertmanager + node-exporter + kube-state-metrics
-# Grafana is disabled here; deployed separately in grafana.tf with datasources and dashboards
+#kube-prometheus-stack — Prometheus + Alertmanager + node-exporter + kube-state-metrics
+#Grafana is disabled here; deployed separately in grafana.tf with datasources and dashboards
 resource "helm_release" "prometheus" {
   name       = "prometheus"
   repository = "https://prometheus-community.github.io/helm-charts"
@@ -41,7 +42,7 @@ resource "helm_release" "prometheus" {
         scrapeInterval     = "30s"
         evaluationInterval = "30s"
 
-        # Spread replicas across nodes (and AZs, since node groups are AZ-pinned).
+        #Spread replicas across nodes (and AZs, since node groups are AZ-pinned).
         affinity = var.prometheus_replicas > 1 ? {
           podAntiAffinity = {
             requiredDuringSchedulingIgnoredDuringExecution = [{
@@ -53,8 +54,8 @@ resource "helm_release" "prometheus" {
           }
         } : null
 
-        # Remote write to Mimir/Thanos when long-term storage is wired up.
-        # Mimir distributor address is set by the mimir.tf module.
+        #Remote write to Mimir/Thanos when long-term storage is wired up.
+        #Mimir distributor address is set by the mimir.tf module.
         remoteWrite = var.metrics_long_term_storage == "mimir" ? [{
           url = "http://mimir-distributor.mimir.svc:8080/api/v1/push"
           headers = {
@@ -67,7 +68,7 @@ resource "helm_release" "prometheus" {
           }]
         }] : []
 
-        # Accept remote write from OTel Collector
+        #Accept remote write from OTel Collector
         enableRemoteWriteReceiver = true
 
         storageSpec = {
@@ -86,9 +87,9 @@ resource "helm_release" "prometheus" {
       }
     }
 
-    # When enabled, kube-prometheus-stack runs an Alertmanager pod that
-    # aggregates PrometheusRule alerts. Required for the Grafana
-    # Alertmanager datasource (alerting.tf) to actually return data.
+    #When enabled, kube-prometheus-stack runs an Alertmanager pod that
+    #aggregates PrometheusRule alerts. Required for the Grafana
+    #Alertmanager datasource (alerting.tf) to actually return data.
     alertmanager = {
       enabled = var.enable_alertmanager
     }

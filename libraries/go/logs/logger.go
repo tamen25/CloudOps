@@ -1,3 +1,4 @@
+// This file contains logger logic for go logs.
 // Package logs is the CloudOps OpenTelemetry logs helper for Go services.
 //
 // API mirrors the Node.js / Python / Java / .NET libraries:
@@ -17,6 +18,8 @@
 //	OTEL_LOG_LEVEL                 JSON array or CSV of info/error/debug/warn
 //	OTEL_LOGS_SAMPLING_RATE        percentage 0..100; errors always export
 //	OTEL_SSM_PARAMETERS            JSON object with otel.logs.{url,api_key}
+//	/tmp/otelExporterParams.json    original PE parameter file fallback
+//	OTEL_SSM_PARAMETERS_FILE        optional override for that file path
 //	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT  OTLP HTTP endpoint fallback
 //	OTEL_EXPORTER_OTLP_ENDPOINT       same, base URL (suffixed /v1/logs)
 //	OTEL_API_KEY / OTEL_EXPORTER_OTLP_HEADERS  bearer auth fallback
@@ -39,6 +42,8 @@ import (
 
 // LibraryVersion stays in sync with the Python/Node libraries' header tag.
 const LibraryVersion = "1.16.2"
+
+const defaultSSMParametersFile = "/tmp/otelExporterParams.json"
 
 // LogLevel is one of "info", "error", "debug", "warn".
 type LogLevel string
@@ -211,6 +216,7 @@ func (l *CloudOpsLogger) ExportLogs() error {
 	return nil
 }
 
+// Initializes the requested work.
 func (l *CloudOpsLogger) init() {
 	if len(l.Exporters) <= 1 && len(l.Exporters) == 1 && strings.EqualFold(l.Exporters[0], "console") {
 		l.useConsole = true
@@ -235,6 +241,7 @@ func (l *CloudOpsLogger) init() {
 	}
 }
 
+// Initializes OTel.
 func (l *CloudOpsLogger) initOtel(ssm SsmParameters) {
 	cfg := ssm.Otel.Logs
 	if cfg == nil || cfg.URL == "" {
@@ -249,6 +256,7 @@ func (l *CloudOpsLogger) initOtel(ssm SsmParameters) {
 	l.useOTel = true
 }
 
+// Writes console.
 func (l *CloudOpsLogger) writeConsole(entry LogEntry) {
 	w := os.Stdout
 	if entry.Level == LevelError {
@@ -268,6 +276,7 @@ func cloneStringSlice(in []string) []string {
 	return out
 }
 
+// Copies level set.
 func cloneLevelSet(in map[LogLevel]bool) map[LogLevel]bool {
 	if in == nil {
 		return nil
@@ -279,6 +288,7 @@ func cloneLevelSet(in map[LogLevel]bool) map[LogLevel]bool {
 	return out
 }
 
+// Parses string list.
 func parseStringList(raw string, fallback []string) []string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -310,6 +320,7 @@ func parseStringList(raw string, fallback []string) []string {
 	return out
 }
 
+// Parses level set.
 func parseLevelSet(raw string, fallback map[LogLevel]bool) map[LogLevel]bool {
 	if strings.TrimSpace(raw) == "" {
 		return cloneLevelSet(fallback)
@@ -331,6 +342,7 @@ func parseLevelSet(raw string, fallback map[LogLevel]bool) map[LogLevel]bool {
 	return out
 }
 
+// Parses resource attributes.
 func parseResourceAttributes(raw string) map[string]string {
 	out := map[string]string{}
 	if raw == "" {
@@ -348,6 +360,7 @@ func parseResourceAttributes(raw string) map[string]string {
 	return out
 }
 
+// Normalizes endpoint.
 func normalizeEndpoint(endpoint string) string {
 	if endpoint == "" {
 		return ""
@@ -359,6 +372,7 @@ func normalizeEndpoint(endpoint string) string {
 	return endpoint + "/v1/logs"
 }
 
+// Reads ssmparameters.
 func readSSMParameters() SsmParameters {
 	raw := os.Getenv("OTEL_SSM_PARAMETERS")
 	if raw != "" {
@@ -366,6 +380,10 @@ func readSSMParameters() SsmParameters {
 		if err := json.Unmarshal([]byte(raw), &s); err == nil && !s.IsEmpty() {
 			return s
 		}
+	}
+
+	if fileParameters := readSSMParametersFile(""); !fileParameters.IsEmpty() {
+		return fileParameters
 	}
 
 	logsURL := os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
@@ -384,6 +402,32 @@ func readSSMParameters() SsmParameters {
 	return SsmParameters{}
 }
 
+// Reads ssmparameters file.
+func readSSMParametersFile(filePath string) SsmParameters {
+	if filePath == "" {
+		filePath = os.Getenv("OTEL_SSM_PARAMETERS_FILE")
+	}
+	if filePath == "" {
+		filePath = defaultSSMParametersFile
+	}
+
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error reading or parsing otelExporterParams.json: %v\n", err)
+		}
+		return SsmParameters{}
+	}
+
+	var s SsmParameters
+	if err := json.Unmarshal(raw, &s); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading or parsing otelExporterParams.json: %v\n", err)
+		return SsmParameters{}
+	}
+	return s
+}
+
+// Finds first env.
 func firstEnv(names ...string) string {
 	for _, n := range names {
 		if v := os.Getenv(n); v != "" {
@@ -393,6 +437,7 @@ func firstEnv(names ...string) string {
 	return ""
 }
 
+// Handles runtime resource attributes.
 func runtimeResourceAttributes() map[string]string {
 	attrs := parseResourceAttributes(os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -444,6 +489,7 @@ func runtimeResourceAttributes() map[string]string {
 	return attrs
 }
 
+// Gets sampling rate.
 func samplingRate() float64 {
 	raw := os.Getenv("OTEL_LOGS_SAMPLING_RATE")
 	if raw == "" {
@@ -456,6 +502,7 @@ func samplingRate() float64 {
 	return v
 }
 
+// Gets current trace ID.
 func currentTraceID() string {
 	if v := os.Getenv("_X_AMZN_TRACE_ID"); v != "" {
 		return v
@@ -466,6 +513,7 @@ func currentTraceID() string {
 	return "unknown"
 }
 
+// Renders entry.
 func renderEntry(message any, optionalParams []any) string {
 	parts := []string{stringify(message)}
 	for _, p := range optionalParams {
@@ -474,6 +522,7 @@ func renderEntry(message any, optionalParams []any) string {
 	return strings.Join(parts, "\n")
 }
 
+// Turns into text the requested work.
 func stringify(v any) string {
 	if v == nil {
 		return ""
@@ -570,10 +619,12 @@ type logSampler struct {
 	batch  map[string]*LogBatch
 }
 
+// Handles new log sampler.
 func newLogSampler(l *CloudOpsLogger, rate float64) *logSampler {
 	return &logSampler{logger: l, rate: rate, batch: map[string]*LogBatch{}}
 }
 
+// Adds the requested work.
 func (s *logSampler) add(entry LogEntry) {
 	if s.rate == 0 {
 		s.logger.ProcessLog(entry)
@@ -596,6 +647,7 @@ func (s *logSampler) add(entry LogEntry) {
 	s.mu.Unlock()
 }
 
+// Flushes one batch.
 func (s *logSampler) flushOneBatch() {
 	s.mu.Lock()
 	current := s.batch
@@ -618,6 +670,7 @@ func (s *logSampler) flushOneBatch() {
 	}
 }
 
+// Decides whether to sample.
 func (s *logSampler) shouldSample() bool {
 	threshold := s.rate
 	if threshold < 0 {

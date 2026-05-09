@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// This file contains generate load logic for scripts.
 /**
  * Load Generation Script for Order API
  *
@@ -40,6 +41,7 @@ const config = {
   endpoint: getArg('--endpoint', 'mixed')
 };
 
+// Gets arg.
 function getArg(flag, defaultValue) {
   const index = args.indexOf(flag);
   return index !== -1 && args[index + 1] ? args[index + 1] : defaultValue;
@@ -218,6 +220,7 @@ function printStats() {
 
 // Print progress every 10 seconds
 let progressInterval;
+// Handles start progress reporting.
 function startProgressReporting() {
   progressInterval = setInterval(() => {
     const elapsed = Math.min(config.duration, Math.floor((Date.now() - testStartTime) / 1000));
@@ -230,6 +233,7 @@ function startProgressReporting() {
 
 // Main execution
 let testStartTime;
+// Runs the main workflow for the requested work.
 async function main() {
   console.log('Starting load test...\n');
 

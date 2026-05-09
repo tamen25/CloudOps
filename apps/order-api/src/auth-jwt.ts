@@ -1,3 +1,4 @@
+// This file contains auth JWT logic for order API src.
 // OIDC / JWKS bearer-token verification — closes backlog #7.
 //
 // Wires `jose` for offline JWT verification against a remote JWKS endpoint
@@ -10,12 +11,14 @@ import type { Request, Response, NextFunction } from 'express';
 
 type Logger = { warn: (...a: unknown[]) => void; info?: (...a: unknown[]) => void; error?: (...a: unknown[]) => void };
 
+// Parses scopes.
 export function parseScopes(claims: { scp?: unknown; scope?: unknown }): Set<string> {
   if (Array.isArray(claims.scp)) return new Set(claims.scp as string[]);
   if (typeof claims.scope === 'string') return new Set(claims.scope.split(/\s+/).filter(Boolean));
   return new Set();
 }
 
+// Handles has all scopes.
 export function hasAllScopes(present: Set<string>, required: Set<string>): boolean {
   for (const s of required) if (!present.has(s)) return false;
   return true;
@@ -30,6 +33,7 @@ export interface CreateJwtVerifierArgs {
   jwksOptions?: Record<string, unknown>;
 }
 
+// Creates JWT verifier.
 export function createJwtVerifier(args: CreateJwtVerifierArgs = {} as CreateJwtVerifierArgs) {
   const {
     issuer,

@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
-# verify-alerting.sh — post-apply check that the Grafana + Alertmanager
-# alerting pipeline is actually functional. Closes backlog item #4.
+#This script runs verify alerting automation for CloudOps.
+#verify-alerting.sh — post-apply check that the Grafana + Alertmanager
+#alerting pipeline is actually functional. Closes backlog item #4.
 #
-# Checks:
-#   1. Alertmanager pod is running (kube-prometheus-stack release).
-#   2. PrometheusRule CRDs for SLO availability/latency are present.
-#   3. Grafana sidecar has picked up alert ConfigMaps with grafana_alert=1
-#      (counts both the cloudops-native rules and the alerting provisioning
-#      files).
-#   4. Grafana API reports the SLO rules + cloudops-native rules under the
-#      Alerts section. Optional — needs GRAFANA_URL and GRAFANA_API_KEY in env.
+#Checks:
+#1. Alertmanager pod is running (kube-prometheus-stack release).
+#2. PrometheusRule CRDs for SLO availability/latency are present.
+#3. Grafana sidecar has picked up alert ConfigMaps with grafana_alert=1
+#(counts both the cloudops-native rules and the alerting provisioning
+#files).
+#4. Grafana API reports the SLO rules + cloudops-native rules under the
+#Alerts section. Optional — needs GRAFANA_URL and GRAFANA_API_KEY in env.
 #
-# Usage:
-#   ./scripts/verify-alerting.sh                  # k8s-side checks only
-#   GRAFANA_URL=https://grafana.example.com \
-#     GRAFANA_API_KEY=glsa_xxx \
-#     ./scripts/verify-alerting.sh                # also queries Grafana API
+#Usage:
+#./scripts/verify-alerting.sh                  # k8s-side checks only
+#GRAFANA_URL=https://grafana.example.com \
+#GRAFANA_API_KEY=glsa_xxx \
+#./scripts/verify-alerting.sh                # also queries Grafana API
 #
-# Exit codes:
-#   0 — all checks passed
-#   1 — one or more checks failed
+#Exit codes:
+#0 — all checks passed
+#1 — one or more checks failed
 
 set -uo pipefail
 
@@ -29,10 +30,14 @@ APP_NAMESPACE="${APP_NAMESPACE:-cloudops}"
 PASS=0
 FAIL=0
 
+#Handles ok.
 ok()   { printf "  \033[32m\xe2\x9c\x94\033[0m %s\n" "$1"; PASS=$((PASS + 1)); }
+#Handles fail.
 fail() { printf "  \033[31m\xe2\x9c\x97\033[0m %s\n" "$1"; FAIL=$((FAIL + 1)); }
+#Handles info.
 info() { printf "\n\033[1m%s\033[0m\n" "$1"; }
 
+#Requires the requested work.
 require() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "ERROR: required command not found: $1" >&2
@@ -42,7 +47,7 @@ require() {
 
 require kubectl
 
-# ── 1. Alertmanager pod up ────────────────────────────────────────────────────
+#── 1. Alertmanager pod up ────────────────────────────────────────────────────
 info "1. Alertmanager pod (release=prometheus)"
 am_pods=$(kubectl get pods -n "$NAMESPACE_MONITORING" \
   -l "app.kubernetes.io/name=alertmanager" \
@@ -63,7 +68,7 @@ else
   done <<< "$am_pods"
 fi
 
-# ── 2. SLO PrometheusRule CRDs present ────────────────────────────────────────
+#── 2. SLO PrometheusRule CRDs present ────────────────────────────────────────
 info "2. SLO PrometheusRule CRDs (slo.tf)"
 for rule in order-api-slo-availability order-api-slo-latency order-api-slo-throughput; do
   if kubectl get prometheusrule "$rule" -n "$NAMESPACE_MONITORING" >/dev/null 2>&1; then
@@ -73,7 +78,7 @@ for rule in order-api-slo-availability order-api-slo-latency order-api-slo-throu
   fi
 done
 
-# ── 3. Grafana alert ConfigMaps picked up by sidecar ──────────────────────────
+#── 3. Grafana alert ConfigMaps picked up by sidecar ──────────────────────────
 info "3. Grafana alert ConfigMaps (grafana_alert=1)"
 alert_cms=$(kubectl get configmap -A -l "grafana_alert=1" \
   -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
@@ -87,7 +92,7 @@ else
   done <<< "$alert_cms"
 fi
 
-# ── 4. Grafana API reports the rules (optional) ──────────────────────────────
+#── 4. Grafana API reports the rules (optional) ──────────────────────────────
 info "4. Grafana API alert rules (optional — set GRAFANA_URL + GRAFANA_API_KEY)"
 if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_API_KEY:-}" ]; then
   require curl
@@ -125,7 +130,7 @@ else
   echo "  (skipped — set GRAFANA_URL and GRAFANA_API_KEY to enable)"
 fi
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+#── Summary ───────────────────────────────────────────────────────────────────
 echo
 printf "Passed: \033[32m%d\033[0m  Failed: \033[31m%d\033[0m\n" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

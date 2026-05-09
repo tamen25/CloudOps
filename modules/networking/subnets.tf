@@ -1,4 +1,5 @@
-# Public subnets — ALB and NAT gateways; tagged for external load balancer discovery
+#This file defines subnets settings for CloudOps.
+#Public subnets — ALB and NAT gateways; tagged for external load balancer discovery
 resource "aws_subnet" "public" {
   #checkov:skip=CKV_AWS_130:Public subnets intentionally assign public IPs - required for ALB nodes
   count = local.az_count
@@ -16,7 +17,7 @@ resource "aws_subnet" "public" {
   })
 }
 
-# Private subnets — EKS nodes; tagged for internal load balancer discovery
+#Private subnets — EKS nodes; tagged for internal load balancer discovery
 resource "aws_subnet" "private" {
   count = local.az_count
 
@@ -33,7 +34,7 @@ resource "aws_subnet" "private" {
   })
 }
 
-# Database subnets — RDS only, no internet route
+#Database subnets — RDS only, no internet route
 resource "aws_subnet" "database" {
   count = local.az_count
 
@@ -48,7 +49,7 @@ resource "aws_subnet" "database" {
   })
 }
 
-# Subnet group referenced by the database module
+#Subnet group referenced by the database module
 resource "aws_db_subnet_group" "main" {
   name        = "${var.name_prefix}-db-subnet-group"
   description = "Database subnet group for ${var.name_prefix}"

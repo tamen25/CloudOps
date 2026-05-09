@@ -1,3 +1,4 @@
+#This manifest defines migration job for CloudOps.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,8 +18,8 @@ spec:
     spec:
       serviceAccountName: "${ORDER_API_SERVICE_ACCOUNT}"
       restartPolicy: Never
-      # Closes backlog #36 — match the order-api Deployment so Gatekeeper
-      # K8sNoRootContainers admits this Job's pod.
+      #Closes backlog #36 — match the order-api Deployment so Gatekeeper
+      #K8sNoRootContainers admits this Job's pod.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -31,9 +32,9 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
-      # Backlog #57 — same RDS CA fetch as the Deployment so migrations also
-      # talk TLS. RDS parameter group enforces rds.force_ssl=1, so a missing
-      # SSL config would fail-fast at handshake.
+      #Backlog #57 — same RDS CA fetch as the Deployment so migrations also
+      #talk TLS. RDS parameter group enforces rds.force_ssl=1, so a missing
+      #SSL config would fail-fast at handshake.
       initContainers:
         - name: fetch-rds-ca
           image: curlimages/curl:8.10.1

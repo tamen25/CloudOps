@@ -1,3 +1,4 @@
+// This file contains logs exporter config logic for logs src.
 using System.Text.Json.Serialization;
 
 namespace CloudOps.Otel.Logs;

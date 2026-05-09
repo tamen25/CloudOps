@@ -1,6 +1,7 @@
-# WAFv2 web ACL — regional, attached to the public ALB.
-# Created only when var.enable_waf = true. Defaults are OWASP-aligned and tight
-# enough to block common automated abuse without breaking real users.
+#This file defines WAF settings for CloudOps.
+#WAFv2 web ACL — regional, attached to the public ALB.
+#Created only when var.enable_waf = true. Defaults are OWASP-aligned and tight
+#enough to block common automated abuse without breaking real users.
 
 resource "aws_wafv2_web_acl" "main" {
   count = var.enable_waf ? 1 : 0
@@ -12,7 +13,7 @@ resource "aws_wafv2_web_acl" "main" {
     allow {}
   }
 
-  # ── Rate limit: 2000 req / 5 min / IP ───────────────────────────────────────
+  #── Rate limit: 2000 req / 5 min / IP ───────────────────────────────────────
   rule {
     name     = "rate-limit"
     priority = 0
@@ -35,7 +36,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # ── AWS-managed: Core (CRS) ─────────────────────────────────────────────────
+  #── AWS-managed: Core (CRS) ─────────────────────────────────────────────────
   rule {
     name     = "common-rule-set"
     priority = 1
@@ -58,7 +59,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # ── AWS-managed: Known bad inputs ───────────────────────────────────────────
+  #── AWS-managed: Known bad inputs ───────────────────────────────────────────
   rule {
     name     = "known-bad-inputs"
     priority = 2
@@ -81,7 +82,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # ── AWS-managed: SQL injection ──────────────────────────────────────────────
+  #── AWS-managed: SQL injection ──────────────────────────────────────────────
   rule {
     name     = "sqli"
     priority = 3
@@ -104,7 +105,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # ── AWS-managed: Anonymous IP list (Tor exits, hosting providers, public proxies) ─
+  #── AWS-managed: Anonymous IP list (Tor exits, hosting providers, public proxies) ─
   rule {
     name     = "anonymous-ip-list"
     priority = 4
@@ -127,7 +128,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # ── Geo block (optional) ────────────────────────────────────────────────────
+  #── Geo block (optional) ────────────────────────────────────────────────────
   dynamic "rule" {
     for_each = length(var.waf_geo_block_countries) > 0 ? [1] : []
     content {
@@ -161,29 +162,29 @@ resource "aws_wafv2_web_acl" "main" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-public-alb" })
 }
 
-# Association — attached to the public `cloudops` ALB only. The cloudops-otel
-# ALB carries OTel gRPC ingestion (typically locked down at the SG layer or
-# routed via PrivateLink in prod), so adding L7 inspection there is out of
-# scope. WAF here is the public-traffic perimeter for api.<domain> +
-# grafana.<domain>. Closes backlog #17.
+#Association — attached to the public `cloudops` ALB only. The cloudops-otel
+#ALB carries OTel gRPC ingestion (typically locked down at the SG layer or
+#routed via PrivateLink in prod), so adding L7 inspection there is out of
+#scope. WAF here is the public-traffic perimeter for api.<domain> +
+#grafana.<domain>. Closes backlog #17.
 #
-# The ALB is created lazily by the LB controller once an Ingress in the
-# "cloudops" group is applied. We can't reference it as a TF resource (not
-# managed by this code), so we look it up by tag.
+#The ALB is created lazily by the LB controller once an Ingress in the
+#"cloudops" group is applied. We can't reference it as a TF resource (not
+#managed by this code), so we look it up by tag.
 #
-# ── Two-pass apply (chicken-and-egg) ───────────────────────────────────────────
-# On a fresh stack the order is:
-#   pass 1 (alb_dns_name = ""):  enable_waf can be true; web ACL is created but
-#                                association + data.aws_lb are skipped via count.
-#                                LBC reconciles the cloudops Ingress, ALB comes
-#                                up, ingress.route53 records populate
-#                                alb_dns_name.
-#   pass 2 (alb_dns_name set):   data.aws_lb.public resolves by tag,
-#                                aws_wafv2_web_acl_association.alb attaches.
+#── Two-pass apply (chicken-and-egg) ───────────────────────────────────────────
+#On a fresh stack the order is:
+#pass 1 (alb_dns_name = ""):  enable_waf can be true; web ACL is created but
+#association + data.aws_lb are skipped via count.
+#LBC reconciles the cloudops Ingress, ALB comes
+#up, ingress.route53 records populate
+#alb_dns_name.
+#pass 2 (alb_dns_name set):   data.aws_lb.public resolves by tag,
+#aws_wafv2_web_acl_association.alb attaches.
 #
-# The explicit `count = ... && var.alb_dns_name != ""` is the two-pass marker.
-# The depends_on below makes the ordering survive a refresh that races the LBC:
-# the data lookup will not run until the LBC helm release is applied.
+#The explicit `count = ... && var.alb_dns_name != ""` is the two-pass marker.
+#The depends_on below makes the ordering survive a refresh that races the LBC:
+#the data lookup will not run until the LBC helm release is applied.
 
 data "aws_lb" "public" {
   count = var.enable_waf && var.alb_dns_name != "" ? 1 : 0
@@ -196,6 +197,7 @@ data "aws_lb" "public" {
   depends_on = [helm_release.lb_controller]
 }
 
+#Creates the AWS wafv2 web acl association resource named alb.
 resource "aws_wafv2_web_acl_association" "alb" {
   count = var.enable_waf && var.alb_dns_name != "" ? 1 : 0
 
@@ -205,7 +207,7 @@ resource "aws_wafv2_web_acl_association" "alb" {
   depends_on = [helm_release.lb_controller]
 }
 
-# CloudWatch log group for WAF logs (sampled blocked requests).
+#CloudWatch log group for WAF logs (sampled blocked requests).
 resource "aws_cloudwatch_log_group" "waf" {
   count = var.enable_waf && var.waf_logging_enabled ? 1 : 0
 
@@ -215,6 +217,7 @@ resource "aws_cloudwatch_log_group" "waf" {
   tags = local.common_tags
 }
 
+#Creates the AWS wafv2 web acl logging configuration resource named main.
 resource "aws_wafv2_web_acl_logging_configuration" "main" {
   count = var.enable_waf && var.waf_logging_enabled ? 1 : 0
 

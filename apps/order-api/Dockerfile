@@ -1,7 +1,8 @@
-# Multi-stage build: compile TypeScript in builder, ship only dist + prod
-# deps in the runtime image. Closes backlog #64.
+#This Dockerfile builds the apps order API container image.
+#Multi-stage build: compile TypeScript in builder, ship only dist + prod
+#deps in the runtime image. Closes backlog #64.
 
-# 1. Builder — install ALL deps (incl. typescript) and compile to dist/.
+#1. Builder — install ALL deps (incl. typescript) and compile to dist/.
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json tsconfig.json ./
@@ -9,13 +10,13 @@ RUN npm ci
 COPY src ./src
 RUN npm run build
 
-# 2. Prod-deps — install ONLY production deps for the runtime image.
+#2. Prod-deps — install ONLY production deps for the runtime image.
 FROM node:22-alpine AS prod-deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# 3. Runtime — non-root, only compiled output + prod deps.
+#3. Runtime — non-root, only compiled output + prod deps.
 FROM node:22-alpine
 
 RUN addgroup -g 1001 -S nodejs && \

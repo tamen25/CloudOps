@@ -1,4 +1,5 @@
-# Create the primary RDS database instance with encryption, backups, and monitoring enabled
+#This file defines RDS settings for CloudOps.
+#Create the primary RDS database instance with encryption, backups, and monitoring enabled
 resource "aws_db_instance" "primary" {
   #checkov:skip=CKV_AWS_157:Multi-AZ disabled intentionally - cost optimization for dev environment
   #checkov:skip=CKV_AWS_293:Deletion protection disabled intentionally - dev environment requires easy teardown
@@ -63,7 +64,7 @@ resource "aws_db_instance" "primary" {
   }
 }
 
-# Create a read replica of the primary database instance for improved read performance and availability
+#Create a read replica of the primary database instance for improved read performance and availability
 resource "aws_db_instance" "replica" {
   count = var.create_read_replica ? 1 : 0
 

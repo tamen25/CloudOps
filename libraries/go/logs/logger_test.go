@@ -1,3 +1,4 @@
+// This file contains logger test logic for go logs.
 package logs
 
 import (
@@ -5,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// Handles test parse string list.
 func TestParseStringList(t *testing.T) {
 	got := parseStringList(`["console","otel"]`, []string{"x"})
 	if len(got) != 2 || got[0] != "console" || got[1] != "otel" {
@@ -31,6 +34,7 @@ func TestParseStringList(t *testing.T) {
 	}
 }
 
+// Handles test parse level set does not share default map.
 func TestParseLevelSetDoesNotShareDefaultMap(t *testing.T) {
 	first := parseLevelSet("", defaultLevels)
 	first[LevelInfo] = false
@@ -41,6 +45,7 @@ func TestParseLevelSetDoesNotShareDefaultMap(t *testing.T) {
 	}
 }
 
+// Handles test parse level set ignores invalid levels.
 func TestParseLevelSetIgnoresInvalidLevels(t *testing.T) {
 	got := parseLevelSet("bad, error", defaultLevels)
 	if len(got) != 1 || !got[LevelError] {
@@ -53,6 +58,7 @@ func TestParseLevelSetIgnoresInvalidLevels(t *testing.T) {
 	}
 }
 
+// Handles test normalize endpoint.
 func TestNormalizeEndpoint(t *testing.T) {
 	if got := normalizeEndpoint("https://otel.example.com/"); got != "https://otel.example.com/v1/logs" {
 		t.Fatal(got)
@@ -65,6 +71,7 @@ func TestNormalizeEndpoint(t *testing.T) {
 	}
 }
 
+// Handles test runtime resource attributes lambda.
 func TestRuntimeResourceAttributesLambda(t *testing.T) {
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "fn-test")
 	t.Setenv("OTEL_SERVICE_NAME", "fn-svc")
@@ -77,6 +84,7 @@ func TestRuntimeResourceAttributesLambda(t *testing.T) {
 	}
 }
 
+// Handles test runtime resource attributes service name override.
 func TestRuntimeResourceAttributesServiceNameOverride(t *testing.T) {
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=from-resource,deployment.environment=dev")
 	t.Setenv("OTEL_SERVICE_NAME", "from-env")
@@ -90,6 +98,7 @@ func TestRuntimeResourceAttributesServiceNameOverride(t *testing.T) {
 	}
 }
 
+// Handles test sampler error always processes.
 func TestSamplerErrorAlwaysProcesses(t *testing.T) {
 	os.Unsetenv("OTEL_LOGS_SAMPLING_RATE")
 	t.Setenv("OTEL_LOGS_SAMPLING_RATE", "0")
@@ -108,6 +117,7 @@ func TestSamplerErrorAlwaysProcesses(t *testing.T) {
 	}
 }
 
+// Handles test read ssmparameters from JSON.
 func TestReadSSMParametersFromJSON(t *testing.T) {
 	t.Setenv("OTEL_SSM_PARAMETERS", `{"otel":{"logs":{"url":"https://collector.example.com/v1/logs","api_key":"secret"}}}`)
 	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
@@ -124,6 +134,49 @@ func TestReadSSMParametersFromJSON(t *testing.T) {
 	}
 }
 
+// Handles test read ssmparameters from file.
+func TestReadSSMParametersFromFile(t *testing.T) {
+	paramsFile := filepath.Join(t.TempDir(), "otelExporterParams.json")
+	if err := os.WriteFile(paramsFile, []byte(`{"otel":{"logs":{"url":"https://file.example.com/v1/logs","api_key":"file-secret"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("OTEL_SSM_PARAMETERS", "")
+	t.Setenv("OTEL_SSM_PARAMETERS_FILE", paramsFile)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://fallback.example.com")
+	t.Setenv("OTEL_API_KEY", "fallback-secret")
+
+	ssm := readSSMParameters()
+	if ssm.IsEmpty() || ssm.Otel == nil || ssm.Otel.Logs == nil {
+		t.Fatalf("ssm not parsed: %#v", ssm)
+	}
+	if ssm.Otel.Logs.URL != "https://file.example.com/v1/logs" || ssm.Otel.Logs.APIKey != "file-secret" {
+		t.Fatalf("unexpected file ssm logs config: %#v", ssm.Otel.Logs)
+	}
+}
+
+// Handles test read ssmparameters falls back when file is invalid.
+func TestReadSSMParametersFallsBackWhenFileIsInvalid(t *testing.T) {
+	paramsFile := filepath.Join(t.TempDir(), "otelExporterParams.json")
+	if err := os.WriteFile(paramsFile, []byte(`{not-json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("OTEL_SSM_PARAMETERS", "")
+	t.Setenv("OTEL_SSM_PARAMETERS_FILE", paramsFile)
+	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "https://fallback.example.com/v1/logs")
+	t.Setenv("OTEL_API_KEY", "fallback-secret")
+
+	ssm := readSSMParameters()
+	if ssm.IsEmpty() || ssm.Otel == nil || ssm.Otel.Logs == nil {
+		t.Fatalf("ssm not parsed: %#v", ssm)
+	}
+	if ssm.Otel.Logs.URL != "https://fallback.example.com/v1/logs" || ssm.Otel.Logs.APIKey != "fallback-secret" {
+		t.Fatalf("unexpected fallback ssm logs config: %#v", ssm.Otel.Logs)
+	}
+}
+
+// Handles test export logs falls back to console on httpfailure.
 func TestExportLogsFallsBackToConsoleOnHTTPFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "collector down", http.StatusBadGateway)
@@ -148,6 +201,7 @@ func TestExportLogsFallsBackToConsoleOnHTTPFailure(t *testing.T) {
 	}
 }
 
+// Captures stdout.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -173,6 +227,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(body)
 }
 
+// Handles test logger level methods.
 func TestLoggerLevelMethods(t *testing.T) {
 	t.Setenv("OTEL_LOGS_SAMPLING_RATE", "0")
 	t.Setenv("OTEL_BACKEND_EXPORTERS", "console")
@@ -187,6 +242,7 @@ func TestLoggerLevelMethods(t *testing.T) {
 	})
 }
 
+// Handles test stringify variants.
 func TestStringifyVariants(t *testing.T) {
 	if got := stringify(nil); got != "" {
 		t.Fatal(got)
@@ -205,6 +261,7 @@ func TestStringifyVariants(t *testing.T) {
 	}
 }
 
+// Handles test sampler probabilistic path.
 func TestSamplerProbabilisticPath(t *testing.T) {
 	t.Setenv("OTEL_LOGS_SAMPLING_RATE", "100")
 	l := NewCloudOpsLogger("sampler-test")

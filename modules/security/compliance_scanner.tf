@@ -1,13 +1,14 @@
-# Compliance Scanner Lambda
+#This file defines compliance scanner settings for CloudOps.
+#Compliance Scanner Lambda
 #
-# Runs every 6 hours via EventBridge. Scans S3, RDS, EKS, security groups, IAM,
-# and Secrets Manager against a security baseline. Findings are deduplicated in
-# DynamoDB, new HIGH/CRITICAL findings trigger SNS, and metrics are published to
-# CloudWatch under the CloudOps/Security namespace.
+#Runs every 6 hours via EventBridge. Scans S3, RDS, EKS, security groups, IAM,
+#and Secrets Manager against a security baseline. Findings are deduplicated in
+#DynamoDB, new HIGH/CRITICAL findings trigger SNS, and metrics are published to
+#CloudWatch under the CloudOps/Security namespace.
 #
-# Install Lambda dependencies BEFORE terraform apply via:
-#   ./scripts/build-lambdas.sh
-# Closes backlog #20.
+#Install Lambda dependencies BEFORE terraform apply via:
+#./scripts/build-lambdas.sh
+#Closes backlog #20.
 
 data "archive_file" "compliance_scanner" {
   type        = "zip"
@@ -15,6 +16,7 @@ data "archive_file" "compliance_scanner" {
   output_path = "${path.module}/lambda_function/compliance_scanner.zip"
 }
 
+#Creates the AWS cloudwatch log group resource named compliance scanner.
 resource "aws_cloudwatch_log_group" "compliance_scanner" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-compliance-scanner"
@@ -23,6 +25,7 @@ resource "aws_cloudwatch_log_group" "compliance_scanner" {
   tags = var.tags
 }
 
+#Creates the AWS lambda function resource named compliance scanner.
 resource "aws_lambda_function" "compliance_scanner" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -78,7 +81,7 @@ resource "aws_lambda_function" "compliance_scanner" {
   tags = merge(var.tags, { Name = "${var.project_name}-compliance-scanner" })
 }
 
-# EventBridge rule — fires every 6 hours
+#EventBridge rule — fires every 6 hours
 resource "aws_cloudwatch_event_rule" "compliance_scanner" {
   name                = "${var.project_name}-compliance-scanner-schedule"
   description         = "Triggers the compliance scanner Lambda every 6 hours"
@@ -87,12 +90,14 @@ resource "aws_cloudwatch_event_rule" "compliance_scanner" {
   tags = var.tags
 }
 
+#Creates the AWS cloudwatch event target resource named compliance scanner.
 resource "aws_cloudwatch_event_target" "compliance_scanner" {
   rule      = aws_cloudwatch_event_rule.compliance_scanner.name
   target_id = "ComplianceScannerLambda"
   arn       = aws_lambda_function.compliance_scanner.arn
 }
 
+#Creates the AWS lambda permission resource named compliance scanner eventbridge.
 resource "aws_lambda_permission" "compliance_scanner_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
@@ -101,7 +106,7 @@ resource "aws_lambda_permission" "compliance_scanner_eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.compliance_scanner.arn
 }
 
-# ── IAM ───────────────────────────────────────────────────────────────────────
+#── IAM ───────────────────────────────────────────────────────────────────────
 
 data "aws_iam_policy_document" "compliance_scanner_assume_role" {
   statement {
@@ -114,6 +119,7 @@ data "aws_iam_policy_document" "compliance_scanner_assume_role" {
   }
 }
 
+#Creates the AWS IAM role resource named compliance scanner.
 resource "aws_iam_role" "compliance_scanner" {
   name               = "${var.project_name}-compliance-scanner"
   assume_role_policy = data.aws_iam_policy_document.compliance_scanner_assume_role.json
@@ -122,14 +128,16 @@ resource "aws_iam_role" "compliance_scanner" {
   tags = var.tags
 }
 
+#Creates the AWS IAM role policy attachment resource named compliance scanner basic execution.
 resource "aws_iam_role_policy_attachment" "compliance_scanner_basic_execution" {
   role       = aws_iam_role.compliance_scanner.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+#Reads the AWS IAM policy document data source named compliance scanner permissions.
 data "aws_iam_policy_document" "compliance_scanner_permissions" {
   #checkov:skip=CKV_AWS_356:Compliance scanner requires read access across multiple AWS services
-  # EC2 — describe security groups in the project VPC
+  #EC2 — describe security groups in the project VPC
   statement {
     sid    = "EC2DescribeSecurityGroups"
     effect = "Allow"
@@ -140,7 +148,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # RDS — read instance configuration
+  #RDS — read instance configuration
   statement {
     sid    = "RDSDescribeInstances"
     effect = "Allow"
@@ -150,7 +158,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # S3 — read bucket security configuration (no data access)
+  #S3 — read bucket security configuration (no data access)
   statement {
     sid    = "S3BucketSecurityConfig"
     effect = "Allow"
@@ -163,7 +171,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # IAM — read policies, roles, and account summary (read-only)
+  #IAM — read policies, roles, and account summary (read-only)
   statement {
     sid    = "IAMReadOnly"
     effect = "Allow"
@@ -177,7 +185,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # EKS — describe cluster configuration
+  #EKS — describe cluster configuration
   statement {
     sid    = "EKSDescribeCluster"
     effect = "Allow"
@@ -187,7 +195,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # Secrets Manager — list and describe secrets (no GetSecretValue)
+  #Secrets Manager — list and describe secrets (no GetSecretValue)
   statement {
     sid    = "SecretsManagerListDescribe"
     effect = "Allow"
@@ -198,7 +206,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  # DynamoDB — read/write findings table and its GSIs
+  #DynamoDB — read/write findings table and its GSIs
   statement {
     sid    = "DynamoDBFindingsTable"
     effect = "Allow"
@@ -215,7 +223,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     ]
   }
 
-  # CloudWatch — publish compliance metrics
+  #CloudWatch — publish compliance metrics
   statement {
     sid    = "CloudWatchPutMetrics"
     effect = "Allow"
@@ -230,7 +238,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     }
   }
 
-  # SNS — publish finding alerts
+  #SNS — publish finding alerts
   statement {
     sid    = "SNSPublishAlerts"
     effect = "Allow"
@@ -241,6 +249,7 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
   }
 }
 
+#Creates the AWS IAM role policy resource named compliance scanner permissions.
 resource "aws_iam_role_policy" "compliance_scanner_permissions" {
   name   = "${var.project_name}-compliance-scanner-permissions"
   role   = aws_iam_role.compliance_scanner.id

@@ -1,3 +1,4 @@
+<!-- This document explains coverage gates for CloudOps. -->
 # Coverage Gates
 
 Source of truth for backlog #65, #67, #68, #69. Each implemented package has
