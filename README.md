@@ -142,10 +142,31 @@ Required status checks: `quality`, `plan` — blocks merges if Terraform fmt/val
 
 | Workflow | Trigger | What It Does |
 |----------|---------|-------------|
-| **App Pipeline** (`app.yml`) | Push to `main` on `apps/order-api/**` | Unit tests → Docker build+push to ECR → Trivy image scan → EKS rollout → integration tests (health, orders, metrics, traces) → auto-rollback on failure |
-| **Infra Pipeline** (`infra.yml`) | Push/PR to `main` on `*.tf`, `modules/**` | fmt/validate/lint/tfsec → Infracost cost diff (PR) → `terraform plan` → manual approval → staged `terraform apply` |
+| **App Pipeline** (`app.yml`) | Push to `main` on `apps/order-api/**` (gated) · PR · `workflow_dispatch` | Unit tests → Docker build+push to ECR → Trivy image scan → EKS rollout → integration tests (health, orders, metrics, traces) → auto-rollback on failure |
+| **Infra Pipeline** (`infra.yml`) | Push to `main` on `*.tf`, `modules/**` (gated) · PR · `workflow_dispatch` | fmt/validate/lint/tfsec → Infracost cost diff (PR) → `terraform plan` → manual approval → staged `terraform apply` |
+| **Library Pipeline** (`libraries.yml`) | Push to `main` on `libraries/**` (gated) · PR · `workflow_dispatch` | per-language tests + coverage gates → optional publish to CodeArtifact |
 | **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → teardown in dependency order |
 | **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC | `terraform plan -detailed-exitcode` → opens GitHub issue on drift, closes it when resolved |
+| **EKS Emergency Access** (`eks-emergency-access.yml`) | `workflow_dispatch` only | Break-glass: widens private EKS endpoint to a single CIDR via AWS API (state stays private) |
+
+#### Toggle: auto-run on merge to `main`
+
+`app.yml`, `infra.yml`, `libraries.yml` only fire on push-to-`main` when the
+repository variable `AUTO_RUN_ON_MERGE` is set to `"true"`. Pull requests and
+`workflow_dispatch` always fire regardless.
+
+```bash
+gh variable set AUTO_RUN_ON_MERGE --body true     # enable auto-run on merge
+gh variable delete AUTO_RUN_ON_MERGE              # disable (default)
+gh variable list                                   # check current value
+```
+
+UI path: Settings → Secrets and variables → Actions → Variables tab.
+
+When disabled, the entry jobs (`quality` in infra, `test` in app, the six
+`*-check` jobs + `publish-plan` in libraries) skip on push, and every
+downstream job cascade-skips through `needs:`. PR runs and manual dispatches
+are unaffected. This lets every promotion to dev/staging/prod be deliberate.
 
 ---
 

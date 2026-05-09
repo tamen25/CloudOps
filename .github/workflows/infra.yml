@@ -64,6 +64,13 @@ jobs:
   #─────────────────────────────────────────────────────────────────────────────
   quality:
     runs-on: ubuntu-latest
+    #Gate: push-to-main runs only fire when the repository variable
+    #AUTO_RUN_ON_MERGE is set to "true". PR + workflow_dispatch always run.
+    #Toggle: `gh variable set AUTO_RUN_ON_MERGE --body true` to enable;
+    #`gh variable delete AUTO_RUN_ON_MERGE` to disable. Default: disabled.
+    #All downstream jobs `needs: quality` (or chain through it), so disabling
+    #here cascade-skips the entire pipeline on merge.
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     permissions:
       contents: read
       security-events: write

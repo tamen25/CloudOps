@@ -65,9 +65,17 @@ env:
   CODEARTIFACT_DOMAIN_OWNER: ${{ vars.CODEARTIFACT_DOMAIN_OWNER }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+#Gate: push-to-main runs only fire when the repository variable
+#AUTO_RUN_ON_MERGE is set to "true". PR + workflow_dispatch always run.
+#Toggle: `gh variable set AUTO_RUN_ON_MERGE --body true` to enable;
+#`gh variable delete AUTO_RUN_ON_MERGE` to disable. Default: disabled.
+#The 6 *-check jobs and publish-plan are entry-level; the publish-* jobs
+#chain through `needs: publish-plan` so they cascade-skip when the gate
+#is closed.
 jobs:
   nodejs-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -99,6 +107,7 @@ jobs:
 
   java-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -130,6 +139,7 @@ jobs:
 
   dotnet-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -165,6 +175,7 @@ jobs:
 
   python-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -204,6 +215,7 @@ jobs:
 
   go-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -237,6 +249,7 @@ jobs:
 
   cpp-check:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -296,6 +309,7 @@ jobs:
 
   publish-plan:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     outputs:
       nodejs: ${{ steps.plan.outputs.nodejs }}
       java: ${{ steps.plan.outputs.java }}
