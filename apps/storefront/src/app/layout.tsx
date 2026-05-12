@@ -30,7 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="relative flex min-h-screen flex-col bg-bg-base">
+      <body className="isolate relative flex min-h-screen flex-col bg-bg-base">
         <AuroraBackdrop />
         <Navbar />
         <div className="relative flex-1">{children}</div>
