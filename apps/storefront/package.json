@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint src test scripts",
     "test": "tsx --test test/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/lib/auth.ts\" --test-coverage-include=\"src/lib/utils.ts\" --test-coverage-lines=80 --test-coverage-branches=70 --test-coverage-functions=80 test/*.test.ts",
     "audit": "npm audit --audit-level=high",
     "contract-check": "tsx scripts/contract-check.ts"
   },

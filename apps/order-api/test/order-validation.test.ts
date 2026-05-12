@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // Validator is internal to app.ts — exercise it through POST /order.
-const { createApp } = require('../src/app');
+const { createApp, validateOrderPayload } = require('../src/app');
 
 // Handles silent logger.
 function silentLogger() {
@@ -143,4 +143,16 @@ test('POST /order rejects oversize body (>64kb)', async () => {
   } finally {
     server.close();
   }
+});
+
+test('total must be a finite number — rejects NaN', () => {
+  const res = validateOrderPayload({ items: [{ sku: 'a', quantity: 1 }], total: Number.NaN });
+  assert.equal(res.ok, false);
+  if (res.ok === false) assert.match(res.error, /finite/);
+});
+
+test('total must be a finite number — rejects Infinity', () => {
+  const res = validateOrderPayload({ items: [{ sku: 'a', quantity: 1 }], total: Number.POSITIVE_INFINITY });
+  assert.equal(res.ok, false);
+  if (res.ok === false) assert.match(res.error, /finite/);
 });

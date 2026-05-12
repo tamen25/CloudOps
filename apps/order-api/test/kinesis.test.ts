@@ -62,3 +62,59 @@ test('publishOrderEvent surfaces the error message on send failure', async () =>
   assert.equal(res.ok, false);
   assert.match(res.error ?? '', /kinesis_unavailable/);
 });
+
+test('publishOrderEvent retries once on transient error and succeeds', async () => {
+  const stub = new StubKinesis();
+  stub.mode = 'first-throw-then-ok';
+  // Force the error type to look like ProvisionedThroughputExceeded
+  const { publishOrderEvent } = createPublisher({
+    client: {
+      sent: stub.sent,
+      send: async (cmd: any) => {
+        stub.calls += 1;
+        stub.sent.push(cmd.input ?? cmd);
+        if (stub.calls === 1) {
+          const err: any = new Error('throughput exceeded');
+          err.name = 'ProvisionedThroughputExceededException';
+          // Surface as the class instance the publisher checks for.
+          const { ProvisionedThroughputExceededException } = await import('@aws-sdk/client-kinesis');
+          throw Object.assign(new ProvisionedThroughputExceededException({ $metadata: {}, message: 'x' } as any), err);
+        }
+        return { SequenceNumber: 'seq-2', ShardId: 'shard-1' };
+      },
+    } as any,
+    streamName: 'orders-events-dev',
+  });
+  const res = await publishOrderEvent({ tenantId: 'acme', orderId: 'ORD-2', type: 'order.created' });
+  assert.equal(res.ok, true);
+  assert.equal(res.sequenceNumber, 'seq-2');
+  assert.equal(stub.calls, 2);
+});
+
+test('publishOrderEvent fails when retry also fails', async () => {
+  const calls = { n: 0 };
+  const { publishOrderEvent } = createPublisher({
+    client: {
+      send: async () => {
+        calls.n += 1;
+        const { ProvisionedThroughputExceededException } = await import('@aws-sdk/client-kinesis');
+        throw new ProvisionedThroughputExceededException({ $metadata: {}, message: 'still busy' } as any);
+      },
+    } as any,
+    streamName: 'orders-events-dev',
+    logger: { warn: () => undefined },
+  });
+  const res = await publishOrderEvent({ tenantId: 'acme', orderId: 'ORD-3', type: 'order.created' });
+  assert.equal(res.ok, false);
+  assert.match(res.error ?? '', /still busy|ProvisionedThroughput/);
+  assert.equal(calls.n, 2);
+});
+
+test('publishOrderEvent uses cached client when no override given', async () => {
+  // First call constructs a real client. We can't avoid the SDK constructor
+  // here; assert that the function does not throw with no `client` arg.
+  const { publishOrderEvent } = createPublisher({ streamName: '' });
+  const res = await publishOrderEvent({ tenantId: 'acme', orderId: 'ORD-x', type: 'order.created' });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, 'stream_not_configured');
+});

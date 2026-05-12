@@ -104,3 +104,64 @@ test('failed POST /order writes a failure audit event after rollback', async () 
     server.close();
   }
 });
+
+test('POST /order writes kinesis_publish_failed audit row when publisher returns ok=false', async () => {
+  const { pool, calls } = makeRecordingPool();
+  const publishOrderEvent = async () => ({ ok: false, error: 'transport down' });
+  const { app } = createApp({
+    pool,
+    logger: silentLogger(),
+    nodeEnv: 'test',
+    apiKey: 'shared',
+    rateLimitMax: 1000,
+    publishOrderEvent,
+  });
+  const server = await new Promise((r) => {
+    const s = app.listen(0, '127.0.0.1', () => r(s));
+  });
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'shared', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(res.status, 201);
+    // First audit row is order.create success; second is the kinesis fallback.
+    const audits = calls.filter((c) => /^INSERT INTO audit_events/i.test(c.sql));
+    assert.equal(audits.length, 2, 'expected success + kinesis_publish_failed audit rows');
+    const [, , action, , , , result, errorCode] = audits[1].params;
+    assert.equal(action, 'order.created');
+    assert.equal(result, 'kinesis_publish_failed');
+    assert.equal(errorCode, 'transport down');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /order swallows publisher throw and still returns 201', async () => {
+  const { pool } = makeRecordingPool();
+  const publishOrderEvent = async () => { throw new Error('boom'); };
+  const { app } = createApp({
+    pool,
+    logger: silentLogger(),
+    nodeEnv: 'test',
+    apiKey: 'shared',
+    rateLimitMax: 1000,
+    publishOrderEvent,
+  });
+  const server = await new Promise((r) => {
+    const s = app.listen(0, '127.0.0.1', () => r(s));
+  });
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'shared', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(res.status, 201);
+  } finally {
+    server.close();
+  }
+});

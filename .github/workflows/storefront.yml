@@ -74,9 +74,9 @@ jobs:
         working-directory: apps/storefront
         run: npm run contract-check
 
-      - name: Unit tests
+      - name: Unit tests with coverage gate
         working-directory: apps/storefront
-        run: npm test
+        run: npm run test:coverage
 
       - name: npm audit (high+)
         working-directory: apps/storefront

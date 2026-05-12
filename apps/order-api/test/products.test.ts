@@ -184,3 +184,149 @@ test('POST /_internal/admin/products creates product with valid HMAC', async () 
   assert.equal(res.body.id, 99);
   delete process.env.INTERNAL_HMAC_SECRET;
 });
+
+test('GET /products returns 500 when DB throws', async () => {
+  const pool = makePool([async () => { throw new Error('boom'); }]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const res = await request(app, 'GET', '/products', undefined, { 'x-tenant-id': 'acme' });
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error, 'Failed to list products');
+});
+
+test('GET /products/:id returns 500 when DB throws', async () => {
+  const pool = makePool([async () => { throw new Error('boom'); }]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const res = await request(app, 'GET', '/products/7', undefined, { 'x-tenant-id': 'acme' });
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error, 'Failed to fetch product');
+});
+
+test('POST /_internal/search rejects empty query', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: '' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: '' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'invalid_query');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('POST /_internal/search returns 500 on DB error', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([async () => { throw new Error('boom'); }]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: 'widget' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error, 'search_failed');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('POST /_internal/search rejects stale timestamp', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const timestamp = String(Date.now() - 10 * 60 * 1000);
+  const body = JSON.stringify({ q: 'widget' });
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 401);
+  assert.equal(res.body.error, 'hmac_stale');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('POST /_internal/admin/products validates required fields', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ sku: 'A', name: '' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/admin/products', { sku: 'A', name: '' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'invalid_product');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('PUT /_internal/admin/products/:id updates product', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([
+    async (sql) => {
+      assert.match(sql, /UPDATE products/);
+      return { rows: [{ id: 5 }] };
+    },
+  ]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ name: 'Renamed' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'PUT', '/_internal/admin/products/5', { name: 'Renamed' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 5);
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('PUT /_internal/admin/products/:id 404 when missing', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([async () => ({ rows: [] })]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ name: 'X' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'PUT', '/_internal/admin/products/99', { name: 'X' }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 404);
+  assert.equal(res.body.error, 'not_found');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('DELETE /_internal/admin/products/:id removes product', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([
+    async (sql) => {
+      assert.match(sql, /DELETE FROM products/);
+      return { rows: [{ id: 5 }] };
+    },
+  ]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({});
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'DELETE', '/_internal/admin/products/5', {}, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.id, 5);
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+test('POST /_internal/admin/products rejects malformed tenant header', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const pool = makePool([]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ sku: 'NEW-1', name: 'New', price_cents: 1000 });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'test-secret', timestamp, tenant: 'bad tenant', body });
+  const res = await request(app, 'POST', '/_internal/admin/products', { sku: 'NEW-1', name: 'New', price_cents: 1000 }, {
+    'x-cloudops-hmac': hmac, 'x-cloudops-timestamp': timestamp, 'x-cloudops-tenant': 'bad tenant',
+  });
+  assert.equal(res.status, 401);
+  assert.equal(res.body.error, 'invalid_tenant');
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
