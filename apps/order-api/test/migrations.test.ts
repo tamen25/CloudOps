@@ -70,8 +70,9 @@ test('runMigrations releases the client when no migrations are pending', async (
             { name: '003_rls.sql' },
             { name: '004_idempotency_keys.sql' },
             { name: '005_audit_events.sql' },
+            { name: '006_products.sql' },
           ],
-          rowCount: 5,
+          rowCount: 6,
         };
       }
       return { rows: [], rowCount: 0 };

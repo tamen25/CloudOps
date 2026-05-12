@@ -25,6 +25,8 @@ tags:
     description: Liveness and readiness probes
   - name: orders
     description: Order create / list endpoints
+  - name: products
+    description: Public-read catalog endpoints (tenant-scoped via JWT / X-Tenant-Id)
 security:
   - bearerAuth: []
   - apiKeyAuth: []
@@ -178,6 +180,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RateLimitError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  /products:
+    get:
+      summary: List active products for the caller's tenant
+      description: Paginated catalog list. Tenant resolved from JWT or `X-Tenant-Id`; Postgres RLS enforces the boundary.
+      operationId: listProducts
+      tags:
+        - products
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProductsResponse'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  /products/{id}:
+    get:
+      summary: Get a product by ID for the caller's tenant
+      description: Fetches a single active product by primary key. Tenant scoping enforced via RLS, so a request for another tenant's product returns 404.
+      operationId: getProduct
+      tags:
+        - products
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProductResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
         '500':
           description: Internal error
           content:
@@ -473,3 +535,52 @@ components:
         error:
           type: string
           example: Failed to process order
+    NotFoundError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          example: not_found
+    Product:
+      type: object
+      required:
+        - id
+        - sku
+        - name
+        - price_cents
+        - qty
+      properties:
+        id: { type: integer }
+        sku: { type: string, maxLength: 64 }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        price_cents: { type: integer, minimum: 0 }
+        qty: { type: integer, minimum: 0 }
+        image_key: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    ListProductsResponse:
+      type: object
+      required:
+        - success
+        - products
+      properties:
+        success: { type: boolean, enum: [true] }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        limit: { type: integer }
+        offset: { type: integer }
+    GetProductResponse:
+      type: object
+      required:
+        - success
+        - product
+      properties:
+        success: { type: boolean, enum: [true] }
+        product: { $ref: '#/components/schemas/Product' }

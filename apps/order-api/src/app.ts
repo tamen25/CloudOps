@@ -323,6 +323,152 @@ export function createApp({
     }
   });
 
+  // ── Products (closes backlog #81) ─────────────────────────────────────
+  // Public-read but tenant-scoped — every query routes through withTenant()
+  // so RLS enforces the boundary regardless of who calls. Internal routes
+  // (search + admin CRUD) are HMAC-gated and consumed by the search-gateway
+  // Lambda (#82) and admin UI (#88).
+  const PRODUCT_LIST_SQL = 'SELECT id, sku, name, description, price_cents, qty, image_key, created_at FROM products WHERE is_active = true ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2';
+  const PRODUCT_GET_SQL = 'SELECT id, sku, name, description, price_cents, qty, image_key, created_at FROM products WHERE id = $1 AND is_active = true';
+  const PRODUCT_SEARCH_SQL = "SELECT id, sku, name, price_cents, qty, image_key, ts_rank_cd(search_tsv, q) AS rank FROM products, plainto_tsquery('english', $1) AS q WHERE search_tsv @@ q AND is_active = true ORDER BY rank DESC, created_at DESC LIMIT $2";
+  const PRODUCT_INSERT_SQL = 'INSERT INTO products (tenant_id, sku, name, description, price_cents, qty, image_key, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id';
+  const PRODUCT_UPDATE_SQL = 'UPDATE products SET name = COALESCE($2, name), description = COALESCE($3, description), price_cents = COALESCE($4, price_cents), qty = COALESCE($5, qty), image_key = COALESCE($6, image_key), is_active = COALESCE($7, is_active), updated_at = NOW() WHERE id = $1 RETURNING id';
+  const PRODUCT_DELETE_SQL = 'DELETE FROM products WHERE id = $1 RETURNING id';
+
+  app.get('/products', ...authChain, async (req: RequestWithCtx, res: Response) => {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
+    const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_LIST_SQL, [limit, offset])
+      );
+      res.json({ success: true, products: result.rows, limit, offset });
+    } catch (err) {
+      logger.error({ err }, 'failed to list products');
+      res.status(500).json({ success: false, error: 'Failed to list products' });
+    }
+  });
+
+  app.get('/products/:id', ...authChain, async (req: RequestWithCtx, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ success: false, error: 'invalid_id' });
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_GET_SQL, [id])
+      );
+      if (!result.rows || result.rows.length === 0) return res.status(404).json({ success: false, error: 'not_found' });
+      res.json({ success: true, product: result.rows[0] });
+    } catch (err) {
+      logger.error({ err }, 'failed to fetch product');
+      res.status(500).json({ success: false, error: 'Failed to fetch product' });
+    }
+  });
+
+  // HMAC middleware for internal routes — signed by the search-gateway
+  // Lambda (#82) and admin UI server (#88). Secret rotates via External
+  // Secrets / Secrets Manager.
+  const internalHmacSecret = process.env.INTERNAL_HMAC_SECRET ?? '';
+  const requireInternalHmac = (req: Request, res: Response, next: NextFunction) => {
+    if (!internalHmacSecret) return res.status(503).json({ success: false, error: 'internal_hmac_not_configured' });
+    const header = req.get('x-cloudops-hmac');
+    const timestamp = req.get('x-cloudops-timestamp');
+    const tenantHeader = req.get('x-cloudops-tenant');
+    if (!header || !timestamp || !tenantHeader) return res.status(401).json({ success: false, error: 'hmac_missing' });
+    const ts = parseInt(timestamp, 10);
+    if (!Number.isInteger(ts) || Math.abs(Date.now() - ts) > 5 * 60 * 1000) {
+      return res.status(401).json({ success: false, error: 'hmac_stale' });
+    }
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(tenantHeader)) return res.status(401).json({ success: false, error: 'invalid_tenant' });
+    const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
+    const expected = createHash('sha256').update(`${timestamp}.${tenantHeader}.${raw}.${internalHmacSecret}`).digest('hex');
+    const given = Buffer.from(header, 'hex');
+    const exp = Buffer.from(expected, 'hex');
+    if (given.length !== exp.length || !timingSafeEqual(given, exp)) {
+      return res.status(401).json({ success: false, error: 'hmac_invalid' });
+    }
+    (req as RequestWithCtx).tenantId = tenantHeader;
+    next();
+  };
+
+  app.post('/_internal/search', requireInternalHmac, async (req: RequestWithCtx, res: Response) => {
+    const body = (req.body ?? {}) as { q?: unknown; limit?: unknown };
+    const q = typeof body.q === 'string' ? body.q.trim() : '';
+    if (!q || q.length > 200) return res.status(400).json({ success: false, error: 'invalid_query' });
+    const limit = Math.min(Math.max(Number.isInteger(body.limit) ? (body.limit as number) : 20, 1), 50);
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_SEARCH_SQL, [q, limit])
+      );
+      res.json({ success: true, results: result.rows, limit });
+    } catch (err) {
+      logger.error({ err }, 'internal search failed');
+      res.status(500).json({ success: false, error: 'search_failed' });
+    }
+  });
+
+  app.post('/_internal/admin/products', requireInternalHmac, async (req: RequestWithCtx, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const sku = typeof body.sku === 'string' ? body.sku : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    const priceCents = typeof body.price_cents === 'number' && Number.isInteger(body.price_cents) ? body.price_cents : null;
+    if (!sku || sku.length > 64 || !name || name.length > 1000 || priceCents === null || priceCents < 0) {
+      return res.status(400).json({ success: false, error: 'invalid_product' });
+    }
+    const description = typeof body.description === 'string' ? body.description : null;
+    const qty = Number.isInteger(body.qty) ? (body.qty as number) : 0;
+    const imageKey = typeof body.image_key === 'string' ? body.image_key : null;
+    const isActive = typeof body.is_active === 'boolean' ? body.is_active : true;
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_INSERT_SQL, [req.tenantId, sku, name, description, priceCents, qty, imageKey, isActive])
+      );
+      res.status(201).json({ success: true, id: result.rows?.[0]?.id ?? null });
+    } catch (err) {
+      logger.error({ err }, 'admin create product failed');
+      res.status(500).json({ success: false, error: 'create_failed' });
+    }
+  });
+
+  app.put('/_internal/admin/products/:id', requireInternalHmac, async (req: RequestWithCtx, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ success: false, error: 'invalid_id' });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const args = [
+      id,
+      typeof body.name === 'string' ? body.name : null,
+      typeof body.description === 'string' ? body.description : null,
+      Number.isInteger(body.price_cents) ? body.price_cents : null,
+      Number.isInteger(body.qty) ? body.qty : null,
+      typeof body.image_key === 'string' ? body.image_key : null,
+      typeof body.is_active === 'boolean' ? body.is_active : null,
+    ];
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_UPDATE_SQL, args)
+      );
+      if (!result.rows || result.rows.length === 0) return res.status(404).json({ success: false, error: 'not_found' });
+      res.json({ success: true, id });
+    } catch (err) {
+      logger.error({ err }, 'admin update product failed');
+      res.status(500).json({ success: false, error: 'update_failed' });
+    }
+  });
+
+  app.delete('/_internal/admin/products/:id', requireInternalHmac, async (req: RequestWithCtx, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ success: false, error: 'invalid_id' });
+    try {
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        client.query(PRODUCT_DELETE_SQL, [id])
+      );
+      if (!result.rows || result.rows.length === 0) return res.status(404).json({ success: false, error: 'not_found' });
+      res.json({ success: true, id });
+    } catch (err) {
+      logger.error({ err }, 'admin delete product failed');
+      res.status(500).json({ success: false, error: 'delete_failed' });
+    }
+  });
+
   app.get('/', (_req: Request, res: Response) => {
     res.status(200).json({
       service: serviceName,
@@ -333,6 +479,8 @@ export function createApp({
         metrics: 'GET /metrics',
         createOrder: 'POST /order',
         getOrders: 'GET /orders',
+        listProducts: 'GET /products',
+        getProduct: 'GET /products/:id',
       },
     });
   });

@@ -144,6 +144,16 @@ spec:
               value: "${OIDC_JWKS_URL}"
             - name: OIDC_REQUIRED_SCOPES
               value: "${OIDC_REQUIRED_SCOPES}"
+            #INTERNAL_HMAC_SECRET (closes backlog #81) — shared secret between
+            #order-api and the search-gateway Lambda + admin UI server. Empty
+            #disables `/_internal/*` routes (returns 503). Wired from
+            #Secrets Manager via External Secrets in non-dev envs.
+            - name: INTERNAL_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: order-api-internal
+                  key: hmac-secret
+                  optional: true
           livenessProbe:
             httpGet:
               path: /health
