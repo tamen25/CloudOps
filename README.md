@@ -191,6 +191,11 @@ All decisions are documented as Architecture Decision Records:
 | [ADR-013](docs/adr/013-private-eks-emergency-cidr.md) | Private EKS endpoint with emergency CIDR break-glass |
 | [ADR-014](docs/adr/014-rds-proxy-defer.md) | Defer RDS Proxy adoption (with explicit triggers) |
 | [ADR-015](docs/adr/015-order-api-idempotency.md) | order-api idempotency semantics (`Idempotency-Key`) |
+| [ADR-016](docs/adr/016-cognito-over-auth0.md) | Cognito User Pool over Auth0 / Clerk |
+| [ADR-017](docs/adr/017-lambda-eks-hybrid-search.md) | Lambda + EKS hybrid search |
+| [ADR-018](docs/adr/018-apigw-websocket-over-appsync.md) | API Gateway WebSocket over AppSync subscriptions |
+| [ADR-019](docs/adr/019-step-functions-checkout-saga.md) | Step Functions Standard for checkout saga |
+| [ADR-020](docs/adr/020-nextjs-on-eks-over-lambda-edge.md) | Next.js standalone on EKS over Lambda@Edge / OpenNext |
 
 ---
 

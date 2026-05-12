@@ -134,6 +134,60 @@ delete_s3_bucket() {
 }
 
 #─────────────────────────────────────────────────────────────────────────────
+#Step 0: Storefront pre-destroy (closes backlog #90).
+#Stops running Step Functions executions, empties the assets S3 bucket, and
+#truncates the cart Dynamo table so the platform `terraform destroy` does
+#not error out on non-empty resources. Best-effort — every block is
+#wrapped in `|| true` so missing resources do not abort the script.
+#─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}Step 0: Storefront pre-destroy (SF executions, S3 assets, cart Dynamo)${NC}"
+
+CHECKOUT_SM_NAME="${PROJECT_NAME}-$(get_tfvar 'environment')-checkout"
+SM_ARN="arn:aws:states:${REGION}:${ACCOUNT_ID}:stateMachine:${CHECKOUT_SM_NAME}"
+if aws stepfunctions describe-state-machine --state-machine-arn "$SM_ARN" --region "$REGION" >/dev/null 2>&1; then
+    aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter RUNNING --region "$REGION" \
+        --query 'executions[*].executionArn' --output text 2>/dev/null \
+        | tr '\t' '\n' \
+        | while read -r exec_arn; do
+            [ -z "$exec_arn" ] && continue
+            aws stepfunctions stop-execution --execution-arn "$exec_arn" --region "$REGION" >/dev/null 2>&1 || true
+        done
+    echo -e "${GREEN}  ✓ stopped running checkout executions${NC}"
+fi
+
+ASSETS_BUCKET="${PROJECT_NAME}-$(get_tfvar 'environment')-assets"
+if aws s3api head-bucket --bucket "$ASSETS_BUCKET" --region "$REGION" 2>/dev/null; then
+    aws s3 rm "s3://$ASSETS_BUCKET" --recursive --region "$REGION" >/dev/null 2>&1 || true
+    echo -e "${GREEN}  ✓ emptied $ASSETS_BUCKET${NC}"
+fi
+
+CART_TABLE="${PROJECT_NAME}-$(get_tfvar 'environment')-cart"
+if aws dynamodb describe-table --table-name "$CART_TABLE" --region "$REGION" >/dev/null 2>&1; then
+    #Soft truncate — TTL would clear the rest. Caps at 100 items to keep destroy fast.
+    aws dynamodb scan --table-name "$CART_TABLE" --projection-expression "pk, sk" \
+        --max-items 100 --region "$REGION" --output json 2>/dev/null \
+        | python3 -c "import json,sys;d=json.load(sys.stdin);
+for i in d.get('Items',[]):
+    print(json.dumps(i))" 2>/dev/null \
+        | while read -r row; do
+            [ -z "$row" ] && continue
+            aws dynamodb delete-item --table-name "$CART_TABLE" --key "$row" --region "$REGION" >/dev/null 2>&1 || true
+        done
+    echo -e "${GREEN}  ✓ truncated $CART_TABLE${NC}"
+fi
+
+WS_TABLE="${PROJECT_NAME}-$(get_tfvar 'environment')-ws-connections"
+if aws dynamodb describe-table --table-name "$WS_TABLE" --region "$REGION" >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ ws-connections will purge on table delete (TTL 24h)${NC}"
+fi
+
+KINESIS_STREAM="${PROJECT_NAME}-$(get_tfvar 'environment')-orders-events"
+if aws kinesis describe-stream --stream-name "$KINESIS_STREAM" --region "$REGION" >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ kinesis stream present (on-demand) — destroy proceeds${NC}"
+fi
+
+#─────────────────────────────────────────────────────────────────────────────
 #Step 1: Drain RDS first (5-15 min, blocks dependent destroys)
 #─────────────────────────────────────────────────────────────────────────────
 echo ""

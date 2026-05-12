@@ -818,6 +818,71 @@ In a partial failure, recover in this order to minimize impact:
 
 ---
 
+## 9.5 Storefront
+
+Storefront stories (#79-#89) extend the platform with: Next.js 15 RSC
+app at the apex domain, Cognito User Pool + Hosted UI at `auth.<domain>`,
+search Lambda + API GW HTTP at `search.<domain>`, WebSocket fanout at
+`ws.<domain>`, DynamoDB cart, Kinesis order events, Step Functions
+checkout saga, S3 + CloudFront assets at `assets.<domain>`.
+
+### 9.5.1 Cognito user signup
+
+Test user provisioning + `custom:tenant_id`:
+
+```bash
+POOL_ID=$(terraform -chdir=stacks/platform output -raw cognito_user_pool_id)
+aws cognito-idp admin-create-user \
+  --user-pool-id "$POOL_ID" \
+  --username demo@example.com \
+  --user-attributes Name=email,Value=demo@example.com \
+                    Name=email_verified,Value=true \
+                    Name=custom:tenant_id,Value=acme \
+  --temporary-password 'TempPass!2026'
+
+# Promote to admin (gates /admin/* in the storefront):
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id "$POOL_ID" --username demo@example.com --group-name admin
+```
+
+### 9.5.2 Storefront secrets rotation
+
+| Secret | Source | Rotation cadence |
+|---|---|---|
+| `INTERNAL_HMAC_SECRET` | Secrets Manager → External Secrets | 90 days (manual) |
+| `WS_TOKEN_SECRET` | Secrets Manager → External Secrets | 30 days |
+| OTel bearer token | SSM Parameter Store | tied to keepers (#38) |
+| Cognito client (no secret — PKCE) | n/a | n/a |
+
+### 9.5.3 WebSocket troubleshooting
+
+- **Storefront flips to `reconnecting`** — check `/api/ws-token` response
+  body; if it's `503 ws_token_disabled` the deployment is missing
+  `WS_TOKEN_SECRET`.
+- **`$connect` returns 401** — JWT failed verification. Re-check the
+  Cognito issuer + audience env vars on the `ws-connect` Lambda.
+- **Updates stop arriving but `$connect` still works** — fanout Lambda
+  hit the DLQ. Check `aws lambda get-function-event-invoke-config`.
+- **Stale connections** — fanout drops 410 Gone rows automatically.
+  Force-prune via `aws dynamodb scan --filter-expression "expires_at <
+  :now"` if needed.
+
+### 9.5.4 Checkout saga compensation
+
+- **Find a failed execution:**
+  ```bash
+  aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter FAILED
+  aws stepfunctions get-execution-history --execution-arn "$EXEC_ARN" --query 'events[*].[type, stateEnteredEventDetails.name]'
+  ```
+- **Replay a stuck execution:** use the same execution name with a
+  fresh `StartExecutionCommand` — the order-api idempotency table
+  ensures the order is not duplicated.
+- **Manual compensation:** if Step Functions failed past the order
+  creation but the customer was charged, `PATCH /order/:id` with
+  `status=cancelled` and write a corresponding `audit_events` row.
+
+---
+
 ## 10. Glossary
 
 **Availability SLI** — The proportion of HTTP requests to order-api that return a non-5xx response. Expressed as a decimal (0.999 = 99.9%). Measured by Prometheus recording rule `job:slo_availability:ratio_rate5m`.
