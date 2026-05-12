@@ -154,3 +154,12 @@ output "storefront_cart_irsa_role_arn" {
   description = "Annotate apps/storefront/k8s/serviceaccount.yaml with this ARN."
   value       = var.enable_storefront_cart ? module.storefront_cart[0].irsa_role_arn : null
 }
+
+#─── Storefront Events (#85) ───────────────────────────────────────────────
+output "storefront_events_stream_name" {
+  value = var.enable_storefront_events ? module.storefront_events[0].stream_name : null
+}
+
+output "storefront_events_stream_arn" {
+  value = var.enable_storefront_events ? module.storefront_events[0].stream_arn : null
+}

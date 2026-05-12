@@ -4,6 +4,7 @@ import pino from 'pino';
 import rateLimit from 'express-rate-limit';
 import { createHash, timingSafeEqual } from 'crypto';
 import { Registry, Counter, Histogram } from 'prom-client';
+import type { OrderEvent } from './kinesis';
 
 // Order payload schema (closes backlog #44).
 const MAX_ITEMS = 50;
@@ -81,6 +82,7 @@ export interface CreateAppArgs {
   rateLimitWindowMs?: number;
   rateLimitMax?: number;
   metrics?: ReturnType<typeof createMetrics>;
+  publishOrderEvent?: (event: OrderEvent) => Promise<{ ok: boolean; error?: string }>;
 }
 
 type RequestWithCtx = Request & { user?: any; tenantId?: string };
@@ -97,6 +99,7 @@ export function createApp({
   rateLimitWindowMs = 60 * 1000,
   rateLimitMax = 60,
   metrics = createMetrics({ serviceName, environment: nodeEnv }),
+  publishOrderEvent,
 }: CreateAppArgs) {
   if (!pool || typeof pool.query !== 'function') {
     throw new Error('createApp requires a pool with a query() function');
@@ -293,6 +296,30 @@ export function createApp({
       });
 
       logger.info({ orderId, total, tenant: req.tenantId, status: outcome.status }, 'order request processed');
+      // Post-commit Kinesis publish (closes backlog #85). Outside withTenant
+      // so a Kinesis outage cannot roll back the order. Failure writes a
+      // best-effort audit row with result='kinesis_publish_failed'.
+      if (publishOrderEvent && outcome.status === 201) {
+        try {
+          const publish = await publishOrderEvent({
+            tenantId: req.tenantId!,
+            orderId,
+            type: 'order.created',
+            payload: { total, item_count: items.length },
+          });
+          if (!publish.ok) {
+            logger.warn({ orderId, err: publish.error }, 'kinesis publish failed; writing audit row');
+            try {
+              await withTenant(req.tenantId!, (client) =>
+                client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.created', requestId, orderId, 201, 'kinesis_publish_failed', publish.error ?? null, JSON.stringify({ total, item_count: items.length })]));
+            } catch (auditErr) {
+              logger.error({ auditErr }, 'failed to write audit event for kinesis_publish_failed');
+            }
+          }
+        } catch (publishErr) {
+          logger.error({ publishErr }, 'unexpected kinesis publish error');
+        }
+      }
       res.status(outcome.status).json(outcome.body);
     } catch (err) {
       logger.error({ err }, 'failed to create order');

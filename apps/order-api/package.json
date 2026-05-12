@@ -19,6 +19,7 @@
   "author": "CloudOps",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-kinesis": "^3.511.0",
     "@aws-sdk/client-secrets-manager": "^3.511.0",
     "@opentelemetry/auto-instrumentations-node": "^0.49.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.52.0",

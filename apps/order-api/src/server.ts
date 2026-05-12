@@ -10,6 +10,7 @@ import type { Server } from 'http';
 import { createApp, createMetricsApp, createMetrics } from './app';
 import { assertAuthConfigured } from './auth-config';
 import { createJwtVerifier } from './auth-jwt';
+import { createPublisher } from './kinesis';
 
 const PORT = Number(process.env.PORT) || 3000;
 const METRICS_PORT = Number(process.env.METRICS_PORT) || 9090;
@@ -127,6 +128,7 @@ initDatabase()
     assertAuthConfigured({ apiKey, jwtVerifier, nodeEnv: NODE_ENV, logger });
 
     const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
+    const publisher = createPublisher({ awsRegion: AWS_REGION, logger });
     const { app } = createApp({
       pool,
       logger,
@@ -135,6 +137,7 @@ initDatabase()
       apiKey,
       jwtVerifier,
       metrics,
+      publishOrderEvent: publisher.publishOrderEvent,
     });
 
     server = app.listen(PORT, '0.0.0.0', () => {

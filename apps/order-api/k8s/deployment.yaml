@@ -154,6 +154,10 @@ spec:
                   name: order-api-internal
                   key: hmac-secret
                   optional: true
+            #Kinesis order-event stream (closes backlog #85). Empty disables
+            #publishing — app continues to commit orders normally.
+            - name: KINESIS_STREAM_NAME
+              value: "${KINESIS_STREAM_NAME}"
           livenessProbe:
             httpGet:
               path: /health

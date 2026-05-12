@@ -686,3 +686,28 @@ variable "enable_storefront_cart" {
   type        = bool
   default     = false
 }
+
+#─── Storefront Events (#85) ───────────────────────────────────────────────
+variable "enable_storefront_events" {
+  description = "Provision the orders-events Kinesis Data Stream + publisher policy."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_events_retention_hours" {
+  description = "Kinesis stream retention in hours (AWS minimum 24, maximum 8760)."
+  type        = number
+  default     = 24
+}
+
+variable "storefront_events_kms_key_arn" {
+  description = "KMS CMK ARN. Empty falls back to alias/aws/kinesis."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_events_order_api_role_name" {
+  description = "Name (not ARN) of the order-api IRSA role to attach the publisher policy to. Sourced from the cluster stack output."
+  type        = string
+  default     = ""
+}

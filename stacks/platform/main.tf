@@ -433,6 +433,20 @@ module "storefront_search" {
   depends_on = [module.auth]
 }
 
+#Wires the storefront-events module (closes backlog #85).
+module "storefront_events" {
+  count  = var.enable_storefront_events ? 1 : 0
+  source = "../../modules/storefront-events"
+
+  project_name             = var.project_name
+  environment              = var.environment
+  retention_hours          = var.storefront_events_retention_hours
+  kms_key_arn              = var.storefront_events_kms_key_arn
+  order_api_irsa_role_name = var.storefront_events_order_api_role_name
+
+  tags = local.common_tags
+}
+
 #Wires the storefront-cart module (closes backlog #84).
 module "storefront_cart" {
   count  = var.enable_storefront_cart ? 1 : 0
