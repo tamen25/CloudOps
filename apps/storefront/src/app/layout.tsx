@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toast";
+import { Navbar } from "@/components/site/Navbar";
+import { Footer } from "@/components/site/Footer";
 import "@/styles/globals.css";
 
 const inter = Inter({
@@ -27,8 +29,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body>
-        {children}
+      <body className="flex min-h-screen flex-col">
+        <Navbar />
+        <div className="flex-1">{children}</div>
+        <Footer />
         <Toaster />
       </body>
     </html>

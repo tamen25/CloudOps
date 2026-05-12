@@ -77,3 +77,46 @@
 .animate-pulse-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.animate-float-slow {
+  animation: float-slow 4s ease-in-out infinite;
+}
+
+/* Hero radial glow */
+.hero-glow {
+  background:
+    radial-gradient(60% 50% at 20% 0%, rgba(45, 212, 191, 0.18) 0%, rgba(45, 212, 191, 0) 60%),
+    radial-gradient(50% 40% at 95% 10%, rgba(83, 155, 245, 0.12) 0%, rgba(83, 155, 245, 0) 65%),
+    radial-gradient(60% 60% at 50% 100%, rgba(94, 234, 212, 0.08) 0%, rgba(94, 234, 212, 0) 70%);
+}
+
+/* Faint dot grid background */
+.dot-grid {
+  background-image: radial-gradient(rgba(205, 217, 229, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Brand glow on hover (used on hero CTA + feature cards) */
+.brand-glow:hover {
+  box-shadow:
+    0 0 0 1px rgba(45, 212, 191, 0.45),
+    0 10px 40px -10px rgba(45, 212, 191, 0.45);
+}
+
+/* Gradient text utility for the hero word "production-shaped" */
+.gradient-text-brand {
+  background: linear-gradient(120deg, #5eead4 0%, #2dd4bf 50%, #14b8a6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
