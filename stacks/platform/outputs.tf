@@ -94,3 +94,44 @@ output "self_healing_dashboard_url" {
 output "order_api_url" {
   value = "https://api.${var.domain_name}"
 }
+
+#─── Auth (#80) ────────────────────────────────────────────────────────────
+output "cognito_user_pool_id" {
+  value = var.enable_auth ? module.auth[0].user_pool_id : null
+}
+
+output "cognito_user_pool_arn" {
+  value = var.enable_auth ? module.auth[0].user_pool_arn : null
+}
+
+output "cognito_issuer_url" {
+  description = "Feed into OIDC_ISSUER on storefront + order-api."
+  value       = var.enable_auth ? module.auth[0].issuer_url : null
+}
+
+output "cognito_jwks_url" {
+  description = "Feed into OIDC_JWKS_URL on storefront + order-api."
+  value       = var.enable_auth ? module.auth[0].jwks_url : null
+}
+
+output "cognito_storefront_client_id" {
+  description = "Feed into OIDC_AUDIENCE + OIDC_CLIENT_ID on storefront."
+  value       = var.enable_auth ? module.auth[0].storefront_client_id : null
+}
+
+output "cognito_hosted_ui_domain" {
+  value = var.enable_auth ? module.auth[0].hosted_ui_domain : null
+}
+
+output "cognito_hosted_ui_authorize_url" {
+  value = var.enable_auth ? module.auth[0].hosted_ui_authorize_url : null
+}
+
+output "cognito_hosted_ui_token_url" {
+  value     = var.enable_auth ? module.auth[0].hosted_ui_token_url : null
+  sensitive = false
+}
+
+output "cognito_hosted_ui_logout_url" {
+  value = var.enable_auth ? module.auth[0].hosted_ui_logout_url : null
+}

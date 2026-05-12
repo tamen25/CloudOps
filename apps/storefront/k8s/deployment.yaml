@@ -76,6 +76,10 @@ spec:
               value: "${OIDC_HOSTED_UI}"
             - name: OIDC_CLIENT_ID
               value: "${OIDC_CLIENT_ID}"
+            #STOREFRONT_ORIGIN is the public origin (https://<domain>) — used
+            #as the OAuth `redirect_uri` base. Derived in CI from tfvars.
+            - name: STOREFRONT_ORIGIN
+              value: "${STOREFRONT_ORIGIN}"
             #Cart Dynamo (wired in #84; empty until then).
             - name: CART_TABLE_NAME
               value: "${CART_TABLE_NAME}"

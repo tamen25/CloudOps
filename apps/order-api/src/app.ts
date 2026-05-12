@@ -192,10 +192,17 @@ export function createApp({
 
   const TENANT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
   const TENANT_FALLBACK_ENVS = new Set(['dev', 'test', 'local']);
-  // Requires tenant.
+  // Requires tenant. Cognito custom attributes ship as `custom:tenant_id`
+  // (backlog #80); generic JWTs may use plain `tenant_id`. Either claim is
+  // accepted so the order-api works with both Cognito and other IdPs.
   const requireTenant = (req: RequestWithCtx, res: Response, next: NextFunction) => {
     let tenantId = '';
-    if (req.user && typeof req.user.tenant_id === 'string') {
+    const customClaim = req.user
+      ? (req.user as Record<string, unknown>)['custom:tenant_id']
+      : undefined;
+    if (req.user && typeof customClaim === 'string') {
+      tenantId = customClaim;
+    } else if (req.user && typeof req.user.tenant_id === 'string') {
       tenantId = req.user.tenant_id;
     } else if (!req.user) {
       const header = req.get('x-tenant-id');

@@ -526,3 +526,76 @@ variable "cost_anomaly_threshold_percent" {
   type    = number
   default = 20
 }
+
+#─── Auth (#80) — Cognito User Pool + Hosted UI ────────────────────────────
+variable "enable_auth" {
+  description = "Provision Cognito User Pool + storefront app client (closes backlog #80)."
+  type        = bool
+  default     = false
+}
+
+variable "auth_route53_zone_id" {
+  description = "Route 53 hosted zone ID for the apex domain. Required when auth_create_hosted_ui_domain=true."
+  type        = string
+  default     = ""
+}
+
+variable "auth_create_hosted_ui_domain" {
+  description = "Provision the custom Hosted UI domain auth.<domain>. Requires an ACM cert in us-east-1."
+  type        = bool
+  default     = false
+}
+
+variable "auth_hosted_ui_acm_certificate_arn" {
+  description = "ACM certificate ARN (us-east-1) for auth.<domain>."
+  type        = string
+  default     = ""
+}
+
+variable "auth_callback_urls" {
+  description = "OAuth callback URLs. Defaults to https://<domain>/auth/callback when empty."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_logout_urls" {
+  description = "OAuth sign-out URLs. Defaults to https://<domain>/ when empty."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_password_minimum_length" {
+  description = "Cognito password policy minimum length."
+  type        = number
+  default     = 12
+}
+
+variable "auth_mfa_configuration" {
+  description = "Cognito MFA mode: OFF / ON / OPTIONAL."
+  type        = string
+  default     = "OPTIONAL"
+}
+
+variable "auth_id_token_validity_minutes" {
+  description = "ID token validity in minutes."
+  type        = number
+  default     = 60
+}
+
+variable "auth_access_token_validity_minutes" {
+  description = "Access token validity in minutes."
+  type        = number
+  default     = 60
+}
+
+variable "auth_refresh_token_validity_days" {
+  description = "Refresh token validity in days."
+  type        = number
+  default     = 30
+}
+
+variable "auth_admin_group_name" {
+  description = "Cognito group name that gates storefront /admin/* routes."
+  type        = string
+  default     = "admin"
+}

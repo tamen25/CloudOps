@@ -369,3 +369,33 @@ module "self_healing" {
 
   depends_on = [module.observability]
 }
+
+#Wires the auth module (Cognito User Pool + Hosted UI) — closes backlog #80.
+module "auth" {
+  count  = var.enable_auth ? 1 : 0
+  source = "../../modules/auth"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  domain_name             = var.domain_name
+  route53_zone_id         = var.auth_route53_zone_id
+  create_hosted_ui_domain = var.auth_create_hosted_ui_domain
+  hosted_ui_acm_certificate_arn = var.auth_hosted_ui_acm_certificate_arn
+
+  callback_urls = length(var.auth_callback_urls) > 0 ? var.auth_callback_urls : [
+    "https://${var.domain_name}/auth/callback",
+  ]
+  logout_urls = length(var.auth_logout_urls) > 0 ? var.auth_logout_urls : [
+    "https://${var.domain_name}/",
+  ]
+
+  password_minimum_length       = var.auth_password_minimum_length
+  mfa_configuration             = var.auth_mfa_configuration
+  id_token_validity_minutes     = var.auth_id_token_validity_minutes
+  access_token_validity_minutes = var.auth_access_token_validity_minutes
+  refresh_token_validity_days   = var.auth_refresh_token_validity_days
+  admin_group_name              = var.auth_admin_group_name
+
+  tags = local.common_tags
+}

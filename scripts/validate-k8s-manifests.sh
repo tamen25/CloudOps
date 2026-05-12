@@ -111,6 +111,7 @@ OIDC_AUDIENCE= \
 OIDC_JWKS_URL= \
 OIDC_HOSTED_UI= \
 OIDC_CLIENT_ID= \
+STOREFRONT_ORIGIN= \
 OTEL_ENDPOINT=https://otel.example.com \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
   apps/storefront/node_modules/.bin/tsx apps/storefront/scripts/render-k8s.ts apps/storefront/k8s "$STOREFRONT_OUT"
