@@ -27,6 +27,7 @@ LAMBDA_DIRS=(
   "modules/storefront-realtime/lambdas/connect"
   "modules/storefront-realtime/lambdas/disconnect"
   "modules/storefront-realtime/lambdas/fanout"
+  "modules/storefront-checkout/lambdas/email"
 )
 
 #Handles needs install.

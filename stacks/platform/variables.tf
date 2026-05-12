@@ -742,3 +742,28 @@ variable "storefront_realtime_fanout_dlq_arn" {
   type        = string
   default     = ""
 }
+
+#─── Storefront Checkout (#87) ─────────────────────────────────────────────
+variable "enable_storefront_checkout" {
+  description = "Provision Step Functions checkout saga + SQS email queue + email Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_checkout_order_api_url" {
+  description = "Internal URL Step Functions calls for POST /order (e.g. http://order-api.cloudops.svc.cluster.local:3000)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_checkout_ses_source_email" {
+  description = "Verified SES identity for order-confirmation emails. Empty disables SES + email policy."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_checkout_storefront_irsa_role_name" {
+  description = "Storefront IRSA role name to grant states:StartExecution. Empty skips the inline policy attachment."
+  type        = string
+  default     = ""
+}

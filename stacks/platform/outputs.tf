@@ -172,3 +172,12 @@ output "storefront_realtime_ws_url" {
 output "storefront_realtime_connections_table_name" {
   value = var.enable_storefront_realtime ? module.storefront_realtime[0].connections_table_name : null
 }
+
+#─── Storefront Checkout (#87) ─────────────────────────────────────────────
+output "storefront_checkout_state_machine_arn" {
+  value = var.enable_storefront_checkout ? module.storefront_checkout[0].state_machine_arn : null
+}
+
+output "storefront_checkout_email_queue_url" {
+  value = var.enable_storefront_checkout ? module.storefront_checkout[0].email_queue_url : null
+}

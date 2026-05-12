@@ -433,6 +433,21 @@ module "storefront_search" {
   depends_on = [module.auth]
 }
 
+#Wires the storefront-checkout module (closes backlog #87).
+module "storefront_checkout" {
+  count  = var.enable_storefront_checkout ? 1 : 0
+  source = "../../modules/storefront-checkout"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  region                    = var.region
+  order_api_url             = var.storefront_checkout_order_api_url
+  ses_source_email          = var.storefront_checkout_ses_source_email
+  storefront_irsa_role_name = var.storefront_checkout_storefront_irsa_role_name
+
+  tags = local.common_tags
+}
+
 #Wires the storefront-realtime module (closes backlog #86).
 module "storefront_realtime" {
   count  = var.enable_storefront_realtime ? 1 : 0
