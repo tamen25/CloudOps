@@ -1,0 +1,96 @@
+#Default-deny ingress + default-deny egress for the storefront namespace,
+#then explicit allows. Mirrors the order-api pattern (closes backlog #79).
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storefront-default-deny-ingress
+  namespace: "${STOREFRONT_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: storefront
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storefront-default-deny-egress
+  namespace: "${STOREFRONT_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: storefront
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storefront-allow-http
+  namespace: "${STOREFRONT_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: storefront
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        #ALB ENIs (public subnets) + every other in-VPC pod.
+        - ipBlock:
+            cidr: "${VPC_CIDR}"
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storefront-allow-egress
+  namespace: "${STOREFRONT_NAMESPACE}"
+spec:
+  podSelector:
+    matchLabels:
+      app: storefront
+  policyTypes:
+    - Egress
+  egress:
+    #DNS — kube-dns / CoreDNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    #order-api (cluster-internal Service) on port 3000.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "${ORDER_API_NAMESPACE}"
+      ports:
+        - protocol: TCP
+          port: 3000
+    #AWS APIs (Cognito JWKS, Dynamo, SSM, STS, Step Functions) over 443 —
+    #to anywhere. Replace with VPC-endpoint CIDRs when interface endpoints
+    #are provisioned.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    #OTel collector in the monitoring namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318

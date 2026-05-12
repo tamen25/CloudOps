@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #This script runs validate Kubernetes manifests automation for CloudOps.
-#Renders apps/order-api/k8s with placeholder values and runs schema
-#validation locally — closes backlog #35. Mirrors what
+#Renders apps/order-api/k8s AND apps/storefront/k8s with placeholder values
+#and runs schema validation locally — closes backlog #35 + #79. Mirrors what
 #.github/workflows/app.yml `manifest-validation` does in CI, so app
 #manifest changes can be smoke-tested without pushing a PR.
 #
@@ -23,8 +23,6 @@ cd "$REPO_ROOT"
 TOOLS_DIR="$REPO_ROOT/.tools"
 KUBECONFORM_VERSION="${KUBECONFORM_VERSION:-0.6.7}"
 KUBE_VERSION="${KUBE_VERSION:-1.32.0}"
-RENDER_OUT="$(mktemp -d -t order-api-k8s-XXXXXX)"
-trap 'rm -rf "$RENDER_OUT"' EXIT
 
 mkdir -p "$TOOLS_DIR"
 
@@ -63,8 +61,11 @@ if [ ! -x "$KUBECONFORM_BIN" ]; then
   )
 fi
 
-#── 2. Render manifests with placeholder env vars ────────────────────────────
-echo "Rendering apps/order-api/k8s → $RENDER_OUT ..."
+#── 2a. Render apps/order-api/k8s ────────────────────────────────────────────
+ORDER_OUT="$(mktemp -d -t order-api-k8s-XXXXXX)"
+trap 'rm -rf "$ORDER_OUT" "${STOREFRONT_OUT:-}"' EXIT
+
+echo "Rendering apps/order-api/k8s → $ORDER_OUT ..."
 ORDER_API_NAMESPACE=cloudops \
 ORDER_API_SERVICE_ACCOUNT=order-api \
 ORDER_API_IRSA_ROLE_ARN=arn:aws:iam::123456789012:role/cloudops-order-api-irsa \
@@ -84,16 +85,52 @@ OIDC_ISSUER= \
 OIDC_AUDIENCE= \
 OIDC_JWKS_URL= \
 OIDC_REQUIRED_SCOPES= \
-  apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$RENDER_OUT"
+  apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$ORDER_OUT"
+
+#── 2b. Render apps/storefront/k8s ───────────────────────────────────────────
+STOREFRONT_OUT="$(mktemp -d -t storefront-k8s-XXXXXX)"
+
+echo "Rendering apps/storefront/k8s → $STOREFRONT_OUT ..."
+STOREFRONT_NAMESPACE=storefront \
+STOREFRONT_SERVICE_ACCOUNT=storefront \
+STOREFRONT_IRSA_ROLE_ARN=arn:aws:iam::123456789012:role/cloudops-storefront-irsa \
+STOREFRONT_IMAGE=example.com/storefront@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+STOREFRONT_ENVIRONMENT=dev \
+STOREFRONT_HOST=example.com \
+STOREFRONT_API_BASE_URL=https://api.example.com \
+STOREFRONT_SEARCH_BASE_URL=https://search.example.com \
+STOREFRONT_WS_BASE_URL=wss://ws.example.com \
+CART_TABLE_NAME= \
+CHECKOUT_STATE_MACHINE_ARN= \
+ORDER_API_NAMESPACE=cloudops \
+AWS_REGION=us-east-1 \
+ACM_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/example \
+VPC_CIDR=10.0.0.0/16 \
+OIDC_ISSUER= \
+OIDC_AUDIENCE= \
+OIDC_JWKS_URL= \
+OIDC_HOSTED_UI= \
+OIDC_CLIENT_ID= \
+OTEL_ENDPOINT=https://otel.example.com \
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
+  apps/storefront/node_modules/.bin/tsx apps/storefront/scripts/render-k8s.ts apps/storefront/k8s "$STOREFRONT_OUT"
 
 #── 3. Validate ──────────────────────────────────────────────────────────────
-echo "Running kubeconform (kubernetes ${KUBE_VERSION}) ..."
+echo "Running kubeconform (kubernetes ${KUBE_VERSION}) on order-api..."
 "$KUBECONFORM_BIN" \
   -strict \
   -kubernetes-version "$KUBE_VERSION" \
   -ignore-missing-schemas \
   -summary \
-  "$RENDER_OUT"/*.yaml
+  "$ORDER_OUT"/*.yaml
+
+echo "Running kubeconform (kubernetes ${KUBE_VERSION}) on storefront..."
+"$KUBECONFORM_BIN" \
+  -strict \
+  -kubernetes-version "$KUBE_VERSION" \
+  -ignore-missing-schemas \
+  -summary \
+  "$STOREFRONT_OUT"/*.yaml
 
 echo
-echo "✓ Manifests pass kubeconform"
+echo "✓ Manifests pass kubeconform (order-api + storefront)"

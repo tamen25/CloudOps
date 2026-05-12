@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: storefront
+  namespace: "${STOREFRONT_NAMESPACE}"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "${ACM_CERT_ARN}"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    #Storefront joins the shared `cloudops` ALB group at order=20 (lower
+    #priority than order-api at 30). Same ALB, single WAF, single DNS record.
+    alb.ingress.kubernetes.io/group.name: cloudops
+    alb.ingress.kubernetes.io/group.order: "20"
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  rules:
+    - host: "${STOREFRONT_HOST}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: storefront
+                port:
+                  number: 3000

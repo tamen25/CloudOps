@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: "${STOREFRONT_NAMESPACE}"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: storefront
+  template:
+    metadata:
+      labels:
+        app: storefront
+    spec:
+      serviceAccountName: "${STOREFRONT_SERVICE_ACCOUNT}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        #Next.js standalone writes a small amount to /tmp + /app/.next/cache
+        #at runtime; back both with emptyDir so readOnlyRootFilesystem holds.
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+      containers:
+        - name: storefront
+          image: "${STOREFRONT_IMAGE}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
+          ports:
+            - name: http
+              containerPort: 3000
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: NODE_ENV
+              value: "${STOREFRONT_ENVIRONMENT}"
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: AWS_REGION
+              value: "${AWS_REGION}"
+            #API endpoints — exposed to the server-side code only (no NEXT_PUBLIC_ prefix).
+            - name: API_BASE_URL
+              value: "${STOREFRONT_API_BASE_URL}"
+            - name: SEARCH_BASE_URL
+              value: "${STOREFRONT_SEARCH_BASE_URL}"
+            #Cognito OIDC (wired in #80; empty until then).
+            - name: OIDC_ISSUER
+              value: "${OIDC_ISSUER}"
+            - name: OIDC_AUDIENCE
+              value: "${OIDC_AUDIENCE}"
+            - name: OIDC_JWKS_URL
+              value: "${OIDC_JWKS_URL}"
+            - name: OIDC_HOSTED_UI
+              value: "${OIDC_HOSTED_UI}"
+            - name: OIDC_CLIENT_ID
+              value: "${OIDC_CLIENT_ID}"
+            #Cart Dynamo (wired in #84; empty until then).
+            - name: CART_TABLE_NAME
+              value: "${CART_TABLE_NAME}"
+            #Checkout Step Functions (wired in #87; empty until then).
+            - name: CHECKOUT_STATE_MACHINE_ARN
+              value: "${CHECKOUT_STATE_MACHINE_ARN}"
+            #WebSocket endpoint (wired in #86; empty until then).
+            - name: WS_BASE_URL
+              value: "${STOREFRONT_WS_BASE_URL}"
+            #Session cookie HMAC + WS-token HMAC secrets. Sourced via External
+            #Secrets in non-dev envs; in dev these stay empty.
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: storefront-secrets
+                  key: session-secret
+                  optional: true
+            - name: WS_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: storefront-secrets
+                  key: ws-token-secret
+                  optional: true
+            #OTel — wired through the same SSM-published config as order-api
+            #(closes backlog #61).
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "${OTEL_ENDPOINT}"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: otel-auth
+                  key: api-key
+            - name: OTEL_SERVICE_NAME
+              value: "storefront"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "${OTEL_RESOURCE_ATTRIBUTES}"
+            - name: K8S_NAMESPACE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CONTAINER_NAME
+              value: "storefront"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

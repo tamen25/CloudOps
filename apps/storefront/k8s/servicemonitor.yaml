@@ -1,0 +1,22 @@
+#Prometheus ServiceMonitor — kube-prometheus-stack picks this up via the
+#`release: prometheus` label. Storefront emits Prom metrics on /api/metrics
+#in #89 when @vercel/otel wires Prom export. Until then, scrape returns an
+#empty exposition (no failure).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: storefront
+  namespace: "${STOREFRONT_NAMESPACE}"
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: storefront
+  endpoints:
+    - port: http
+      path: /api/metrics
+      interval: 30s
+  namespaceSelector:
+    matchNames:
+      - "${STOREFRONT_NAMESPACE}"
