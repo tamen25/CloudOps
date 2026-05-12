@@ -399,3 +399,36 @@ module "auth" {
 
   tags = local.common_tags
 }
+
+#Wires the storefront-search module (closes backlog #82).
+#Requires enable_auth=true so the JWT authorizer has a User Pool to point at.
+module "storefront_search" {
+  count  = var.enable_storefront_search ? 1 : 0
+  source = "../../modules/storefront-search"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = var.region
+  domain_name  = var.domain_name
+
+  create_custom_domain = var.storefront_search_create_custom_domain
+  search_subdomain     = var.storefront_search_subdomain
+  acm_certificate_arn  = var.storefront_search_acm_certificate_arn
+  route53_zone_id      = local.route53_zone_id
+
+  cognito_user_pool_id = var.enable_auth ? module.auth[0].user_pool_id : ""
+  cognito_client_id    = var.enable_auth ? module.auth[0].storefront_client_id : ""
+
+  private_subnet_ids          = var.storefront_search_private_subnet_ids
+  vpc_link_security_group_ids = var.storefront_search_lambda_extra_sgs
+  order_api_internal_url      = var.storefront_search_order_api_internal_url
+  hmac_secret_parameter_name  = var.storefront_search_hmac_parameter_name
+
+  lambda_memory_mb       = var.storefront_search_lambda_memory_mb
+  lambda_timeout_seconds = var.storefront_search_lambda_timeout_seconds
+  otel_endpoint          = var.storefront_search_otel_endpoint
+
+  tags = local.common_tags
+
+  depends_on = [module.auth]
+}

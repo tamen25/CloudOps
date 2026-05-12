@@ -135,3 +135,12 @@ output "cognito_hosted_ui_token_url" {
 output "cognito_hosted_ui_logout_url" {
   value = var.enable_auth ? module.auth[0].hosted_ui_logout_url : null
 }
+
+#─── Storefront Search (#82) ───────────────────────────────────────────────
+output "storefront_search_api_endpoint" {
+  value = var.enable_storefront_search ? module.storefront_search[0].api_endpoint : null
+}
+
+output "storefront_search_lambda_arn" {
+  value = var.enable_storefront_search ? module.storefront_search[0].lambda_role_arn : null
+}

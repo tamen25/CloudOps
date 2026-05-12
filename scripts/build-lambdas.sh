@@ -23,6 +23,7 @@ LAMBDA_DIRS=(
   "modules/security/lambda_function/auto_remediation"
   "modules/security/lambda_function/compliance_scanner"
   "modules/security/lambda_function/kube_bench_processor"
+  "modules/storefront-search/lambda_function"
 )
 
 #Handles needs install.

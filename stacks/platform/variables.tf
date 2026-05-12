@@ -599,3 +599,70 @@ variable "auth_admin_group_name" {
   type        = string
   default     = "admin"
 }
+
+#─── Storefront Search (#82) ───────────────────────────────────────────────
+variable "enable_storefront_search" {
+  description = "Provision API GW HTTP + Lambda search-gateway → Express _internal/search."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_search_create_custom_domain" {
+  description = "Create the search.<domain_name> custom domain + Route 53 alias."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_search_subdomain" {
+  description = "Subdomain for the search API."
+  type        = string
+  default     = "search"
+}
+
+variable "storefront_search_acm_certificate_arn" {
+  description = "ACM certificate ARN for search.<domain_name> (same region as the API GW)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_private_subnet_ids" {
+  description = "Private subnet IDs for the Lambda VPC config. Default empty — set when enable_storefront_search=true."
+  type        = list(string)
+  default     = []
+}
+
+variable "storefront_search_lambda_extra_sgs" {
+  description = "Extra security group IDs to attach to the Lambda ENIs (e.g. an in-cluster SG that order-api allows on 3000)."
+  type        = list(string)
+  default     = []
+}
+
+variable "storefront_search_order_api_internal_url" {
+  description = "Internal URL Lambda calls to reach Express _internal/search (e.g. http://order-api.cloudops.svc.cluster.local:3000)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_hmac_parameter_name" {
+  description = "SSM Parameter Store name (SecureString) holding the order-api INTERNAL_HMAC_SECRET. Empty disables SSM read; Lambda falls back to its own env var."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_lambda_memory_mb" {
+  description = "Lambda memory size."
+  type        = number
+  default     = 256
+}
+
+variable "storefront_search_lambda_timeout_seconds" {
+  description = "Lambda timeout."
+  type        = number
+  default     = 5
+}
+
+variable "storefront_search_otel_endpoint" {
+  description = "OTEL_EXPORTER_OTLP_ENDPOINT for the Lambda."
+  type        = string
+  default     = ""
+}
