@@ -101,6 +101,7 @@ STOREFRONT_HOST=example.com \
 STOREFRONT_API_BASE_URL=https://api.example.com \
 STOREFRONT_SEARCH_BASE_URL=https://search.example.com \
 STOREFRONT_WS_BASE_URL=wss://ws.example.com \
+NEXT_PUBLIC_WS_BASE_URL=wss://ws.example.com \
 CART_TABLE_NAME= \
 CHECKOUT_STATE_MACHINE_ARN= \
 ORDER_API_NAMESPACE=cloudops \

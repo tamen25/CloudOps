@@ -86,8 +86,10 @@ spec:
             #Checkout Step Functions (wired in #87; empty until then).
             - name: CHECKOUT_STATE_MACHINE_ARN
               value: "${CHECKOUT_STATE_MACHINE_ARN}"
-            #WebSocket endpoint (wired in #86; empty until then).
+            #WebSocket endpoint (#86). The browser uses NEXT_PUBLIC_WS_BASE_URL.
             - name: WS_BASE_URL
+              value: "${STOREFRONT_WS_BASE_URL}"
+            - name: NEXT_PUBLIC_WS_BASE_URL
               value: "${STOREFRONT_WS_BASE_URL}"
             #Session cookie HMAC + WS-token HMAC secrets. Sourced via External
             #Secrets in non-dev envs; in dev these stay empty.

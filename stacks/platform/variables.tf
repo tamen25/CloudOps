@@ -711,3 +711,34 @@ variable "storefront_events_order_api_role_name" {
   type        = string
   default     = ""
 }
+
+#─── Storefront Realtime (#86) ─────────────────────────────────────────────
+variable "enable_storefront_realtime" {
+  description = "Provision API GW WebSocket + 3 Lambdas + connection-registry Dynamo."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_realtime_create_custom_domain" {
+  description = "Create ws.<domain_name> custom domain + Route 53 alias."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_realtime_ws_subdomain" {
+  description = "Subdomain for the WebSocket API."
+  type        = string
+  default     = "ws"
+}
+
+variable "storefront_realtime_acm_certificate_arn" {
+  description = "ACM certificate ARN for ws.<domain_name> (same region as the WS API)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_realtime_fanout_dlq_arn" {
+  description = "Optional SQS DLQ ARN for the fanout Lambda. Empty disables DLQ."
+  type        = string
+  default     = ""
+}

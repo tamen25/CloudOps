@@ -433,6 +433,32 @@ module "storefront_search" {
   depends_on = [module.auth]
 }
 
+#Wires the storefront-realtime module (closes backlog #86).
+module "storefront_realtime" {
+  count  = var.enable_storefront_realtime ? 1 : 0
+  source = "../../modules/storefront-realtime"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = var.region
+  domain_name  = var.domain_name
+
+  create_custom_domain = var.storefront_realtime_create_custom_domain
+  ws_subdomain         = var.storefront_realtime_ws_subdomain
+  acm_certificate_arn  = var.storefront_realtime_acm_certificate_arn
+  route53_zone_id      = local.route53_zone_id
+
+  cognito_issuer_url = var.enable_auth ? module.auth[0].issuer_url : ""
+  cognito_client_id  = var.enable_auth ? module.auth[0].storefront_client_id : ""
+
+  kinesis_stream_arn = var.enable_storefront_events ? module.storefront_events[0].stream_arn : ""
+  fanout_dlq_arn     = var.storefront_realtime_fanout_dlq_arn
+
+  tags = local.common_tags
+
+  depends_on = [module.auth, module.storefront_events]
+}
+
 #Wires the storefront-events module (closes backlog #85).
 module "storefront_events" {
   count  = var.enable_storefront_events ? 1 : 0

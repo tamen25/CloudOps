@@ -62,7 +62,11 @@ modules/**/lambda_function_*/*.zip
 modules/slo/lambda_function.zip
 modules/**/lambda_function/**/node_modules/
 modules/**/lambda_function_*/node_modules/
+modules/**/lambdas/**/node_modules/
+modules/**/lambda_function/**/*.zip
+modules/**/lambdas/**/*.zip
 modules/slo/lambda_function/node_modules/
+modules/**/.build/
 
 # Local tool downloads (kubeconform, etc) — closes backlog #35.
 .tools/

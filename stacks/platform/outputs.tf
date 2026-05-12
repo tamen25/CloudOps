@@ -163,3 +163,12 @@ output "storefront_events_stream_name" {
 output "storefront_events_stream_arn" {
   value = var.enable_storefront_events ? module.storefront_events[0].stream_arn : null
 }
+
+#─── Storefront Realtime (#86) ─────────────────────────────────────────────
+output "storefront_realtime_ws_url" {
+  value = var.enable_storefront_realtime ? module.storefront_realtime[0].ws_url : null
+}
+
+output "storefront_realtime_connections_table_name" {
+  value = var.enable_storefront_realtime ? module.storefront_realtime[0].connections_table_name : null
+}
