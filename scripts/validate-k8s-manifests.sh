@@ -104,6 +104,7 @@ STOREFRONT_WS_BASE_URL=wss://ws.example.com \
 NEXT_PUBLIC_WS_BASE_URL=wss://ws.example.com \
 CART_TABLE_NAME= \
 CHECKOUT_STATE_MACHINE_ARN= \
+ASSETS_BUCKET_NAME= \
 ORDER_API_NAMESPACE=cloudops \
 AWS_REGION=us-east-1 \
 ACM_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/example \

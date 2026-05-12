@@ -433,6 +433,25 @@ module "storefront_search" {
   depends_on = [module.auth]
 }
 
+#Wires the storefront-assets module (closes backlog #88).
+module "storefront_assets" {
+  count  = var.enable_storefront_assets ? 1 : 0
+  source = "../../modules/storefront-assets"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  region                    = var.region
+  domain_name               = var.domain_name
+  create_custom_domain      = var.storefront_assets_create_custom_domain
+  assets_subdomain          = var.storefront_assets_subdomain
+  acm_certificate_arn       = var.storefront_assets_acm_certificate_arn
+  route53_zone_id           = local.route53_zone_id
+  storefront_irsa_role_name = var.storefront_assets_storefront_irsa_role_name
+  sharp_layer_arn           = var.storefront_assets_sharp_layer_arn
+
+  tags = local.common_tags
+}
+
 #Wires the storefront-checkout module (closes backlog #87).
 module "storefront_checkout" {
   count  = var.enable_storefront_checkout ? 1 : 0

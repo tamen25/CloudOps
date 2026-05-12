@@ -767,3 +767,40 @@ variable "storefront_checkout_storefront_irsa_role_name" {
   type        = string
   default     = ""
 }
+
+#─── Storefront Assets (#88) ───────────────────────────────────────────────
+variable "enable_storefront_assets" {
+  description = "Provision the S3 assets bucket + CloudFront + image-resize Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_assets_create_custom_domain" {
+  description = "Create assets.<domain_name> CloudFront alias + Route 53 record."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_assets_subdomain" {
+  description = "Subdomain for the CDN."
+  type        = string
+  default     = "assets"
+}
+
+variable "storefront_assets_acm_certificate_arn" {
+  description = "ACM certificate ARN in us-east-1 (CloudFront requirement)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_assets_storefront_irsa_role_name" {
+  description = "Storefront IRSA role name — grants s3:PutObject on originals/ for presigned uploads."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_assets_sharp_layer_arn" {
+  description = "Optional Lambda layer ARN providing sharp + libvips arm64. Empty packages sharp in the Lambda zip."
+  type        = string
+  default     = ""
+}
