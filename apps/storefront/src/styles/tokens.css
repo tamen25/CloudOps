@@ -68,4 +68,13 @@
   --danger: #e5534b;
   --info: #539bf5;
   --focus-ring: rgb(45 212 191 / 0.6);
+
+  /* Aurora accent palette — used ONLY by the decorative backdrop, never
+   * for text or interactive elements (keeps AA boundaries intact). */
+  --aurora-teal: #2dd4bf;
+  --aurora-cyan: #22d3ee;
+  --aurora-indigo: #818cf8;
+  --aurora-violet: #a78bfa;
+  --aurora-rose: #fb7185;
+  --aurora-amber: #fbbf24;
 }

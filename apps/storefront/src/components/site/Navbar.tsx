@@ -5,7 +5,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border-muted/60 bg-bg-base/80 backdrop-blur supports-[backdrop-filter]:bg-bg-base/60">
+    <header className="sticky top-0 z-40 border-b border-border-muted/60 bg-bg-base/70 backdrop-blur-xl supports-[backdrop-filter]:bg-bg-base/55">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-brand-500/15 text-brand-500">

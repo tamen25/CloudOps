@@ -92,11 +92,11 @@
   animation: float-slow 4s ease-in-out infinite;
 }
 
-/* Hero radial glow */
+/* Hero radial glow — kept for the CTA card. */
 .hero-glow {
   background:
     radial-gradient(60% 50% at 20% 0%, rgba(45, 212, 191, 0.18) 0%, rgba(45, 212, 191, 0) 60%),
-    radial-gradient(50% 40% at 95% 10%, rgba(83, 155, 245, 0.12) 0%, rgba(83, 155, 245, 0) 65%),
+    radial-gradient(50% 40% at 95% 10%, rgba(167, 139, 250, 0.14) 0%, rgba(167, 139, 250, 0) 65%),
     radial-gradient(60% 60% at 50% 100%, rgba(94, 234, 212, 0.08) 0%, rgba(94, 234, 212, 0) 70%);
 }
 
@@ -104,6 +104,72 @@
 .dot-grid {
   background-image: radial-gradient(rgba(205, 217, 229, 0.08) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+/* Hairline grid for inset cards. */
+.line-grid {
+  background-image:
+    linear-gradient(rgba(205, 217, 229, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(205, 217, 229, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Conic sweep used inside one accent card. */
+.conic-brand {
+  background: conic-gradient(
+    from 200deg at 50% 50%,
+    rgba(45, 212, 191, 0.12) 0deg,
+    rgba(167, 139, 250, 0.10) 90deg,
+    rgba(34, 211, 238, 0.10) 180deg,
+    rgba(94, 234, 212, 0.12) 270deg,
+    rgba(45, 212, 191, 0.12) 360deg
+  );
+}
+
+/* Aurora orb — single coloured blob the AuroraBackdrop composes 6× with
+ * mix-blend-mode: screen for additive-light mesh-gradient feel. */
+.aurora-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(60px, -40px, 0) scale(1.08); }
+  66%      { transform: translate3d(-30px, 50px, 0) scale(0.95); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-50px, 40px, 0) scale(1.1); }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  40%      { transform: translate3d(45px, 35px, 0) scale(0.92); }
+  80%      { transform: translate3d(-25px, -55px, 0) scale(1.06); }
+}
+
+.animate-drift-a { animation: drift-a 22s ease-in-out infinite; }
+.animate-drift-b { animation: drift-b 28s ease-in-out infinite; }
+.animate-drift-c { animation: drift-c 18s ease-in-out infinite; }
+
+/* SVG noise overlay — kills gradient banding on big screens. */
+.aurora-noise {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.18'/></svg>");
+  background-size: 200px 200px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift-a,
+  .animate-drift-b,
+  .animate-drift-c,
+  .animate-pulse-dot,
+  .animate-float-slow {
+    animation: none !important;
+  }
 }
 
 /* Brand glow on hover (used on hero CTA + feature cards) */
