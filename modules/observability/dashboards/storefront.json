@@ -1,0 +1,176 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "iteration": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Checkout success rate (SLO 99%)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.95 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(aws_states_executions_succeeded_sum[5m])) / sum(rate(aws_states_executions_started_sum[5m]))"
+        }
+      ]
+    },
+    {
+      "title": "Search latency p95 (target <200ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 9, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(aws_apigateway_latency_p99[5m])))",
+          "legendFormat": "API GW p95"
+        }
+      ]
+    },
+    {
+      "title": "WS connection success (SLO 99%)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 9, "x": 15, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.97 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - (sum(rate(aws_lambda_errors_sum{function_name=~\".+ws-connect\"}[5m])) / sum(rate(aws_lambda_invocations_sum{function_name=~\".+ws-connect\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "title": "Storefront RSC duration (p50/p95/p99)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "p50",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"storefront\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"storefront\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"storefront\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "search-gateway cache hit rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(search_gateway_cache_hits_total[5m])) / sum(rate(search_gateway_requests_total[5m]))"
+        }
+      ]
+    },
+    {
+      "title": "WS active connections",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 13 },
+      "targets": [
+        { "refId": "A", "expr": "sum(ws_active_connections)" }
+      ]
+    },
+    {
+      "title": "Kinesis iterator age (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (stream_name) (aws_kinesis_get_records_iteratorage_milliseconds_maximum)"
+        }
+      ]
+    },
+    {
+      "title": "SF executions by status",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 13 },
+      "targets": [
+        { "refId": "ok", "expr": "sum(rate(aws_states_executions_succeeded_sum[5m]))", "legendFormat": "succeeded" },
+        { "refId": "fail", "expr": "sum(rate(aws_states_executions_failed_sum[5m]))", "legendFormat": "failed" },
+        { "refId": "abort", "expr": "sum(rate(aws_states_executions_aborted_sum[5m]))", "legendFormat": "aborted" }
+      ]
+    },
+    {
+      "title": "CloudFront 4xx/5xx rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        { "refId": "4xx", "expr": "avg(aws_cloudfront_4xx_error_rate_average) / 100", "legendFormat": "4xx" },
+        { "refId": "5xx", "expr": "avg(aws_cloudfront_5xx_error_rate_average) / 100", "legendFormat": "5xx" }
+      ]
+    },
+    {
+      "title": "Cognito sign-in success",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 18 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(aws_cognito_signin_successes_sum[5m]))" }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["storefront", "cloudops"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CloudOps Storefront",
+  "uid": "cloudops-storefront",
+  "version": 1
+}

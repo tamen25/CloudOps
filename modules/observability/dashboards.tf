@@ -16,6 +16,23 @@ resource "kubernetes_config_map" "order_api_red" {
   depends_on = [helm_release.grafana]
 }
 
+#Storefront dashboard (closes backlog #89). Single board covers RSC duration,
+#search-gateway cache hit rate, WS health, SF execution status, Kinesis lag,
+#CloudFront error rate, Cognito sign-in success.
+resource "kubernetes_config_map" "storefront" {
+  metadata {
+    name      = "storefront-dashboard"
+    namespace = "monitoring"
+    labels    = { grafana_dashboard = "1" }
+  }
+
+  data = {
+    "storefront.json" = file("${path.module}/dashboards/storefront.json")
+  }
+
+  depends_on = [helm_release.grafana]
+}
+
 #Creates the kubernetes config map resource named kubernetes overview.
 resource "kubernetes_config_map" "kubernetes_overview" {
   metadata {
