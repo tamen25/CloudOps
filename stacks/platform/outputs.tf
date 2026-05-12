@@ -144,3 +144,13 @@ output "storefront_search_api_endpoint" {
 output "storefront_search_lambda_arn" {
   value = var.enable_storefront_search ? module.storefront_search[0].lambda_role_arn : null
 }
+
+#─── Storefront Cart (#84) ─────────────────────────────────────────────────
+output "storefront_cart_table_name" {
+  value = var.enable_storefront_cart ? module.storefront_cart[0].table_name : null
+}
+
+output "storefront_cart_irsa_role_arn" {
+  description = "Annotate apps/storefront/k8s/serviceaccount.yaml with this ARN."
+  value       = var.enable_storefront_cart ? module.storefront_cart[0].irsa_role_arn : null
+}

@@ -432,3 +432,19 @@ module "storefront_search" {
 
   depends_on = [module.auth]
 }
+
+#Wires the storefront-cart module (closes backlog #84).
+module "storefront_cart" {
+  count  = var.enable_storefront_cart ? 1 : 0
+  source = "../../modules/storefront-cart"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  oidc_provider_arn         = local.oidc_provider_arn
+  oidc_provider_url         = local.oidc_provider_url
+  service_account_namespace = var.storefront_namespace
+  service_account_name      = var.storefront_service_account
+
+  tags = local.common_tags
+}

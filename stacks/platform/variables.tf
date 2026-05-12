@@ -666,3 +666,23 @@ variable "storefront_search_otel_endpoint" {
   type        = string
   default     = ""
 }
+
+#─── Storefront shared namespace / SA names (used by cart, checkout, etc.) ─
+variable "storefront_namespace" {
+  description = "Kubernetes namespace where the storefront Deployment lives."
+  type        = string
+  default     = "storefront"
+}
+
+variable "storefront_service_account" {
+  description = "Kubernetes ServiceAccount name for the storefront pod."
+  type        = string
+  default     = "storefront"
+}
+
+#─── Storefront Cart (#84) ─────────────────────────────────────────────────
+variable "enable_storefront_cart" {
+  description = "Provision the cloudops-cart-<env> Dynamo table + IRSA role."
+  type        = bool
+  default     = false
+}

@@ -62,7 +62,13 @@ export default async function ProductDetailPage({
             <span className="font-mono text-3xl">
               {moneyFormatter.format(product.price_cents / 100)}
             </span>
-            <AddToCartButton productId={product.id} disabled={outOfStock} />
+            <AddToCartButton
+              productId={product.id}
+              sku={product.sku}
+              name={product.name}
+              priceCents={product.price_cents}
+              disabled={outOfStock}
+            />
           </div>
           <dl className="grid grid-cols-2 gap-4 text-xs text-fg-muted">
             <div>
