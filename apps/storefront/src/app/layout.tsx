@@ -3,7 +3,6 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toast";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
-import { AuroraBackdrop } from "@/components/site/AuroraBackdrop";
 import "@/styles/globals.css";
 
 const inter = Inter({
@@ -30,10 +29,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="isolate relative flex min-h-screen flex-col bg-bg-base">
-        <AuroraBackdrop />
+      <body className="flex min-h-screen flex-col bg-bg-base">
         <Navbar />
-        <div className="relative flex-1">{children}</div>
+        <div className="flex-1">{children}</div>
         <Footer />
         <Toaster />
       </body>

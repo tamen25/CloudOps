@@ -12,14 +12,15 @@
  */
 
 @theme {
-  /* Surfaces */
-  --color-bg-base: #1c2128;
-  --color-bg-raised: #22272e;
-  --color-bg-elev: #2d333b;
+  /* Surfaces — deep dark, GitHub Dark base. Deeper than Dimmed on purpose
+   * so the teal brand accent stays punchy and cards read as raised. */
+  --color-bg-base: #0d1117;
+  --color-bg-raised: #161b22;
+  --color-bg-elev: #21262d;
 
   /* Borders */
-  --color-border-default: #444c56;
-  --color-border-muted: #373e47;
+  --color-border-default: #30363d;
+  --color-border-muted: #21262d;
 
   /* Text */
   --color-fg-base: #cdd9e5;
@@ -51,11 +52,11 @@
 }
 
 :root {
-  --bg-base: #1c2128;
-  --bg-raised: #22272e;
-  --bg-elev: #2d333b;
-  --border-default: #444c56;
-  --border-muted: #373e47;
+  --bg-base: #0d1117;
+  --bg-raised: #161b22;
+  --bg-elev: #21262d;
+  --border-default: #30363d;
+  --border-muted: #21262d;
   --fg-base: #cdd9e5;
   --fg-muted: #909dab;
   --fg-subtle: #687480;
@@ -68,13 +69,4 @@
   --danger: #e5534b;
   --info: #539bf5;
   --focus-ring: rgb(45 212 191 / 0.6);
-
-  /* Aurora accent palette — used ONLY by the decorative backdrop, never
-   * for text or interactive elements (keeps AA boundaries intact). */
-  --aurora-teal: #2dd4bf;
-  --aurora-cyan: #22d3ee;
-  --aurora-indigo: #818cf8;
-  --aurora-violet: #a78bfa;
-  --aurora-rose: #fb7185;
-  --aurora-amber: #fbbf24;
 }
