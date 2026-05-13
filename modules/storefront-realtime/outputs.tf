@@ -1,6 +1,6 @@
 output "ws_url" {
   description = "WebSocket URL. Custom domain wins when create_custom_domain=true."
-  value = var.create_custom_domain ? "wss://${var.ws_subdomain}.${var.domain_name}" : "wss://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/${aws_apigatewayv2_stage.default.name}"
+  value       = var.create_custom_domain ? "wss://${var.ws_subdomain}.${var.domain_name}" : "wss://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/${aws_apigatewayv2_stage.default.name}"
 }
 
 output "ws_api_id" {

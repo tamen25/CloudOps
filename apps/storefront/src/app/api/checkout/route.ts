@@ -30,6 +30,9 @@ export async function POST() {
   if (!tenant) return NextResponse.json({ error: "tenant_missing" }, { status: 400 });
 
   const cartKey = await resolveCartKey();
+  if (!cartKey) {
+    return NextResponse.json({ error: "cart_empty" }, { status: 400 });
+  }
   const cartItems = await getCart(cartKey);
   if (cartItems.length === 0) {
     return NextResponse.json({ error: "cart_empty" }, { status: 400 });

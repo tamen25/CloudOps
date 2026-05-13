@@ -43,7 +43,13 @@ export interface CartKey {
   isGuest: boolean;
 }
 
-export async function resolveCartKey(): Promise<CartKey> {
+/**
+ * Read-only cart-key resolution. Safe to call from Server Components.
+ * Returns `null` when the visitor has no session and no guest cookie yet —
+ * callers should treat that as an empty cart. Cookie mutation lives in
+ * `ensureCartKey()` (Route Handler / Server Action only).
+ */
+export async function resolveCartKey(): Promise<CartKey | null> {
   const jar = await cookies();
   const session = jar.get(sessionCookieName)?.value;
   if (session) {
@@ -57,17 +63,31 @@ export async function resolveCartKey(): Promise<CartKey> {
       };
     }
   }
-  let guestId = jar.get(GUEST_COOKIE)?.value;
-  if (!guestId) {
-    guestId = crypto.randomUUID();
-    jar.set(GUEST_COOKIE, guestId, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 30 * 24 * 60 * 60,
-    });
+  const guestId = jar.get(GUEST_COOKIE)?.value;
+  if (guestId) {
+    return { pk: `GUEST#${guestId}`, tenant: null, isGuest: true };
   }
+  return null;
+}
+
+/**
+ * Write-capable cart-key resolution. Mints + sets the guest cookie when
+ * neither a session nor an existing guest cookie is found. MUST be called
+ * from a Route Handler or Server Action — Next App Router rejects cookie
+ * mutation from RSC pages.
+ */
+export async function ensureCartKey(): Promise<CartKey> {
+  const existing = await resolveCartKey();
+  if (existing) return existing;
+  const jar = await cookies();
+  const guestId = crypto.randomUUID();
+  jar.set(GUEST_COOKIE, guestId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 30 * 24 * 60 * 60,
+  });
   return { pk: `GUEST#${guestId}`, tenant: null, isGuest: true };
 }
 

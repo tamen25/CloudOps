@@ -26,15 +26,15 @@ data "archive_file" "fanout" {
 }
 
 resource "aws_lambda_function" "connect" {
-  function_name = "${local.name_prefix}-ws-connect"
-  role          = aws_iam_role.connect.arn
-  handler       = "index.handler"
-  runtime       = "nodejs22.x"
-  architectures = ["arm64"]
-  filename      = data.archive_file.connect.output_path
+  function_name    = "${local.name_prefix}-ws-connect"
+  role             = aws_iam_role.connect.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.connect.output_path
   source_code_hash = data.archive_file.connect.output_base64sha256
-  timeout       = 5
-  memory_size   = 256
+  timeout          = 5
+  memory_size      = 256
   environment {
     variables = {
       CONNECTIONS_TABLE_NAME = aws_dynamodb_table.connections.name
@@ -53,15 +53,15 @@ resource "aws_lambda_function" "connect" {
 }
 
 resource "aws_lambda_function" "disconnect" {
-  function_name = "${local.name_prefix}-ws-disconnect"
-  role          = aws_iam_role.disconnect.arn
-  handler       = "index.handler"
-  runtime       = "nodejs22.x"
-  architectures = ["arm64"]
-  filename      = data.archive_file.disconnect.output_path
+  function_name    = "${local.name_prefix}-ws-disconnect"
+  role             = aws_iam_role.disconnect.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.disconnect.output_path
   source_code_hash = data.archive_file.disconnect.output_base64sha256
-  timeout       = 5
-  memory_size   = 256
+  timeout          = 5
+  memory_size      = 256
   environment {
     variables = {
       CONNECTIONS_TABLE_NAME = aws_dynamodb_table.connections.name
@@ -77,19 +77,19 @@ resource "aws_lambda_function" "disconnect" {
 }
 
 resource "aws_lambda_function" "fanout" {
-  function_name = "${local.name_prefix}-ws-fanout"
-  role          = aws_iam_role.fanout.arn
-  handler       = "index.handler"
-  runtime       = "nodejs22.x"
-  architectures = ["arm64"]
-  filename      = data.archive_file.fanout.output_path
+  function_name    = "${local.name_prefix}-ws-fanout"
+  role             = aws_iam_role.fanout.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.fanout.output_path
   source_code_hash = data.archive_file.fanout.output_base64sha256
-  timeout       = 30
-  memory_size   = 512
+  timeout          = 30
+  memory_size      = 512
   environment {
     variables = {
-      CONNECTIONS_TABLE_NAME    = aws_dynamodb_table.connections.name
-      WS_MANAGEMENT_ENDPOINT    = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/${aws_apigatewayv2_stage.default.name}"
+      CONNECTIONS_TABLE_NAME = aws_dynamodb_table.connections.name
+      WS_MANAGEMENT_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/${aws_apigatewayv2_stage.default.name}"
     }
   }
   dynamic "dead_letter_config" {

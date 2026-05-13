@@ -47,15 +47,15 @@ data "archive_file" "resize" {
 }
 
 resource "aws_lambda_function" "resize" {
-  function_name = "${local.name_prefix}-image-resize"
-  role          = aws_iam_role.resize.arn
-  handler       = "index.handler"
-  runtime       = "nodejs22.x"
-  architectures = ["arm64"]
-  filename      = data.archive_file.resize.output_path
+  function_name    = "${local.name_prefix}-image-resize"
+  role             = aws_iam_role.resize.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.resize.output_path
   source_code_hash = data.archive_file.resize.output_base64sha256
-  timeout       = 30
-  memory_size   = 1024
+  timeout          = 30
+  memory_size      = 1024
 
   layers = var.sharp_layer_arn != "" ? [var.sharp_layer_arn] : []
 

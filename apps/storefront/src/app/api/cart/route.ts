@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   addToCart,
   cartCount,
+  ensureCartKey,
   getCart,
   resolveCartKey,
 } from "@/lib/cart";
@@ -12,9 +13,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const key = await resolveCartKey();
   if (req.nextUrl.searchParams.get("count") === "1") {
-    return NextResponse.json({ count: await cartCount(key) });
+    return NextResponse.json({ count: key ? await cartCount(key) : 0 });
   }
-  return NextResponse.json({ items: await getCart(key) });
+  return NextResponse.json({ items: key ? await getCart(key) : [] });
 }
 
 export async function POST(req: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   ) {
     return NextResponse.json({ error: "invalid_item" }, { status: 400 });
   }
-  const key = await resolveCartKey();
+  const key = await ensureCartKey();
   await addToCart(key, {
     sku: body.sku,
     qty: body.qty as number,

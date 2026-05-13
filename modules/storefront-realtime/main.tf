@@ -9,7 +9,7 @@ terraform {
 }
 
 locals {
-  name_prefix     = "${var.project_name}-${var.environment}"
+  name_prefix       = "${var.project_name}-${var.environment}"
   connections_table = "${local.name_prefix}-ws-connections"
-  api_name        = "${local.name_prefix}-ws"
+  api_name          = "${local.name_prefix}-ws"
 }

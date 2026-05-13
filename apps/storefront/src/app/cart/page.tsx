@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CartPage() {
   const key = await resolveCartKey();
-  const items = await getCart(key);
+  const items = key ? await getCart(key) : [];
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-6 py-10">
       <header>

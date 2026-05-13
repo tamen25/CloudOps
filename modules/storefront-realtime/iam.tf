@@ -58,8 +58,8 @@ data "aws_iam_policy_document" "disconnect" {
 
 data "aws_iam_policy_document" "fanout" {
   statement {
-    effect    = "Allow"
-    actions   = ["dynamodb:Query", "dynamodb:DeleteItem"]
+    effect  = "Allow"
+    actions = ["dynamodb:Query", "dynamodb:DeleteItem"]
     resources = [
       aws_dynamodb_table.connections.arn,
       "${aws_dynamodb_table.connections.arn}/index/by-tenant",

@@ -29,8 +29,8 @@ resource "aws_sfn_state_machine" "checkout" {
             ConnectionArn = ""
           }
           Headers = {
-            "Content-Type"    = "application/json"
-            "X-Tenant-Id.$"   = "$.tenant_id"
+            "Content-Type"      = "application/json"
+            "X-Tenant-Id.$"     = "$.tenant_id"
             "Idempotency-Key.$" = "$$.Execution.Name"
           }
           RequestBody = {
@@ -54,17 +54,17 @@ resource "aws_sfn_state_machine" "checkout" {
         Parameters = {
           QueueUrl = aws_sqs_queue.email.url
           MessageBody = {
-            "order_id.$" = "$.order.ResponseBody.order.order_id"
+            "order_id.$"  = "$.order.ResponseBody.order.order_id"
             "tenant_id.$" = "$.tenant_id"
-            "total.$" = "$.total"
-            "items.$" = "$.items"
-            "to.$" = "$.email"
+            "total.$"     = "$.total"
+            "items.$"     = "$.items"
+            "to.$"        = "$.email"
           }
         }
         End = true
       }
       Failed = {
-        Type = "Fail"
+        Type  = "Fail"
         Cause = "checkout_failed"
         Error = "CheckoutSagaFailed"
       }
@@ -93,15 +93,15 @@ data "archive_file" "email" {
 }
 
 resource "aws_lambda_function" "email" {
-  function_name = local.email_function
-  role          = aws_iam_role.email.arn
-  handler       = "index.handler"
-  runtime       = "nodejs22.x"
-  architectures = ["arm64"]
-  filename      = data.archive_file.email.output_path
+  function_name    = local.email_function
+  role             = aws_iam_role.email.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.email.output_path
   source_code_hash = data.archive_file.email.output_base64sha256
-  timeout       = 15
-  memory_size   = 256
+  timeout          = 15
+  memory_size      = 256
   environment {
     variables = {
       SES_SOURCE_EMAIL = var.ses_source_email

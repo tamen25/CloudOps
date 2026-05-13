@@ -53,11 +53,11 @@ resource "aws_lambda_function" "search_gateway" {
 
   environment {
     variables = {
-      ORDER_API_INTERNAL_URL     = var.order_api_internal_url
-      HMAC_SECRET_PARAMETER_NAME = var.hmac_secret_parameter_name
+      ORDER_API_INTERNAL_URL      = var.order_api_internal_url
+      HMAC_SECRET_PARAMETER_NAME  = var.hmac_secret_parameter_name
       OTEL_EXPORTER_OTLP_ENDPOINT = var.otel_endpoint
-      OTEL_SERVICE_NAME          = "search-gateway"
-      SERVICE_ENV                = var.environment
+      OTEL_SERVICE_NAME           = "search-gateway"
+      SERVICE_ENV                 = var.environment
     }
   }
 

@@ -14,6 +14,7 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_qty" }, { status: 400 });
   }
   const key = await resolveCartKey();
+  if (!key) return NextResponse.json({ error: "cart_missing" }, { status: 404 });
   await updateQty(key, itemId, body.qty as number);
   return NextResponse.json({ success: true });
 }
@@ -24,6 +25,7 @@ export async function DELETE(
 ) {
   const { itemId } = await params;
   const key = await resolveCartKey();
+  if (!key) return NextResponse.json({ error: "cart_missing" }, { status: 404 });
   await removeItem(key, itemId);
   return NextResponse.json({ success: true });
 }

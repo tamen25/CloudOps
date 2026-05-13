@@ -378,9 +378,9 @@ module "auth" {
   project_name = var.project_name
   environment  = var.environment
 
-  domain_name             = var.domain_name
-  route53_zone_id         = var.auth_route53_zone_id
-  create_hosted_ui_domain = var.auth_create_hosted_ui_domain
+  domain_name                   = var.domain_name
+  route53_zone_id               = var.auth_route53_zone_id
+  create_hosted_ui_domain       = var.auth_create_hosted_ui_domain
   hosted_ui_acm_certificate_arn = var.auth_hosted_ui_acm_certificate_arn
 
   callback_urls = length(var.auth_callback_urls) > 0 ? var.auth_callback_urls : [

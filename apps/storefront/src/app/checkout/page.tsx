@@ -19,6 +19,7 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 
 export default async function CheckoutPage() {
   const key = await resolveCartKey();
+  if (!key) redirect("/cart");
   const items = await getCart(key);
   if (items.length === 0) {
     redirect("/cart");
