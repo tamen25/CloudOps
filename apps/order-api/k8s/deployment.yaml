@@ -154,6 +154,23 @@ spec:
                   name: order-api-internal
                   key: hmac-secret
                   optional: true
+            #INTERNAL_HMAC_SECRET_PREVIOUS (closes backlog #96) — optional
+            #grace-window key accepted alongside the active secret during
+            #rotation. ExternalSecret writes the prior value to
+            #`hmac-secret-previous`; clear it after every caller has rolled.
+            - name: INTERNAL_HMAC_SECRET_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: order-api-internal
+                  key: hmac-secret-previous
+                  optional: true
+            #ALLOWED_ORIGINS (closes backlog #97) — comma-separated allow-list
+            #for browser-originated POST/PUT/PATCH/DELETE. Empty/unset =
+            #permissive (dev only). Set to the storefront + admin origins in
+            #staging/prod. RSC server-to-server fetches do not send Origin
+            #and are always allowed.
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
             #Kinesis order-event stream (closes backlog #85). Empty disables
             #publishing — app continues to commit orders normally.
             - name: KINESIS_STREAM_NAME

@@ -166,6 +166,12 @@ jobs:
           OIDC_AUDIENCE: ""
           OIDC_JWKS_URL: ""
           OIDC_REQUIRED_SCOPES: ""
+          #Kinesis stream — empty during manifest validation; real value wired
+          #into the deploy step below.
+          KINESIS_STREAM_NAME: ""
+          #CSRF Origin allow-list (closes backlog #97) — empty during manifest
+          #validation; deploy step reads from secrets/terraform output.
+          ALLOWED_ORIGINS: ""
         run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
       #kubeval is unmaintained; switched to the actively maintained
@@ -801,6 +807,12 @@ jobs:
           OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
           OIDC_REQUIRED_SCOPES="${{ secrets.OIDC_REQUIRED_SCOPES }}"
 
+          #Kinesis stream (closes backlog #85). Empty disables publishing.
+          KINESIS_STREAM_NAME=$(echo "$TF_VARS" | grep "^kinesis_stream_name" | cut -d'"' -f2 || echo "")
+          #CSRF Origin allow-list (closes backlog #97). Comma-separated; empty=permissive.
+          #In staging/prod set to the storefront + admin origins.
+          ALLOWED_ORIGINS="${{ secrets.ALLOWED_ORIGINS }}"
+
           TF_KEY_ARN=$(terraform -chdir=stacks/cluster output -raw order_api_api_key_secret_arn 2>/dev/null || echo "")
           if [ "$ORDER_API_ENVIRONMENT" != "dev" ] && [ "$ORDER_API_ENVIRONMENT" != "test" ] && [ "$ORDER_API_ENVIRONMENT" != "local" ]; then
             if [ -z "$TF_KEY_ARN" ]; then
@@ -833,6 +845,8 @@ jobs:
             echo "OIDC_AUDIENCE=${OIDC_AUDIENCE:-}"
             echo "OIDC_JWKS_URL=${OIDC_JWKS_URL:-}"
             echo "OIDC_REQUIRED_SCOPES=${OIDC_REQUIRED_SCOPES:-}"
+            echo "KINESIS_STREAM_NAME=${KINESIS_STREAM_NAME:-}"
+            echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}"
           } >> "$GITHUB_ENV"
 
       #── Signature gate ────────────────────────────────────────────────────────

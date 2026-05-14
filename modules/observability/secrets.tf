@@ -20,29 +20,36 @@ resource "kubernetes_namespace" "application" {
 }
 
 #OTel API key — 32-char alphanumeric token used by bearertokenauth extension.
-#Closes part of backlog #38: when var.otel_token_rotation_days > 0, the
-#`keepers` map binds the token to a rotating value derived from current
-#date floor-divided by the rotation window. Each window boundary forces a
-#new random_password, which propagates through the SM secret + the k8s
+#Closes backlog #95: when var.otel_token_rotation_days > 0, the `keepers` map
+#binds the token to a window bucket. Each window boundary forces a new
+#random_password, which propagates through the SM secret + the k8s
 #`otel-auth` Secret. Pods that mount the secret pick up the new token after
 #the kubelet's standard projection refresh (60s default).
+#
+#Window formula:   bucket = floor((year * 366 + day_of_year) / rotation_days)
+#Example (30-day): 2026-05-14 → floor((2026*366 + 134) / 30) = floor(24705) = 24705
+#                  2026-06-13 → floor((2026*366 + 164) / 30) = floor(24706) = 24706
+#The outer floor() must wrap the *quotient*, not the numerator. Before #95
+#the floor() was applied to (year*366+day) only, so the keeper string changed
+#daily regardless of rotation_days. Force a manual rotation with:
+#  terraform apply -replace=module.observability.random_password.otel_api_key
 resource "random_password" "otel_api_key" {
   length  = 32
   special = false
 
   keepers = var.otel_token_rotation_days > 0 ? {
-    #Day-bucketed rotation marker. `floor(unix_seconds / day_seconds /
-    #rotation_days)` increments once per rotation window. timestamp() is
-    #only used during plan; once the keeper changes Terraform replaces the
-    #password and propagates downstream.
-    rotation_window = floor(parseint(formatdate("YYYY", timestamp()), 10) * 366 + parseint(formatdate("DDD", timestamp()), 10)) / var.otel_token_rotation_days
+    rotation_window = floor(
+      (parseint(formatdate("YYYY", timestamp()), 10) * 366
+        + parseint(formatdate("DDD", timestamp()), 10)
+      ) / var.otel_token_rotation_days
+    )
   } : null
 }
 
 #Creates the AWS secretsmanager secret resource named OTel API key.
 resource "aws_secretsmanager_secret" "otel_api_key" {
   #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
-  #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
+  #checkov:skip=CKV2_AWS_57:Rotation is driven by the random_password.otel_api_key `keepers` block (#95), not the SM Lambda rotation API. The keeper is bound to var.otel_token_rotation_days so new tokens land in this secret every window.
   name                    = "cloudops-otel-api-key"
   description             = "Bearer token for OTel Collector authentication"
   recovery_window_in_days = 0

@@ -86,6 +86,7 @@ OIDC_AUDIENCE= \
 OIDC_JWKS_URL= \
 OIDC_REQUIRED_SCOPES= \
 KINESIS_STREAM_NAME= \
+ALLOWED_ORIGINS= \
   apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$ORDER_OUT"
 
 #── 2b. Render apps/storefront/k8s ───────────────────────────────────────────

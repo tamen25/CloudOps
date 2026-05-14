@@ -365,3 +365,112 @@ test('metrics app exposes Prometheus counters after requests', async () => {
     await stopServer(metricsListen.server);
   }
 });
+
+// #97 — CSRF Origin allow-list
+test('CSRF: state-changing POST is rejected when Origin not in allow-list', async () => {
+  process.env.ALLOWED_ORIGINS = 'https://app.example.com,https://admin.example.com';
+  const pool = { query: async () => ({ rows: [], rowCount: 0 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example.com' },
+      body: JSON.stringify({ items: [{ sku: 'x', quantity: 1 }], total: 1 }),
+    });
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.error, 'origin_not_allowed');
+  } finally {
+    delete process.env.ALLOWED_ORIGINS;
+    await stopServer(server);
+  }
+});
+
+test('CSRF: state-changing POST is allowed when Origin is in allow-list', async () => {
+  process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+  const pool = { query: async () => ({ rows: [{ id: 1 }], rowCount: 1 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://app.example.com' },
+      body: JSON.stringify({ items: [{ sku: 'x', quantity: 1 }], total: 1 }),
+    });
+    // Allowed past Origin check; downstream may still fail on auth/tenant —
+    // we only assert the Origin gate did not reject.
+    assert.notEqual(res.status, 403);
+  } finally {
+    delete process.env.ALLOWED_ORIGINS;
+    await stopServer(server);
+  }
+});
+
+test('CSRF: server-to-server POST (no Origin header) bypasses allow-list', async () => {
+  process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+  const pool = { query: async () => ({ rows: [{ id: 1 }], rowCount: 1 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items: [{ sku: 'x', quantity: 1 }], total: 1 }),
+    });
+    assert.notEqual(res.status, 403);
+  } finally {
+    delete process.env.ALLOWED_ORIGINS;
+    await stopServer(server);
+  }
+});
+
+test('CSRF: safe GET is never blocked by Origin check', async () => {
+  process.env.ALLOWED_ORIGINS = 'https://app.example.com';
+  const pool = { query: async () => ({ rows: [], rowCount: 0 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/health`, {
+      headers: { origin: 'https://evil.example.com' },
+    });
+    assert.equal(res.status, 200);
+  } finally {
+    delete process.env.ALLOWED_ORIGINS;
+    await stopServer(server);
+  }
+});
+
+test('CSRF: empty ALLOWED_ORIGINS is permissive (back-compat)', async () => {
+  delete process.env.ALLOWED_ORIGINS;
+  const pool = { query: async () => ({ rows: [{ id: 1 }], rowCount: 1 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://anything.example.com' },
+      body: JSON.stringify({ items: [{ sku: 'x', quantity: 1 }], total: 1 }),
+    });
+    assert.notEqual(res.status, 403);
+  } finally {
+    await stopServer(server);
+  }
+});
+
+// #101 — security headers
+test('helmet: security headers are present on every response', async () => {
+  const pool = { query: async () => ({ rows: [], rowCount: 0 }) };
+  const { server, baseUrl } = await startServer(pool);
+  try {
+    const res = await fetch(`${baseUrl}/health`);
+    assert.equal(res.status, 200);
+    // Helmet defaults we explicitly want
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(res.headers.get('x-frame-options'), 'SAMEORIGIN');
+    assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+    assert.match(res.headers.get('strict-transport-security') || '', /max-age=31536000/);
+    assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
+    // X-Powered-By must be removed
+    assert.equal(res.headers.get('x-powered-by'), null);
+    // CSP intentionally disabled for a JSON API
+    assert.equal(res.headers.get('content-security-policy'), null);
+  } finally {
+    await stopServer(server);
+  }
+});

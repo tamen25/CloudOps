@@ -1,5 +1,6 @@
 // This file contains app logic for order API src.
 import express, { type Request, type Response, type NextFunction } from 'express';
+import helmet from 'helmet';
 import pino from 'pino';
 import rateLimit from 'express-rate-limit';
 import { createHash, timingSafeEqual } from 'crypto';
@@ -65,7 +66,27 @@ export function createMetrics({ serviceName = 'order-api', environment = 'dev' }
     registers: [registry],
   });
 
-  return { registry, httpRequestsTotal, httpRequestDuration };
+  // JWT verify outcome counter (closes backlog #104). `outcome` is one of:
+  //   ok                  — token verified
+  //   invalid_signature   — signature did not match any JWKS key
+  //   expired             — token past `exp`
+  //   wrong_issuer        — `iss` claim mismatch
+  //   wrong_audience      — `aud` claim mismatch
+  //   missing_scope       — required scope not present
+  //   jwks_unreachable    — JWKS endpoint fetch failed (network / DNS / 5xx)
+  //   other               — anything else from jose
+  // The `jwks_unreachable` bucket is the signal for the PrometheusRule
+  // `OIDCJWKSUnreachable` (modules/observability/jwks_alerts.tf). When that
+  // rate spikes the IdP (Cognito) is unreachable and every Bearer auth call
+  // is failing — page on it.
+  const jwtVerifyTotal = new Counter({
+    name: 'jwt_verify_total',
+    help: 'JWT verification outcomes (closes backlog #104)',
+    labelNames: ['outcome'],
+    registers: [registry],
+  });
+
+  return { registry, httpRequestsTotal, httpRequestDuration, jwtVerifyTotal };
 }
 
 type Pool = { query: (...a: any[]) => Promise<any>; connect?: () => Promise<any> };
@@ -109,6 +130,20 @@ export function createApp({
 
   const app = express();
   app.set('trust proxy', 1);
+
+  // Security headers (closes backlog #101). This is a JSON API — no HTML
+  // ever rendered — so the CSP defaults are off (`contentSecurityPolicy: false`).
+  // Everything else is on: HSTS (1y, include subdomains), X-Content-Type-Options
+  // nosniff, X-Frame-Options DENY (no iframe embedding), Referrer-Policy no-referrer,
+  // hide X-Powered-By. crossOriginResourcePolicy is "same-origin" so a browser
+  // cannot embed JSON responses cross-origin (defense in depth alongside #97).
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
+    referrerPolicy: { policy: 'no-referrer' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+  }));
+
   app.use(express.json({ limit: '64kb' }));
 
   // Body-parser error handler (oversize body, malformed JSON).
@@ -120,6 +155,28 @@ export function createApp({
       return res.status(400).json({ success: false, error: 'invalid_json' });
     }
     return next(err);
+  });
+
+  // CSRF Origin check (#97). The API is normally called server-to-server
+  // (Next.js RSC, Lambda, Step Functions) — those fetches do NOT send an
+  // Origin header, so they pass through. A browser-initiated cross-origin
+  // POST/PUT/PATCH/DELETE WILL carry Origin; we reject any value not on
+  // the allow-list. ALLOWED_ORIGINS is a comma-separated list (e.g.
+  // "https://app.example.com,https://admin.example.com"). Empty/unset =
+  // permissive (dev + back-compat). The check skips `/_internal/*` because
+  // those routes are HMAC-gated and never reachable from a browser
+  // anyway, and skips safe methods (GET/HEAD/OPTIONS).
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (allowedOrigins.length === 0) return next();
+    if (!STATE_CHANGING.has(req.method)) return next();
+    if (req.path.startsWith('/_internal/')) return next();
+    const origin = req.get('origin');
+    if (!origin) return next(); // server-to-server fetch
+    if (allowedOrigins.includes(origin)) return next();
+    return res.status(403).json({ success: false, error: 'origin_not_allowed' });
   });
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -195,24 +252,40 @@ export function createApp({
 
   const TENANT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
   const TENANT_FALLBACK_ENVS = new Set(['dev', 'test', 'local']);
-  // Requires tenant. Cognito custom attributes ship as `custom:tenant_id`
-  // (backlog #80); generic JWTs may use plain `tenant_id`. Either claim is
-  // accepted so the order-api works with both Cognito and other IdPs.
+  // Tenant resolution precedence (closes backlog #100, see docs/adr/021-tenant-claim-precedence.md):
+  //   1. JWT `custom:tenant_id` claim — Cognito's namespaced user attribute.
+  //      This is the canonical source; Cognito always issues this exact key
+  //      for tenant assignment done at signup (#80).
+  //   2. JWT `tenant_id` claim — fallback for non-Cognito IdPs (raw OIDC
+  //      providers, internal SSO with custom claim mapping).
+  //   3. `X-Tenant-Id` request header — API-key path only (no JWT). Used by
+  //      back-channel callers (search-gateway Lambda, integration tests).
+  //   4. Literal `default` — dev/test/local fallback for unauth local runs.
+  //
+  // If a JWT is present we ONLY look at claims; we do NOT fall through to
+  // the X-Tenant-Id header. Otherwise a caller with a valid token could
+  // pivot to any tenant by forging the header. Same reason rules 1+2 are
+  // mutually exclusive — once `custom:tenant_id` is set, the flat claim is
+  // ignored (we never need to "merge" claims from one issuer).
   const requireTenant = (req: RequestWithCtx, res: Response, next: NextFunction) => {
     let tenantId = '';
-    const customClaim = req.user
-      ? (req.user as Record<string, unknown>)['custom:tenant_id']
-      : undefined;
-    if (req.user && typeof customClaim === 'string') {
-      tenantId = customClaim;
-    } else if (req.user && typeof req.user.tenant_id === 'string') {
-      tenantId = req.user.tenant_id;
-    } else if (!req.user) {
+    if (req.user) {
+      // Rule 1: Cognito custom attribute
+      const cognitoClaim = (req.user as Record<string, unknown>)['custom:tenant_id'];
+      if (typeof cognitoClaim === 'string') {
+        tenantId = cognitoClaim;
+      } else if (typeof req.user.tenant_id === 'string') {
+        // Rule 2: generic OIDC flat claim
+        tenantId = req.user.tenant_id;
+      }
+      // No X-Tenant-Id fallback on the JWT path — see comment above.
+    } else {
+      // No JWT: API-key path.
       const header = req.get('x-tenant-id');
       if (typeof header === 'string' && header.length > 0) {
-        tenantId = header;
+        tenantId = header; // Rule 3
       } else if (TENANT_FALLBACK_ENVS.has(nodeEnv)) {
-        tenantId = 'default';
+        tenantId = 'default'; // Rule 4
       }
     }
 
@@ -394,7 +467,21 @@ export function createApp({
   // HMAC middleware for internal routes — signed by the search-gateway
   // Lambda (#82) and admin UI server (#88). Secret rotates via External
   // Secrets / Secrets Manager.
+  //
+  // Dual-accept rotation (#96): INTERNAL_HMAC_SECRET is the active key;
+  // INTERNAL_HMAC_SECRET_PREVIOUS is an optional grace-window key accepted
+  // for the rotation overlap. During rotation, External Secrets writes the
+  // new value to `hmac-secret` and the old to `hmac-secret-previous`; once
+  // every caller has rolled, clear the previous slot. Both checks run in
+  // constant time so timing does not leak which slot matched.
   const internalHmacSecret = process.env.INTERNAL_HMAC_SECRET ?? '';
+  const internalHmacSecretPrevious = process.env.INTERNAL_HMAC_SECRET_PREVIOUS ?? '';
+  const tryHmac = (timestamp: string, tenantHeader: string, raw: string, given: Buffer, secret: string): boolean => {
+    if (!secret) return false;
+    const expected = createHash('sha256').update(`${timestamp}.${tenantHeader}.${raw}.${secret}`).digest('hex');
+    const exp = Buffer.from(expected, 'hex');
+    return given.length === exp.length && timingSafeEqual(given, exp);
+  };
   const requireInternalHmac = (req: Request, res: Response, next: NextFunction) => {
     if (!internalHmacSecret) return res.status(503).json({ success: false, error: 'internal_hmac_not_configured' });
     const header = req.get('x-cloudops-hmac');
@@ -407,11 +494,14 @@ export function createApp({
     }
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(tenantHeader)) return res.status(401).json({ success: false, error: 'invalid_tenant' });
     const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
-    const expected = createHash('sha256').update(`${timestamp}.${tenantHeader}.${raw}.${internalHmacSecret}`).digest('hex');
     const given = Buffer.from(header, 'hex');
-    const exp = Buffer.from(expected, 'hex');
-    if (given.length !== exp.length || !timingSafeEqual(given, exp)) {
+    const matchedActive = tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecret);
+    const matchedPrevious = tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecretPrevious);
+    if (!matchedActive && !matchedPrevious) {
       return res.status(401).json({ success: false, error: 'hmac_invalid' });
+    }
+    if (matchedPrevious && !matchedActive) {
+      logger.warn({ tenant: tenantHeader }, 'internal HMAC accepted via PREVIOUS secret — caller still on old key');
     }
     (req as RequestWithCtx).tenantId = tenantHeader;
     next();

@@ -113,6 +113,10 @@ initDatabase()
   .then(async () => {
     const apiKey = await resolveApiKey();
 
+    // Metrics created up-front so the JWT verifier can record outcomes
+    // into the same registry (closes backlog #104).
+    const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
+
     let jwtVerifier = null;
     if (OIDC_ISSUER && OIDC_AUDIENCE && OIDC_JWKS_URL) {
       jwtVerifier = createJwtVerifier({
@@ -121,13 +125,13 @@ initDatabase()
         jwksUrl: OIDC_JWKS_URL,
         requiredScopes: OIDC_REQUIRED_SCOPES,
         logger,
+        onOutcome: (outcome) => metrics.jwtVerifyTotal.inc({ outcome }),
       });
       logger.info({ issuer: OIDC_ISSUER, audience: OIDC_AUDIENCE }, 'oidc verifier configured');
     }
 
     assertAuthConfigured({ apiKey, jwtVerifier, nodeEnv: NODE_ENV, logger });
 
-    const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
     const publisher = createPublisher({ awsRegion: AWS_REGION, logger });
     const { app } = createApp({
       pool,

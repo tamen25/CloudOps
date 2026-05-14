@@ -379,6 +379,13 @@ variable "waf_logging_enabled" {
   default     = true
 }
 
+#Closes backlog #102. Pass-through to modules/ingress/waf.tf retention.
+variable "waf_log_retention_days" {
+  description = "WAF CloudWatch log retention in days. 30 = dev, 90 = staging, 365 = prod (typical)."
+  type        = number
+  default     = 30
+}
+
 #── Compliance (CloudTrail / GuardDuty / Config / Security Hub) ───────────────
 
 variable "enable_compliance" {

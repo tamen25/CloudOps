@@ -318,6 +318,7 @@ module "ingress" {
   waf_rate_limit_per_5min = var.waf_rate_limit_per_5min
   waf_geo_block_countries = var.waf_geo_block_countries
   waf_logging_enabled     = var.waf_logging_enabled
+  waf_log_retention_days  = var.waf_log_retention_days
 
   tags = local.common_tags
 }

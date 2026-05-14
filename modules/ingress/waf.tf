@@ -208,11 +208,13 @@ resource "aws_wafv2_web_acl_association" "alb" {
 }
 
 #CloudWatch log group for WAF logs (sampled blocked requests).
+#Retention configurable via var.waf_log_retention_days (closes backlog #102).
+#Dev default 30d; staging 90d; prod 365d. Set in environments/*.tfvars.
 resource "aws_cloudwatch_log_group" "waf" {
   count = var.enable_waf && var.waf_logging_enabled ? 1 : 0
 
   name              = "aws-waf-logs-${var.name_prefix}"
-  retention_in_days = 30
+  retention_in_days = var.waf_log_retention_days
 
   tags = local.common_tags
 }

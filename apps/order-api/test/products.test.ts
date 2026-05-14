@@ -330,3 +330,63 @@ test('POST /_internal/admin/products rejects malformed tenant header', async () 
   assert.equal(res.body.error, 'invalid_tenant');
   delete process.env.INTERNAL_HMAC_SECRET;
 });
+
+// #96 — dual-accept rotation tests
+test('POST /_internal/search accepts HMAC signed with PREVIOUS secret during rotation', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'new-secret';
+  process.env.INTERNAL_HMAC_SECRET_PREVIOUS = 'old-secret';
+  const pool = makePool([
+    async () => ({ rows: [] }),
+  ]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: 'widget', limit: 20 });
+  const timestamp = String(Date.now());
+  // Caller still uses the old secret (hasn't rolled yet)
+  const hmac = hmacFor({ secret: 'old-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget', limit: 20 }, {
+    'x-cloudops-hmac': hmac,
+    'x-cloudops-timestamp': timestamp,
+    'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 200);
+  delete process.env.INTERNAL_HMAC_SECRET;
+  delete process.env.INTERNAL_HMAC_SECRET_PREVIOUS;
+});
+
+test('POST /_internal/search rejects HMAC signed with a stale unrelated secret', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'new-secret';
+  process.env.INTERNAL_HMAC_SECRET_PREVIOUS = 'old-secret';
+  const pool = makePool([]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: 'widget' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'unrelated-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget' }, {
+    'x-cloudops-hmac': hmac,
+    'x-cloudops-timestamp': timestamp,
+    'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 401);
+  assert.equal(res.body.error, 'hmac_invalid');
+  delete process.env.INTERNAL_HMAC_SECRET;
+  delete process.env.INTERNAL_HMAC_SECRET_PREVIOUS;
+});
+
+test('POST /_internal/search accepts new secret when previous is unset', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'new-secret';
+  // PREVIOUS not set — rotation complete state
+  const pool = makePool([
+    async () => ({ rows: [] }),
+  ]);
+  const { app } = createApp({ pool: pool as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: 'widget' });
+  const timestamp = String(Date.now());
+  const hmac = hmacFor({ secret: 'new-secret', timestamp, tenant: 'acme', body });
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget' }, {
+    'x-cloudops-hmac': hmac,
+    'x-cloudops-timestamp': timestamp,
+    'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 200);
+  delete process.env.INTERNAL_HMAC_SECRET;
+});

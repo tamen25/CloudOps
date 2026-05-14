@@ -288,6 +288,12 @@ variable "waf_logging_enabled" {
   default = true
 }
 
+#Closes backlog #102. WAF CloudWatch log retention; per-env override.
+variable "waf_log_retention_days" {
+  type    = number
+  default = 30
+}
+
 #Observability.
 variable "order_api_namespace" {
   type    = string

@@ -66,6 +66,9 @@ allowed_cidr_blocks      = ["REPLACE_WITH_YOUR_ALLOWED_CIDRS"]
 enable_waf               = true
 waf_rate_limit_per_5min  = 2000
 waf_logging_enabled      = true
+# Closes backlog #102. PCI requires ≥90d; SOC 2 typically 365d; HIPAA 6 years.
+# 365d matches the CloudTrail object-lock retention in this file.
+waf_log_retention_days   = 365
 
 # ── VPC flow logs to S3 ──────────────────────────────────────────────────────
 enable_flow_logs         = true

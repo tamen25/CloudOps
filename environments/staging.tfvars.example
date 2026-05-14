@@ -68,6 +68,10 @@ allowed_cidr_blocks      = ["0.0.0.0/0"]   # tighten in real prod
 enable_waf               = true
 waf_rate_limit_per_5min  = 2000
 waf_logging_enabled      = true
+# Compliance regimes typically require >30d retention (closes backlog #102).
+# Staging matches prod cadence so the log lifecycle is exercised under
+# real conditions.
+waf_log_retention_days   = 90
 
 # ── VPC flow logs to S3 + Athena ─────────────────────────────────────────────
 enable_flow_logs         = true
@@ -101,6 +105,11 @@ prometheus_retention              = "6h"        # Mimir owns long-term
 tempo_ingester_replicas           = 3
 tempo_metrics_generator_enabled   = true
 enable_alertmanager               = true
+
+# OTel collector bearer-token rotation window. 0 = manual rotation only.
+# Staging mirrors prod cadence so the rotation-marker keeper is exercised
+# under real conditions before customer-data envs (#95).
+otel_token_rotation_days = 90
 
 # Bucket hardening
 buckets_versioning              = true

@@ -132,6 +132,21 @@ variable "waf_logging_enabled" {
   default     = true
 }
 
+#Closes backlog #102. CloudWatch log retention for the WAF log group.
+#Compliance regimes typically require 90 days (PCI), 1 year (SOC 2), or
+#7 years (HIPAA / financial). Default of 30 days is dev-only.
+#Valid CloudWatch values: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365,
+#400, 545, 731, 1827, 2192, 2557, 2922, 3288, 3653, or 0 (never expire).
+variable "waf_log_retention_days" {
+  description = "WAF CloudWatch log retention in days. 30 = dev, 90 = staging, 365 = prod (typical)."
+  type        = number
+  default     = 30
+  validation {
+    condition     = contains([0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 2192, 2557, 2922, 3288, 3653], var.waf_log_retention_days)
+    error_message = "waf_log_retention_days must be a valid CloudWatch retention value (e.g. 30, 90, 365, 0=never expire)."
+  }
+}
+
 #Defines the tags input value.
 variable "tags" {
   description = "Additional tags to apply to all resources"
