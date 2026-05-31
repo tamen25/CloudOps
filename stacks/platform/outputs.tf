@@ -182,15 +182,6 @@ output "storefront_checkout_email_queue_url" {
   value = var.enable_storefront_checkout ? module.storefront_checkout[0].email_queue_url : null
 }
 
-#─── Storefront Assets (#88) ───────────────────────────────────────────────
-output "storefront_assets_bucket_name" {
-  value = var.enable_storefront_assets ? module.storefront_assets[0].bucket_name : null
-}
-
-output "storefront_assets_url" {
-  value = var.enable_storefront_assets ? module.storefront_assets[0].assets_url : null
-}
-
 #─── Polyglot mesh ─────────────────────────────────────────────────────────
 output "mesh_gateway_service_dns" {
   description = "In-cluster DNS of the api-gateway (mesh edge / trace root)."

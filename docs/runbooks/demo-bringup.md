@@ -67,9 +67,10 @@ enable_storefront_cart     = true
 enable_storefront_events   = true
 enable_storefront_realtime = true
 enable_storefront_checkout = true
-enable_storefront_assets   = true
 enable_observability       = true
 enable_yace                = true
+enable_mesh                = true   # polyglot service mesh (Go/Python/Java/Node)
+enable_loadgen             = true   # traffic generator + trickle CronJob
 ```
 
 Then:
@@ -82,7 +83,9 @@ bash scripts/terraform-stacks.sh apply platform
 Provisions: ingress controller, observability (Prom + Loki + Tempo +
 Grafana + yace + storefront dashboard + alerts), Cognito User Pool +
 Hosted UI, API GW HTTP (search), API GW WebSocket, Step Functions,
-SQS, S3 assets bucket, CloudFront, all Lambdas.
+SQS, all Lambdas, the polyglot mesh (api-gateway → pricing → inventory →
+fraud → payment → ledger + enrichment/analytics Lambdas + projection
+worker), and the load generator.
 
 ---
 

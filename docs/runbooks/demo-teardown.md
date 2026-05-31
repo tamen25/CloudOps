@@ -35,10 +35,6 @@ aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter 
 ## Stage 2 — Empty data stores
 
 ```bash
-# Empty S3 buckets that have force_destroy=false.
-BUCKET=$(terraform -chdir=stacks/platform output -raw storefront_assets_bucket_name)
-aws s3 rm "s3://$BUCKET" --recursive
-
 # Truncate cart Dynamo (TTL would eventually clear it, but speed it up).
 TABLE=$(terraform -chdir=stacks/platform output -raw storefront_cart_table_name)
 aws dynamodb scan --table-name "$TABLE" --projection-expression "pk, sk" --output json \
@@ -61,9 +57,9 @@ bash scripts/terraform-stacks.sh destroy platform
 ```
 
 Cleans up: Cognito User Pool (deletion_protection=INACTIVE in non-prod),
-CloudFront distribution (slow — global propagation), API GW HTTP +
-WS, Lambdas, SQS, Step Functions, S3 assets bucket, ingress, helm
-releases, observability ConfigMaps + PrometheusRules.
+API GW HTTP + WS, Lambdas (incl. mesh enrichment/analytics), SQS, Step
+Functions, the polyglot mesh + loadgen Deployments/CronJob, EventBridge bus,
+ingress, helm releases, observability ConfigMaps + PrometheusRules.
 
 ---
 

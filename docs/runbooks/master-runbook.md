@@ -824,7 +824,8 @@ Storefront stories (#79-#89) extend the platform with: Next.js 15 RSC
 app at the apex domain, Cognito User Pool + Hosted UI at `auth.<domain>`,
 search Lambda + API GW HTTP at `search.<domain>`, WebSocket fanout at
 `ws.<domain>`, DynamoDB cart, Kinesis order events, Step Functions
-checkout saga, S3 + CloudFront assets at `assets.<domain>`.
+checkout saga, and the polyglot service mesh + load generator surfaced
+through the operator console.
 
 ### 9.5.1 Cognito user signup
 
@@ -859,8 +860,11 @@ aws cognito-idp admin-add-user-to-group \
 - **Storefront flips to `reconnecting`** — check `/api/ws-token` response
   body; if it's `503 ws_token_disabled` the deployment is missing
   `WS_TOKEN_SECRET`.
-- **`$connect` returns 401** — JWT failed verification. Re-check the
-  Cognito issuer + audience env vars on the `ws-connect` Lambda.
+- **`$connect` returns 401** — the short-lived WS ticket failed
+  verification. Confirm the storefront `WS_TOKEN_SECRET` and the
+  `storefront_realtime_ws_token_secret_arn` value point at the same
+  Secrets Manager material. Cognito issuer + audience remain as a rollout
+  fallback for older clients.
 - **Updates stop arriving but `$connect` still works** — fanout Lambda
   hit the DLQ. Check `aws lambda get-function-event-invoke-config`.
 - **Stale connections** — fanout drops 410 Gone rows automatically.

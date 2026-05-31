@@ -135,13 +135,13 @@ delete_s3_bucket() {
 
 #─────────────────────────────────────────────────────────────────────────────
 #Step 0: Storefront pre-destroy (closes backlog #90).
-#Stops running Step Functions executions, empties the assets S3 bucket, and
-#truncates the cart Dynamo table so the platform `terraform destroy` does
-#not error out on non-empty resources. Best-effort — every block is
-#wrapped in `|| true` so missing resources do not abort the script.
+#Stops running Step Functions executions and truncates the cart Dynamo table
+#so the platform `terraform destroy` does not error out on non-empty resources.
+#Best-effort — every block is wrapped in `|| true` so missing resources do not
+#abort the script.
 #─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${YELLOW}Step 0: Storefront pre-destroy (SF executions, S3 assets, cart Dynamo)${NC}"
+echo -e "${YELLOW}Step 0: Storefront pre-destroy (SF executions, cart Dynamo)${NC}"
 
 CHECKOUT_SM_NAME="${PROJECT_NAME}-$(get_tfvar 'environment')-checkout"
 SM_ARN="arn:aws:states:${REGION}:${ACCOUNT_ID}:stateMachine:${CHECKOUT_SM_NAME}"
@@ -154,12 +154,6 @@ if aws stepfunctions describe-state-machine --state-machine-arn "$SM_ARN" --regi
             aws stepfunctions stop-execution --execution-arn "$exec_arn" --region "$REGION" >/dev/null 2>&1 || true
         done
     echo -e "${GREEN}  ✓ stopped running checkout executions${NC}"
-fi
-
-ASSETS_BUCKET="${PROJECT_NAME}-$(get_tfvar 'environment')-assets"
-if aws s3api head-bucket --bucket "$ASSETS_BUCKET" --region "$REGION" 2>/dev/null; then
-    aws s3 rm "s3://$ASSETS_BUCKET" --recursive --region "$REGION" >/dev/null 2>&1 || true
-    echo -e "${GREEN}  ✓ emptied $ASSETS_BUCKET${NC}"
 fi
 
 CART_TABLE="${PROJECT_NAME}-$(get_tfvar 'environment')-cart"
