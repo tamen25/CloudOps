@@ -1,0 +1,31 @@
+# Projection worker (Python). Kinesis consumer building a per-tenant read model.
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudops-projection-worker"
+version = "1.0.0"
+description = "CloudOps mesh projection worker — builds a read model from order events."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+  "boto3==1.35.71",
+  "opentelemetry-api==1.41.0",
+  "opentelemetry-sdk==1.41.0",
+  "opentelemetry-exporter-otlp-proto-http==1.41.0",
+  "opentelemetry-instrumentation-botocore==0.62b0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest==8.3.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/projection"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
