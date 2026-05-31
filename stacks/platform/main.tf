@@ -24,6 +24,7 @@ resource "terraform_data" "toggle_guard" {
     enable_alertmanager                  = var.enable_alertmanager
     enable_external_secrets              = var.enable_external_secrets
     enable_waf                           = var.enable_waf
+    enable_mesh                          = var.enable_mesh
     self_healing_alb_arn_suffix          = var.self_healing_alb_arn_suffix
     self_healing_target_group_arn_suffix = var.self_healing_target_group_arn_suffix
   }
@@ -82,6 +83,11 @@ resource "terraform_data" "toggle_guard" {
     precondition {
       condition     = !(var.buckets_replication_destination_arn != "" && !var.buckets_versioning)
       error_message = "buckets_replication_destination_arn requires buckets_versioning=true."
+    }
+
+    precondition {
+      condition     = !var.enable_mesh || (var.enable_eks && var.enable_observability)
+      error_message = "enable_mesh=true requires enable_eks=true and enable_observability=true (the kubernetes provider must be real, not the localhost fallback)."
     }
   }
 }
@@ -169,6 +175,10 @@ locals {
     ManagedBy   = "Terraform"
     Stack       = "platform"
   }
+
+  #OTLP endpoint the mesh services export to. Same ALB-fronted collector the
+  #apps use; empty when observability is off so the SDKs no-op (no retry storm).
+  mesh_otel_endpoint = var.enable_observability ? "https://otel.${var.domain_name}" : ""
 }
 
 #Wires the ingress module into this stack.
@@ -483,8 +493,10 @@ module "storefront_realtime" {
   acm_certificate_arn  = var.storefront_realtime_acm_certificate_arn
   route53_zone_id      = local.route53_zone_id
 
-  cognito_issuer_url = var.enable_auth ? module.auth[0].issuer_url : ""
-  cognito_client_id  = var.enable_auth ? module.auth[0].storefront_client_id : ""
+  cognito_issuer_url        = var.enable_auth ? module.auth[0].issuer_url : ""
+  cognito_client_id         = var.enable_auth ? module.auth[0].storefront_client_id : ""
+  ws_token_secret_arn       = var.storefront_realtime_ws_token_secret_arn
+  storefront_irsa_role_name = var.storefront_realtime_storefront_irsa_role_name
 
   kinesis_stream_arn = var.enable_storefront_events ? module.storefront_events[0].stream_arn : ""
   fanout_dlq_arn     = var.storefront_realtime_fanout_dlq_arn
@@ -520,6 +532,56 @@ module "storefront_cart" {
   oidc_provider_url         = local.oidc_provider_url
   service_account_namespace = var.storefront_namespace
   service_account_name      = var.storefront_service_account
+
+  tags = local.common_tags
+}
+
+#─── Polyglot mesh (distributed-tracing showcase) ─────────────────────────────
+#Each service is one instance of the generic modules/mesh. Phase 1 ships the
+#trace root (api-gateway) + one downstream (pricing). More hops added in later
+#phases. All gated on var.enable_mesh (requires EKS + observability).
+
+#pricing (Go) — quotes line items. Reachable only from the gateway.
+module "mesh_pricing" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "pricing"
+  namespace                = var.mesh_namespace
+  lang                     = "go"
+  image                    = var.mesh_pricing_image
+  container_port           = 8080
+  run_as_user              = 65532
+  needs_tmp_volume         = false
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#api-gateway (Node) — mesh edge / trace root. Fans out to pricing.
+module "mesh_gateway" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "api-gateway"
+  namespace        = var.mesh_namespace
+  lang             = "node"
+  image            = var.mesh_gateway_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+
+  env = {
+    NODE_ENV    = var.environment
+    PRICING_URL = var.enable_mesh ? module.mesh_pricing[0].service_url : ""
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
 
   tags = local.common_tags
 }

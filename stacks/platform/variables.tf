@@ -749,6 +749,18 @@ variable "storefront_realtime_fanout_dlq_arn" {
   default     = ""
 }
 
+variable "storefront_realtime_ws_token_secret_arn" {
+  description = "Secrets Manager ARN for the shared WS ticket signing secret used by storefront and ws-connect."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_realtime_storefront_irsa_role_name" {
+  description = "Storefront IRSA role name to grant realtime connection cleanup during privacy erasure."
+  type        = string
+  default     = ""
+}
+
 #─── Storefront Checkout (#87) ─────────────────────────────────────────────
 variable "enable_storefront_checkout" {
   description = "Provision Step Functions checkout saga + SQS email queue + email Lambda."
@@ -807,6 +819,37 @@ variable "storefront_assets_storefront_irsa_role_name" {
 
 variable "storefront_assets_sharp_layer_arn" {
   description = "Optional Lambda layer ARN providing sharp + libvips arm64. Empty packages sharp in the Lambda zip."
+  type        = string
+  default     = ""
+}
+
+#─── Polyglot mesh ────────────────────────────────────────────────────────────
+variable "enable_mesh" {
+  description = "Deploy the polyglot service mesh (api-gateway + pricing + ...). Requires enable_eks + enable_observability."
+  type        = bool
+  default     = false
+}
+
+variable "mesh_namespace" {
+  description = "Kubernetes namespace for mesh services."
+  type        = string
+  default     = "cloudops"
+}
+
+variable "mesh_replicas" {
+  description = "Replica count for each mesh service (dev default 1)."
+  type        = number
+  default     = 1
+}
+
+variable "mesh_gateway_image" {
+  description = "Container image for the api-gateway service (set at deploy time from the pushed tag)."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_pricing_image" {
+  description = "Container image for the pricing service."
   type        = string
   default     = ""
 }
