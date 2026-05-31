@@ -61,9 +61,45 @@ if [ ! -x "$KUBECONFORM_BIN" ]; then
   )
 fi
 
+#── Mesh services (rendered with the api-gateway render-k8s.ts) ──────────────
+#MESH_ONLY=1 skips order-api/storefront and validates just the mesh manifests
+#(used by the mesh.yml workflow). Default renders everything.
+MESH_OUT="$(mktemp -d -t mesh-k8s-XXXXXX)"
+
+render_mesh() {
+  for svc in api-gateway pricing; do
+    echo "Rendering apps/${svc}/k8s → $MESH_OUT/${svc} ..."
+    MESH_NAMESPACE=cloudops \
+    MESH_ENVIRONMENT=dev \
+    LOG_LEVEL=info \
+    API_GATEWAY_REPLICAS=1 \
+    API_GATEWAY_SERVICE_ACCOUNT=api-gateway \
+    API_GATEWAY_IMAGE=example.com/api-gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+    PRICING_REPLICAS=1 \
+    PRICING_SERVICE_ACCOUNT=pricing \
+    PRICING_IMAGE=example.com/pricing@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+    PRICING_URL=http://pricing.cloudops.svc.cluster.local \
+    OTEL_ENDPOINT=https://otel.example.com \
+    OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
+      apps/api-gateway/node_modules/.bin/tsx apps/api-gateway/scripts/render-k8s.ts \
+      "apps/${svc}/k8s" "$MESH_OUT/${svc}"
+  done
+}
+
+if [ "${MESH_ONLY:-0}" = "1" ]; then
+  trap 'rm -rf "$MESH_OUT"' EXIT
+  render_mesh
+  echo "Running kubeconform (kubernetes ${KUBE_VERSION}) on mesh services..."
+  "$KUBECONFORM_BIN" -strict -kubernetes-version "$KUBE_VERSION" -ignore-missing-schemas -summary \
+    "$MESH_OUT"/*/*.yaml
+  echo
+  echo "✓ Mesh manifests pass kubeconform"
+  exit 0
+fi
+
 #── 2a. Render apps/order-api/k8s ────────────────────────────────────────────
 ORDER_OUT="$(mktemp -d -t order-api-k8s-XXXXXX)"
-trap 'rm -rf "$ORDER_OUT" "${STOREFRONT_OUT:-}"' EXIT
+trap 'rm -rf "$ORDER_OUT" "${STOREFRONT_OUT:-}" "$MESH_OUT"' EXIT
 
 echo "Rendering apps/order-api/k8s → $ORDER_OUT ..."
 ORDER_API_NAMESPACE=cloudops \
@@ -71,6 +107,7 @@ ORDER_API_SERVICE_ACCOUNT=order-api \
 ORDER_API_IRSA_ROLE_ARN=arn:aws:iam::123456789012:role/cloudops-order-api-irsa \
 ORDER_API_IMAGE=example.com/order-api@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
 ORDER_API_ENVIRONMENT=dev \
+ORDER_API_REPLICAS=2 \
 AWS_REGION=us-east-1 \
 DB_NAME=cloudops \
 DB_SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudops-db \
@@ -104,6 +141,7 @@ STOREFRONT_SEARCH_BASE_URL=https://search.example.com \
 STOREFRONT_WS_BASE_URL=wss://ws.example.com \
 NEXT_PUBLIC_WS_BASE_URL=wss://ws.example.com \
 CART_TABLE_NAME= \
+REALTIME_CONNECTIONS_TABLE_NAME= \
 CHECKOUT_STATE_MACHINE_ARN= \
 ASSETS_BUCKET_NAME= \
 ORDER_API_NAMESPACE=cloudops \
@@ -116,6 +154,15 @@ OIDC_JWKS_URL= \
 OIDC_HOSTED_UI= \
 OIDC_CLIENT_ID= \
 STOREFRONT_ORIGIN= \
+PRIVACY_CONTACT_EMAIL=privacy@example.com \
+STOREFRONT_API_RATE_LIMIT_WINDOW_MS=60000 \
+STOREFRONT_API_IP_RATE_LIMIT_MAX=120 \
+STOREFRONT_API_USER_RATE_LIMIT_MAX=60 \
+STOREFRONT_AUTH_RATE_LIMIT_WINDOW_MS=60000 \
+STOREFRONT_AUTH_IP_RATE_LIMIT_MAX=20 \
+STOREFRONT_AUTH_BACKOFF_BASE_MS=1000 \
+STOREFRONT_AUTH_BACKOFF_MAX_MS=60000 \
+STOREFRONT_AUTH_BACKOFF_RESET_MS=900000 \
 OTEL_ENDPOINT=https://otel.example.com \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
   apps/storefront/node_modules/.bin/tsx apps/storefront/scripts/render-k8s.ts apps/storefront/k8s "$STOREFRONT_OUT"
