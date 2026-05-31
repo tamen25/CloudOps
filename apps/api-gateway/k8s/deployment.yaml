@@ -61,6 +61,12 @@ spec:
               value: "${LOG_LEVEL}"
             - name: PRICING_URL
               value: "${PRICING_URL}"
+            - name: INVENTORY_URL
+              value: "${INVENTORY_URL}"
+            - name: FRAUD_URL
+              value: "${FRAUD_URL}"
+            - name: PAYMENT_URL
+              value: "${PAYMENT_URL}"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "${OTEL_ENDPOINT}"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL

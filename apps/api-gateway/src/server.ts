@@ -7,6 +7,9 @@ import { createApp } from './app';
 
 const PORT = Number(process.env.PORT) || 8080;
 const PRICING_URL = process.env.PRICING_URL || 'http://pricing';
+const INVENTORY_URL = process.env.INVENTORY_URL || 'http://inventory';
+const FRAUD_URL = process.env.FRAUD_URL || 'http://fraud';
+const PAYMENT_URL = process.env.PAYMENT_URL || 'http://payment';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -16,10 +19,16 @@ const logger = pino({
   },
 });
 
-const app = createApp({ pricingUrl: PRICING_URL, logger });
+const app = createApp({
+  pricingUrl: PRICING_URL,
+  inventoryUrl: INVENTORY_URL,
+  fraudUrl: FRAUD_URL,
+  paymentUrl: PAYMENT_URL,
+  logger,
+});
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  logger.info({ port: PORT, pricingUrl: PRICING_URL }, 'api-gateway started');
+  logger.info({ port: PORT, pricingUrl: PRICING_URL, inventoryUrl: INVENTORY_URL, fraudUrl: FRAUD_URL, paymentUrl: PAYMENT_URL }, 'api-gateway started');
 });
 
 function shutdown(): void {
