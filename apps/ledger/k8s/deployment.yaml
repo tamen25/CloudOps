@@ -1,0 +1,91 @@
+# ledger (Go) — double-entry append. /entries is HMAC-gated (called by payment).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: ledger
+    mesh.cloudops/lang: go
+spec:
+  replicas: ${LEDGER_REPLICAS}
+  selector:
+    matchLabels:
+      app: ledger
+  template:
+    metadata:
+      labels:
+        app: ledger
+        mesh.cloudops/lang: go
+    spec:
+      serviceAccountName: "${LEDGER_SERVICE_ACCOUNT}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ledger
+          image: "${LEDGER_IMAGE}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          env:
+            - name: PORT
+              value: "8080"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "${OTEL_ENDPOINT}"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "ledger"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "${OTEL_RESOURCE_ATTRIBUTES}"
+            - name: OTEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: otel-auth
+                  key: api-key
+                  optional: true
+            # Shared internal HMAC secret with the payment service. Dual-accept
+            # rotation: write new->hmac-secret, prior->hmac-secret-previous.
+            - name: INTERNAL_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mesh-internal
+                  key: hmac-secret
+                  optional: true
+            - name: INTERNAL_HMAC_SECRET_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: mesh-internal
+                  key: hmac-secret-previous
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
