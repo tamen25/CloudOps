@@ -883,3 +883,32 @@ variable "mesh_projection_image" {
   type        = string
   default     = ""
 }
+
+#─── Load generator ───────────────────────────────────────────────────────────
+variable "enable_loadgen" {
+  description = "Deploy the load generator (control API + trickle CronJob). Requires enable_mesh."
+  type        = bool
+  default     = false
+}
+
+variable "mesh_loadgen_image" {
+  description = "Container image for the loadgen service."
+  type        = string
+  default     = ""
+}
+
+variable "loadgen_enable_trickle" {
+  description = "Run the steady-trickle CronJob so the service map is never empty."
+  type        = bool
+  default     = true
+}
+
+variable "loadgen_trickle_rps" {
+  type    = number
+  default = 3
+}
+
+variable "loadgen_trickle_duration_seconds" {
+  type    = number
+  default = 60
+}

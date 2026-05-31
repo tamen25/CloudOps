@@ -25,6 +25,7 @@ resource "terraform_data" "toggle_guard" {
     enable_external_secrets              = var.enable_external_secrets
     enable_waf                           = var.enable_waf
     enable_mesh                          = var.enable_mesh
+    enable_loadgen                       = var.enable_loadgen
     self_healing_alb_arn_suffix          = var.self_healing_alb_arn_suffix
     self_healing_target_group_arn_suffix = var.self_healing_target_group_arn_suffix
   }
@@ -88,6 +89,11 @@ resource "terraform_data" "toggle_guard" {
     precondition {
       condition     = !var.enable_mesh || (var.enable_eks && var.enable_observability)
       error_message = "enable_mesh=true requires enable_eks=true and enable_observability=true (the kubernetes provider must be real, not the localhost fallback)."
+    }
+
+    precondition {
+      condition     = !var.enable_loadgen || var.enable_mesh
+      error_message = "enable_loadgen=true requires enable_mesh=true (the loadgen targets the in-cluster api-gateway)."
     }
   }
 }
@@ -719,6 +725,26 @@ module "mesh_gateway" {
 
   otel_endpoint            = local.mesh_otel_endpoint
   otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  tags = local.common_tags
+}
+
+#loadgen — control API + steady-trickle CronJob. Targets only the gateway.
+module "loadgen" {
+  count  = var.enable_loadgen ? 1 : 0
+  source = "../../modules/loadgen"
+
+  namespace                = var.mesh_namespace
+  image                    = var.mesh_loadgen_image
+  gateway_url              = var.enable_mesh ? module.mesh_gateway[0].service_url : ""
+  environment              = var.environment
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  enable_trickle           = var.loadgen_enable_trickle
+  trickle_rps              = var.loadgen_trickle_rps
+  trickle_duration_seconds = var.loadgen_trickle_duration_seconds
 
   tags = local.common_tags
 }

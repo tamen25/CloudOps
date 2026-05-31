@@ -68,7 +68,7 @@ MESH_OUT="$(mktemp -d -t mesh-k8s-XXXXXX)"
 
 render_mesh() {
   local digest=sha256:0000000000000000000000000000000000000000000000000000000000000000
-  for svc in api-gateway pricing inventory fraud payment ledger projection-worker; do
+  for svc in api-gateway pricing inventory fraud payment ledger projection-worker loadgen; do
     echo "Rendering apps/${svc}/k8s → $MESH_OUT/${svc} ..."
     MESH_NAMESPACE=cloudops \
     MESH_ENVIRONMENT=dev \
@@ -93,6 +93,8 @@ render_mesh() {
     LEDGER_URL=http://ledger.cloudops.svc.cluster.local \
     PROJECTION_REPLICAS=1 PROJECTION_SERVICE_ACCOUNT=projection-worker PROJECTION_IMAGE=example.com/projection@${digest} \
     PROJECTION_POLL_INTERVAL_SECONDS=2 \
+    LOADGEN_REPLICAS=1 LOADGEN_SERVICE_ACCOUNT=loadgen LOADGEN_IMAGE=example.com/loadgen@${digest} \
+    GATEWAY_URL=http://api-gateway.cloudops.svc.cluster.local \
       apps/api-gateway/node_modules/.bin/tsx apps/api-gateway/scripts/render-k8s.ts \
       "apps/${svc}/k8s" "$MESH_OUT/${svc}"
   done
