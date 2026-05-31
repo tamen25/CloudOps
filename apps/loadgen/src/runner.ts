@@ -74,7 +74,11 @@ export class LoadRunner {
       endsAt: startedAt + params.durationSeconds * 1000,
     };
 
-    const perTick = Math.max(1, Math.round((params.rps * TICK_MS) / 1000));
+    // Fractional token budget: each tick adds rps*tick/1000 tokens and we fire
+    // floor(budget) requests, carrying the remainder. This keeps low rps
+    // accurate (rps=3 → ~3/s, not 10/s from a per-tick floor of 1).
+    const perTickTokens = (params.rps * TICK_MS) / 1000;
+    let budget = 0;
     const templates = scenarioTemplates(scenario);
 
     this.timer = setInterval(() => {
@@ -82,7 +86,10 @@ export class LoadRunner {
         this.stop();
         return;
       }
-      for (let i = 0; i < perTick; i++) {
+      budget += perTickTokens;
+      const fire = Math.floor(budget);
+      budget -= fire;
+      for (let i = 0; i < fire; i++) {
         void this.fireOne(scenario, templates);
       }
     }, TICK_MS);
