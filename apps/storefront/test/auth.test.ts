@@ -58,7 +58,7 @@ test("buildAuthorizeUrl emits the canonical Cognito query string", () => {
   assert.equal(params.get("state"), "STATE1");
   assert.equal(params.get("code_challenge"), "CHAL1");
   assert.equal(params.get("code_challenge_method"), "S256");
-  assert.equal(params.get("scope"), "openid email profile");
+  assert.equal(params.get("scope"), "openid email");
 });
 
 test("buildAuthorizeUrl honours custom scopes", () => {

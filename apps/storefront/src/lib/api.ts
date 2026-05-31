@@ -19,6 +19,14 @@ interface Product {
   created_at?: string;
 }
 
+interface Order {
+  order_id: string;
+  total: number;
+  status?: "received" | "confirmed" | "packed" | "shipped" | "cancelled";
+  created_at?: string;
+  items?: Array<{ sku: string; quantity: number }>;
+}
+
 async function authHeader(): Promise<HeadersInit> {
   const jar = await cookies();
   const token = jar.get(sessionCookieName)?.value;
@@ -75,4 +83,26 @@ export async function searchProducts(
   };
 }
 
-export type { Product };
+export async function listOrders(): Promise<{ orders: Order[]; count: number }> {
+  if (!API_BASE_URL) throw new Error("API_BASE_URL missing");
+  const res = await fetch(`${API_BASE_URL}/orders`, {
+    headers: await authHeader(),
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) throw new Error(`listOrders ${res.status}`);
+  return (await res.json()) as { orders: Order[]; count: number };
+}
+
+export async function getOrder(orderId: string): Promise<Order | null> {
+  if (!API_BASE_URL) throw new Error("API_BASE_URL missing");
+  const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
+    headers: await authHeader(),
+    next: { revalidate: 0 },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`getOrder ${res.status}`);
+  const body = (await res.json()) as { order: Order };
+  return body.order;
+}
+
+export type { Product, Order };

@@ -5,6 +5,7 @@ import {
   generateState,
   stateCookieName,
 } from "@/lib/auth";
+import { maybeBlockForAuthBackoff } from "@/lib/rate-limit";
 
 /**
  * PKCE login start. Route handler so cookie writes are legal — Next App
@@ -18,7 +19,17 @@ export const dynamic = "force-dynamic";
 const PKCE_COOKIE = "cloudops_pkce_verifier";
 const NEXT_COOKIE = "cloudops_post_login";
 
+export function isSafeNextPath(p: string | null | undefined): p is string {
+  if (typeof p !== "string" || p.length === 0) return false;
+  if (!p.startsWith("/")) return false;
+  if (p.startsWith("//") || p.startsWith("/\\")) return false;
+  return true;
+}
+
 export async function GET(req: NextRequest) {
+  const blocked = maybeBlockForAuthBackoff(req);
+  if (blocked) return blocked;
+
   const hostedUi = process.env.OIDC_HOSTED_UI;
   const clientId = process.env.OIDC_CLIENT_ID;
   const audience = process.env.OIDC_AUDIENCE;
@@ -30,7 +41,12 @@ export async function GET(req: NextRequest) {
   const redirectUri = `${origin.replace(/\/$/, "")}/auth/callback`;
   const { verifier, challenge } = await generatePkce();
   const state = generateState();
-  const next = req.nextUrl.searchParams.get("next");
+  /* Closes #134 open-redirect. `?next=` is user-controlled — only persist it
+   * when it parses as a same-origin relative path. Reject protocol-relative
+   * (`//x`) and Windows-style (`/\\x`) prefixes; both round-trip through
+   * `new URL(next, origin)` to a foreign origin. */
+  const rawNext = req.nextUrl.searchParams.get("next");
+  const next = isSafeNextPath(rawNext) ? rawNext : null;
 
   const url = buildAuthorizeUrl({
     hostedUi,

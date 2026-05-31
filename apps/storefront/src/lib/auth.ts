@@ -80,7 +80,7 @@ export function buildAuthorizeUrl(opts: {
     state: opts.state,
     code_challenge: opts.codeChallenge,
     code_challenge_method: "S256",
-    scope: (opts.scopes ?? ["openid", "email", "profile"]).join(" "),
+    scope: (opts.scopes ?? ["openid", "email"]).join(" "),
   });
   const base = opts.hostedUi.replace(/\/$/, "");
   return `${base}/oauth2/authorize?${params.toString()}`;

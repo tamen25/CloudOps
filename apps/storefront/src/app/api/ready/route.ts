@@ -25,13 +25,9 @@ export async function GET() {
           { status: 503 }
         );
       }
-    } catch (err) {
+    } catch {
       return NextResponse.json(
-        {
-          status: "not_ready",
-          reason: "jwks_fetch_failed",
-          message: err instanceof Error ? err.message : String(err),
-        },
+        { status: "not_ready", reason: "jwks_fetch_failed" },
         { status: 503 }
       );
     }

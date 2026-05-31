@@ -49,6 +49,7 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, "JetBrains Mono",
     "SFMono-Regular", monospace;
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
 }
 
 :root {

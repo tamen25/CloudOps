@@ -8,9 +8,11 @@ import {
   DynamoDBDocumentClient,
   DeleteCommand,
   GetCommand,
+  PutCommand,
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { cookies } from "next/headers";
 import { sessionCookieName, verifySession, resolveTenant } from "@/lib/auth";
 
@@ -75,18 +77,53 @@ export async function resolveCartKey(): Promise<CartKey | null> {
  * neither a session nor an existing guest cookie is found. MUST be called
  * from a Route Handler or Server Action — Next App Router rejects cookie
  * mutation from RSC pages.
+ *
+ * Writes a sentinel row with `attribute_not_exists(pk)` to detect UUID
+ * collisions; retries with a fresh UUID on conflict. Probability is
+ * negligible (UUID v4 = 2^122) but the guard prevents two guests
+ * silently sharing a cart if it ever occurs.
  */
+const MAX_GUEST_ID_ATTEMPTS = 5;
+
 export async function ensureCartKey(): Promise<CartKey> {
   const existing = await resolveCartKey();
   if (existing) return existing;
   const jar = await cookies();
-  const guestId = crypto.randomUUID();
+  const docClient = getClient();
+  let guestId = crypto.randomUUID();
+  if (docClient) {
+    for (let attempt = 0; attempt < MAX_GUEST_ID_ATTEMPTS; attempt++) {
+      try {
+        await docClient.send(
+          new PutCommand({
+            TableName: TABLE,
+            Item: {
+              pk: `GUEST#${guestId}`,
+              sk: "GUEST#META",
+              created_at: new Date().toISOString(),
+              expires_at: Math.floor(Date.now() / 1000) + TTL_SECONDS,
+            },
+            ConditionExpression: "attribute_not_exists(pk)",
+          })
+        );
+        break;
+      } catch (err) {
+        if (!(err instanceof ConditionalCheckFailedException)) throw err;
+        if (attempt === MAX_GUEST_ID_ATTEMPTS - 1) {
+          throw new Error("guest_id_collision_exhausted");
+        }
+        guestId = crypto.randomUUID();
+      }
+    }
+  }
   jar.set(GUEST_COOKIE, guestId, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 30 * 24 * 60 * 60,
+    // Match the row TTL so the browser identifier does not outlive the
+    // guest-cart data it points at.
+    maxAge: TTL_SECONDS,
   });
   return { pk: `GUEST#${guestId}`, tenant: null, isGuest: true };
 }
@@ -173,9 +210,81 @@ export async function removeItem(key: CartKey, sku: string): Promise<void> {
   );
 }
 
+export async function clearCart(key: CartKey): Promise<number> {
+  const docClient = getClient();
+  if (!docClient) return 0;
+  const res = await docClient.send(
+    new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: { ":pk": key.pk },
+      ProjectionExpression: "pk, sk",
+    }),
+  );
+  const rows = (res.Items ?? []) as Array<{ pk?: string; sk?: string }>;
+  for (const row of rows) {
+    if (!row.pk || !row.sk) continue;
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE,
+        Key: { pk: row.pk, sk: row.sk },
+      }),
+    );
+  }
+  return rows.length;
+}
+
 export async function cartCount(key: CartKey): Promise<number> {
   const items = await getCart(key);
   return items.reduce((sum, it) => sum + it.qty, 0);
+}
+
+/**
+ * Race-free checkout lock (closes backlog #128). Writes a META row with a
+ * `locked_at` attribute, refusing if one already exists within the TTL.
+ * Caller MUST call `releaseCheckoutLock` in a finally block. A stale lock
+ * (older than `staleAfterMs`) is treated as releasable so a crashed
+ * checkout does not strand the cart forever.
+ */
+export async function acquireCheckoutLock(
+  key: CartKey,
+  staleAfterMs = 60_000,
+): Promise<boolean> {
+  const docClient = getClient();
+  if (!docClient) return true;
+  const now = Date.now();
+  const stale = now - staleAfterMs;
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE,
+        Key: { pk: key.pk, sk: "CHECKOUT#LOCK" },
+        UpdateExpression: "SET locked_at = :now, expires_at = :exp",
+        ConditionExpression:
+          "attribute_not_exists(locked_at) OR locked_at < :stale",
+        ExpressionAttributeValues: {
+          ":now": now,
+          ":stale": stale,
+          ":exp": Math.floor(now / 1000) + 300,
+        },
+      }),
+    );
+    return true;
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) return false;
+    throw err;
+  }
+}
+
+export async function releaseCheckoutLock(key: CartKey): Promise<void> {
+  const docClient = getClient();
+  if (!docClient) return;
+  await docClient.send(
+    new DeleteCommand({
+      TableName: TABLE,
+      Key: { pk: key.pk, sk: "CHECKOUT#LOCK" },
+    }),
+  );
 }
 
 export const GUEST_COOKIE_NAME = GUEST_COOKIE;

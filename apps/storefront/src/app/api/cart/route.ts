@@ -6,9 +6,12 @@ import {
   getCart,
   resolveCartKey,
 } from "@/lib/cart";
+import { getProduct } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MAX_QTY = 99;
 
 export async function GET(req: NextRequest) {
   const key = await resolveCartKey();
@@ -18,31 +21,43 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items: key ? await getCart(key) : [] });
 }
 
+/**
+ * Closes the 2026-05-15 security review price-tampering finding. The
+ * client only supplies `productId` and `qty`; `sku`, `name`, and
+ * `price_cents` are resolved server-side against the order-api products
+ * catalog and written authoritatively to DynamoDB. Order-api `/order`
+ * additionally re-prices at checkout time as defense-in-depth.
+ */
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as {
-    sku?: string;
+    productId?: number;
     qty?: number;
-    name?: string;
-    price_cents?: number;
   } | null;
   if (
     !body ||
-    typeof body.sku !== "string" ||
-    body.sku.length === 0 ||
+    !Number.isInteger(body.productId) ||
+    (body.productId as number) < 1 ||
     !Number.isInteger(body.qty) ||
     (body.qty as number) < 1 ||
-    typeof body.name !== "string" ||
-    !Number.isInteger(body.price_cents) ||
-    (body.price_cents as number) < 0
+    (body.qty as number) > MAX_QTY
   ) {
     return NextResponse.json({ error: "invalid_item" }, { status: 400 });
   }
+  let product;
+  try {
+    product = await getProduct(body.productId as number);
+  } catch {
+    return NextResponse.json({ error: "catalog_unavailable" }, { status: 503 });
+  }
+  if (!product) {
+    return NextResponse.json({ error: "product_not_found" }, { status: 404 });
+  }
   const key = await ensureCartKey();
   await addToCart(key, {
-    sku: body.sku,
+    sku: product.sku,
     qty: body.qty as number,
-    name: body.name,
-    price_cents: body.price_cents as number,
+    name: product.name,
+    price_cents: product.price_cents,
   });
   return NextResponse.json({ success: true });
 }

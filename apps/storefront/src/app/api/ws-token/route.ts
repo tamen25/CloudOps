@@ -27,7 +27,11 @@ export async function POST() {
     return NextResponse.json({ error: "tenant_missing" }, { status: 400 });
   }
 
-  const token = await new SignJWT({ sub: claims.sub, "custom:tenant_id": tenant })
+  const token = await new SignJWT({
+    sub: claims.sub,
+    "custom:tenant_id": tenant,
+    token_use: "ws",
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer("cloudops-storefront")
     .setAudience("cloudops-ws")

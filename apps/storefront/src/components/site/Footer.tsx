@@ -10,7 +10,7 @@ export function Footer() {
             <span className="grid h-6 w-6 place-items-center rounded-md bg-brand-500/15 text-brand-500">
               <Boxes className="h-3.5 w-3.5" strokeWidth={2.25} />
             </span>
-            CloudOps Shop
+            CloudOps
           </div>
           <p className="text-sm text-fg-muted">
             Production-shaped multi-tenant storefront on AWS + EKS. Demo build.
@@ -36,14 +36,22 @@ export function Footer() {
             <li><Link href="/login" className="text-fg-base hover:text-brand-400">Sign in</Link></li>
             <li><Link href="/design" className="text-fg-base hover:text-brand-400">Design system</Link></li>
             <li><Link href="/admin" className="text-fg-base hover:text-brand-400">Admin</Link></li>
+            <li><Link href="/privacy" className="text-fg-base hover:text-brand-400">Privacy</Link></li>
+            <li><Link href="/cookies" className="text-fg-base hover:text-brand-400">Cookies</Link></li>
           </ul>
         </div>
 
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
-            Stack
+            Platform
           </h4>
-          <p className="font-mono text-xs leading-relaxed text-fg-muted">
+          <ul className="space-y-1 text-sm">
+            <li><Link href="/platform" className="text-fg-base hover:text-brand-400">Overview</Link></li>
+            <li><Link href="/architecture" className="text-fg-base hover:text-brand-400">Architecture</Link></li>
+            <li><Link href="/pipeline" className="text-fg-base hover:text-brand-400">Pipeline</Link></li>
+            <li><Link href="/pipeline#security" className="text-fg-base hover:text-brand-400">Security</Link></li>
+          </ul>
+          <p className="pt-2 font-mono text-[11px] leading-relaxed text-fg-subtle">
             Next.js 15 · EKS · Cognito · API GW · Lambda · Step Functions · DynamoDB · Kinesis · CloudFront · OTel
           </p>
         </div>

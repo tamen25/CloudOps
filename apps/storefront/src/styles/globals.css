@@ -67,6 +67,42 @@
   .font-mono {
     font-family: var(--font-mono);
   }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .display-italic {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.012em;
+  }
+
+  .line-grid {
+    background-image:
+      linear-gradient(rgba(48, 54, 61, 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(48, 54, 61, 0.3) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+  }
+
+  .surface-glow {
+    box-shadow:
+      0 30px 80px -20px rgba(0, 0, 0, 0.6),
+      0 12px 30px -8px rgba(0, 0, 0, 0.4);
+  }
+
+  .mask-edges-y {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .mask-center-fade {
+    -webkit-mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, transparent 0%, #000 80%);
+    mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, transparent 0%, #000 80%);
+  }
 }
 
 @keyframes pulse-dot {
@@ -120,11 +156,77 @@
     0 10px 40px -10px rgba(45, 212, 191, 0.45);
 }
 
+@keyframes packet-flow {
+  from { offset-distance: 0%; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  to   { offset-distance: 100%; opacity: 0; }
+}
+
+@keyframes packet-row {
+  0%   { left: 0; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { left: calc(100% - 6px); opacity: 0; }
+}
+
+@keyframes flow-move {
+  0%   { left: 8px;  opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { left: calc(100% - 8px); opacity: 0; }
+}
+
+@keyframes pulse-line-draw {
+  from { stroke-dashoffset: var(--draw-len, 1200); }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes log-print-a {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+@keyframes log-print-b {
+  from { transform: translateY(-15%); }
+  to   { transform: translateY(-65%); }
+}
+@keyframes log-print-c {
+  from { transform: translateY(-30%); }
+  to   { transform: translateY(-80%); }
+}
+
+@keyframes orbit-packet {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+
+@keyframes draw-line-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up { animation: fade-up 480ms ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-dot,
-  .animate-float-slow {
+  .animate-float-slow,
+  .animate-fade-up {
     animation: none !important;
   }
+  [data-motion="packet"],
+  [data-motion="log-stream"],
+  [data-motion="orbit"],
+  [data-motion="line-draw"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .flow-packet { animation: none !important; display: none !important; }
 }
 
 /* Gradient text utility for the hero word "production-shaped" */

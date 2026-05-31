@@ -35,14 +35,14 @@ const features: Feature[] = [
   {
     icon: Radio,
     title: "Realtime via WebSocket + Kinesis",
-    body: "Order events publish to Kinesis post-commit; a fanout Lambda pushes per-tenant updates to active WS connections. Stale connections prune on 410 Gone.",
+    body: "Order events publish to Kinesis post-commit; a fanout Lambda pushes owner-scoped updates to active WS connections. Stale connections prune on 410 Gone.",
     href: "/orders",
     meta: "ADR-018",
   },
   {
     icon: Workflow,
-    title: "Checkout saga on Step Functions",
-    body: "Durable execution history with native Catch and idempotent retries. The execution name is the Idempotency-Key, so retries fold instead of duplicate.",
+    title: "Post-order workflow on Step Functions",
+    body: "The authenticated API creates the order first; Step Functions keeps durable confirmation-email delivery, while the execution name remains the Idempotency-Key.",
     href: "/checkout",
     meta: "ADR-019",
   },

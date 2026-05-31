@@ -38,15 +38,19 @@ interface Node {
 }
 
 interface Flow {
+  id: string;
   label: string;
   accent: ServiceCategory;
+  packetColor: string;
   nodes: Node[];
 }
 
 const flows: Flow[] = [
   {
+    id: "page-load",
     label: "Page load",
     accent: "frontend",
+    packetColor: "#2dd4bf",
     nodes: [
       { icon: Globe, category: "client", name: "Browser", detail: "RSC + WS" },
       { icon: Cloud, category: "networking", name: "CloudFront", detail: "assets.<dom>" },
@@ -56,8 +60,10 @@ const flows: Flow[] = [
     ],
   },
   {
+    id: "search-read",
     label: "Search read",
     accent: "compute",
+    packetColor: "#ED7100",
     nodes: [
       { icon: Network, category: "networking", name: "API GW HTTP", detail: "search.<dom>" },
       { icon: Zap, category: "compute", name: "search-gateway λ", detail: "LRU 60s + HMAC" },
@@ -66,8 +72,10 @@ const flows: Flow[] = [
     ],
   },
   {
+    id: "order-realtime",
     label: "Order + realtime",
     accent: "integration",
+    packetColor: "#E7157B",
     nodes: [
       { icon: Code2, category: "compute", name: "Express /order", detail: "RLS + audit" },
       { icon: Activity, category: "analytics", name: "Kinesis", detail: "post-commit" },
@@ -77,8 +85,10 @@ const flows: Flow[] = [
     ],
   },
   {
+    id: "checkout-saga",
     label: "Checkout saga",
     accent: "integration",
+    packetColor: "#E7157B",
     nodes: [
       { icon: Workflow, category: "integration", name: "Step Functions", detail: "Standard SM" },
       { icon: Code2, category: "compute", name: "Express /order", detail: "exec name = key" },
@@ -121,14 +131,19 @@ export function ArchPanel() {
         <CardContent className="overflow-x-auto p-0">
           <div className="min-w-max space-y-8 px-6 py-8 md:px-8">
             {flows.map((flow) => (
-              <div key={flow.label} className="space-y-3">
+              <div
+                key={flow.label}
+                data-flow-id={flow.id}
+                id={flow.id}
+                className="group/row space-y-3 transition-opacity duration-300 hover:opacity-100 [&:hover_~_*]:opacity-60 [.group/row:hover_~_&]:opacity-60"
+              >
                 <div className="flex items-center gap-3">
                   <span className={`h-1 w-8 rounded-full ${accentBar[flow.accent]}`} />
                   <span className="font-mono text-[11px] uppercase tracking-wider text-fg-muted">
                     {flow.label}
                   </span>
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="relative flex items-start gap-2">
                   {flow.nodes.map((node, idx) => (
                     <div key={`${flow.label}-${node.name}-${idx}`} className="flex items-start gap-2">
                       <ServiceTile
@@ -145,6 +160,16 @@ export function ArchPanel() {
                       ) : null}
                     </div>
                   ))}
+                  <span
+                    aria-hidden
+                    data-motion="packet"
+                    className="pointer-events-none absolute top-3 h-1.5 w-1.5 rounded-full"
+                    style={{
+                      backgroundColor: flow.packetColor,
+                      boxShadow: `0 0 12px ${flow.packetColor}`,
+                      animation: "packet-row 4s linear infinite",
+                    }}
+                  />
                 </div>
               </div>
             ))}
