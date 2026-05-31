@@ -1,0 +1,16 @@
+# payment ClusterIP service. Reachable in-mesh as
+# payment.${MESH_NAMESPACE}.svc.cluster.local on port 80.
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: payment
+spec:
+  selector:
+    app: payment
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
