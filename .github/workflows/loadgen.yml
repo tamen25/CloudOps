@@ -1,0 +1,110 @@
+# Load generator pipeline.
+# - PR / push: test + build the loadgen image source.
+# - workflow_dispatch: fire an on-demand load run. The run itself executes
+#   INSIDE the cluster (the loadgen targets the private api-gateway), so the
+#   dispatch path creates a one-off k8s Job from the loadgen image with
+#   RUN_ON_START. That step is a commented activation block until the cluster
+#   prerequisites land (mirrors app.yml deploy gating + storefront.yml #121).
+
+name: Loadgen Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/loadgen/**'
+      - 'modules/loadgen/**'
+      - '.github/workflows/loadgen.yml'
+  pull_request:
+    paths:
+      - 'apps/loadgen/**'
+      - 'modules/loadgen/**'
+      - '.github/workflows/loadgen.yml'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Load scenario'
+        required: true
+        type: choice
+        default: mixed
+        options: [browse, place-order, burst, mixed, chaos]
+      rps:
+        description: 'Target requests/sec (clamped to 200)'
+        required: true
+        type: string
+        default: '20'
+      duration_seconds:
+        description: 'Run duration in seconds (clamped to 600)'
+        required: true
+        type: string
+        default: '120'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loadgen-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    defaults:
+      run:
+        working-directory: apps/loadgen
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Contract check
+        run: npm run contract-check
+      - name: Build
+        run: npm run build
+
+  # ── On-demand run (ACTIVATION PENDING) ───────────────────────────────────---
+  # The load run executes in-cluster (gateway is private). Activate when the
+  # deploy path has cluster access (kubeconfig via OIDC + aws eks
+  # update-kubeconfig), then create a one-off Job from the loadgen image:
+  #
+  # run-load:
+  #   if: github.event_name == 'workflow_dispatch'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+  #         aws-region: ${{ secrets.AWS_REGION }}
+  #     - run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME"
+  #     - run: |
+  #         kubectl -n cloudops create job "loadgen-adhoc-$GITHUB_RUN_ID" \
+  #           --image="$LOADGEN_IMAGE" -- node dist/server.js
+  #         # with env RUN_ON_START=${{ inputs.scenario }}
+  #         #          RUN_RPS=${{ inputs.rps }}
+  #         #          RUN_DURATION_SECONDS=${{ inputs.duration_seconds }}
+  #         #          GATEWAY_URL=http://api-gateway.cloudops.svc.cluster.local
+  #     - run: kubectl -n cloudops wait --for=condition=complete \
+  #         "job/loadgen-adhoc-$GITHUB_RUN_ID" --timeout=700s
+  echo-inputs:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo requested run (activation pending)
+        run: |
+          echo "Requested load run (in-cluster execution not yet activated):"
+          echo "  scenario=${{ inputs.scenario }}"
+          echo "  rps=${{ inputs.rps }} (clamped to 200 by loadgen)"
+          echo "  duration_seconds=${{ inputs.duration_seconds }} (clamped to 600)"
+          echo "Activate the run-load job above once the cluster deploy path exists."
