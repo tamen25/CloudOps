@@ -1,0 +1,85 @@
+# inventory (Python/FastAPI) — reserve stock for line items.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: inventory
+    mesh.cloudops/lang: python
+spec:
+  replicas: ${INVENTORY_REPLICAS}
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory
+        mesh.cloudops/lang: python
+    spec:
+      serviceAccountName: "${INVENTORY_SERVICE_ACCOUNT}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      containers:
+        - name: inventory
+          image: "${INVENTORY_IMAGE}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "128Mi"
+          env:
+            - name: PORT
+              value: "8080"
+            - name: SEED_STOCK
+              value: "${INVENTORY_SEED_STOCK}"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "${OTEL_ENDPOINT}"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "inventory"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "${OTEL_RESOURCE_ATTRIBUTES}"
+            - name: OTEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: otel-auth
+                  key: api-key
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 8
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 4
+            periodSeconds: 10
+            failureThreshold: 3

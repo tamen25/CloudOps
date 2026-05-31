@@ -1,0 +1,39 @@
+# Inventory service (Python/FastAPI). One job: reserve stock for line items.
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cloudops-inventory"
+version = "1.0.0"
+description = "CloudOps mesh inventory service — stock reservation."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "opentelemetry-api==1.41.0",
+  "opentelemetry-sdk==1.41.0",
+  "opentelemetry-exporter-otlp-proto-http==1.41.0",
+  "opentelemetry-instrumentation-fastapi==0.62b0",
+  "prometheus-client==0.21.1",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest==8.3.4",
+  "httpx==0.28.1",
+  "pytest-cov==6.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inventory"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["inventory"]
+omit = ["src/inventory/tracing.py"]
