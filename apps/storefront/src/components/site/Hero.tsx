@@ -23,8 +23,8 @@ export function Hero() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg" className="brand-glow">
-              <Link href="/products">
-                Browse catalog
+              <Link href="/console">
+                Open the console
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
