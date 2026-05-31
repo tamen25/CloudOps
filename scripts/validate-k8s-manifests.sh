@@ -67,20 +67,32 @@ fi
 MESH_OUT="$(mktemp -d -t mesh-k8s-XXXXXX)"
 
 render_mesh() {
-  for svc in api-gateway pricing; do
+  local digest=sha256:0000000000000000000000000000000000000000000000000000000000000000
+  for svc in api-gateway pricing inventory fraud payment ledger projection-worker; do
     echo "Rendering apps/${svc}/k8s → $MESH_OUT/${svc} ..."
     MESH_NAMESPACE=cloudops \
     MESH_ENVIRONMENT=dev \
+    AWS_REGION=us-east-1 \
     LOG_LEVEL=info \
-    API_GATEWAY_REPLICAS=1 \
-    API_GATEWAY_SERVICE_ACCOUNT=api-gateway \
-    API_GATEWAY_IMAGE=example.com/api-gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
-    PRICING_REPLICAS=1 \
-    PRICING_SERVICE_ACCOUNT=pricing \
-    PRICING_IMAGE=example.com/pricing@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
-    PRICING_URL=http://pricing.cloudops.svc.cluster.local \
     OTEL_ENDPOINT=https://otel.example.com \
     OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
+    OTEL_OTLP_HEADERS="Authorization=Bearer placeholder" \
+    KINESIS_STREAM_NAME= \
+    API_GATEWAY_REPLICAS=1 \
+    API_GATEWAY_SERVICE_ACCOUNT=api-gateway \
+    API_GATEWAY_IMAGE=example.com/api-gateway@${digest} \
+    PRICING_REPLICAS=1 PRICING_SERVICE_ACCOUNT=pricing PRICING_IMAGE=example.com/pricing@${digest} \
+    PRICING_URL=http://pricing.cloudops.svc.cluster.local \
+    INVENTORY_REPLICAS=1 INVENTORY_SERVICE_ACCOUNT=inventory INVENTORY_IMAGE=example.com/inventory@${digest} \
+    INVENTORY_URL=http://inventory.cloudops.svc.cluster.local INVENTORY_SEED_STOCK= \
+    FRAUD_REPLICAS=1 FRAUD_SERVICE_ACCOUNT=fraud FRAUD_IMAGE=example.com/fraud@${digest} \
+    FRAUD_URL=http://fraud.cloudops.svc.cluster.local \
+    PAYMENT_REPLICAS=1 PAYMENT_SERVICE_ACCOUNT=payment PAYMENT_IMAGE=example.com/payment@${digest} \
+    PAYMENT_URL=http://payment.cloudops.svc.cluster.local \
+    LEDGER_REPLICAS=1 LEDGER_SERVICE_ACCOUNT=ledger LEDGER_IMAGE=example.com/ledger@${digest} \
+    LEDGER_URL=http://ledger.cloudops.svc.cluster.local \
+    PROJECTION_REPLICAS=1 PROJECTION_SERVICE_ACCOUNT=projection-worker PROJECTION_IMAGE=example.com/projection@${digest} \
+    PROJECTION_POLL_INTERVAL_SECONDS=2 \
       apps/api-gateway/node_modules/.bin/tsx apps/api-gateway/scripts/render-k8s.ts \
       "apps/${svc}/k8s" "$MESH_OUT/${svc}"
   done

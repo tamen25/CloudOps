@@ -201,3 +201,16 @@ output "mesh_pricing_service_dns" {
   description = "In-cluster DNS of the pricing service."
   value       = var.enable_mesh ? module.mesh_pricing[0].service_dns : null
 }
+
+output "mesh_service_dns" {
+  description = "Map of every mesh service to its in-cluster DNS name."
+  value = var.enable_mesh ? {
+    api-gateway       = module.mesh_gateway[0].service_dns
+    pricing           = module.mesh_pricing[0].service_dns
+    inventory         = module.mesh_inventory[0].service_dns
+    fraud             = module.mesh_fraud[0].service_dns
+    payment           = module.mesh_payment[0].service_dns
+    ledger            = module.mesh_ledger[0].service_dns
+    projection-worker = module.mesh_projection[0].service_dns
+  } : null
+}

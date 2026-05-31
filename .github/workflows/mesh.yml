@@ -14,13 +14,23 @@ on:
     branches: [main]
     paths:
       - 'apps/api-gateway/**'
+      - 'apps/payment/**'
       - 'apps/pricing/**'
+      - 'apps/ledger/**'
+      - 'apps/inventory/**'
+      - 'apps/projection-worker/**'
+      - 'apps/fraud/**'
       - 'modules/mesh/**'
       - '.github/workflows/mesh.yml'
   pull_request:
     paths:
       - 'apps/api-gateway/**'
+      - 'apps/payment/**'
       - 'apps/pricing/**'
+      - 'apps/ledger/**'
+      - 'apps/inventory/**'
+      - 'apps/projection-worker/**'
+      - 'apps/fraud/**'
       - 'modules/mesh/**'
       - '.github/workflows/mesh.yml'
   workflow_dispatch: {}
@@ -42,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway]
+        service: [api-gateway, payment]
     defaults:
       run:
         working-directory: apps/${{ matrix.service }}
@@ -73,7 +83,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [pricing]
+        service: [pricing, ledger]
     defaults:
       run:
         working-directory: apps/${{ matrix.service }}
@@ -100,6 +110,55 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           "$(go env GOPATH)/bin/govulncheck" ./...
         continue-on-error: true
+
+  # ── Python services ─────────────────────────────────────────────────────---
+  python:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [inventory, projection-worker]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install (with test extras)
+        run: pip install -e ".[test]"
+      - name: Test
+        run: pytest -q
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit || true
+        continue-on-error: true
+
+  # ── Java services ───────────────────────────────────────────────────────---
+  java:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [fraud]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify (test + jacoco coverage gate)
+        run: mvn -B verify
 
   # ── Manifest validation (render + kubeconform) ──────────────────────────────
   manifest-validation:

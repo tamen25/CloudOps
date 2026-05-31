@@ -853,3 +853,33 @@ variable "mesh_pricing_image" {
   type        = string
   default     = ""
 }
+
+variable "mesh_inventory_image" {
+  description = "Container image for the inventory service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_fraud_image" {
+  description = "Container image for the fraud service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_payment_image" {
+  description = "Container image for the payment service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_ledger_image" {
+  description = "Container image for the ledger service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_projection_image" {
+  description = "Container image for the projection-worker service."
+  type        = string
+  default     = ""
+}

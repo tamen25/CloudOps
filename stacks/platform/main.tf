@@ -537,9 +537,10 @@ module "storefront_cart" {
 }
 
 #─── Polyglot mesh (distributed-tracing showcase) ─────────────────────────────
-#Each service is one instance of the generic modules/mesh. Phase 1 ships the
-#trace root (api-gateway) + one downstream (pricing). More hops added in later
-#phases. All gated on var.enable_mesh (requires EKS + observability).
+#Each service is one instance of the generic modules/mesh. The trace root
+#(api-gateway, Node) fans out across pricing (Go) → inventory (Python) → fraud
+#(Java) → payment (Node) → ledger (Go); projection-worker (Python) consumes the
+#order-event stream. All gated on var.enable_mesh (requires EKS + observability).
 
 #pricing (Go) — quotes line items. Reachable only from the gateway.
 module "mesh_pricing" {
@@ -561,7 +562,123 @@ module "mesh_pricing" {
   tags = local.common_tags
 }
 
-#api-gateway (Node) — mesh edge / trace root. Fans out to pricing.
+#inventory (Python) — reserve stock. Reachable only from the gateway.
+module "mesh_inventory" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "inventory"
+  namespace                = var.mesh_namespace
+  lang                     = "python"
+  image                    = var.mesh_inventory_image
+  container_port           = 8080
+  run_as_user              = 1001
+  needs_tmp_volume         = true
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#fraud (Java) — risk score. Reachable only from the gateway.
+module "mesh_fraud" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "fraud"
+  namespace                = var.mesh_namespace
+  lang                     = "java"
+  image                    = var.mesh_fraud_image
+  container_port           = 8080
+  run_as_user              = 1001
+  needs_tmp_volume         = true
+  replicas                 = var.mesh_replicas
+  cpu_request              = "100m"
+  memory_request           = "256Mi"
+  cpu_limit                = "500m"
+  memory_limit             = "512Mi"
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#ledger (Go) — double-entry append. Reachable only from payment.
+module "mesh_ledger" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "ledger"
+  namespace                = var.mesh_namespace
+  lang                     = "go"
+  image                    = var.mesh_ledger_image
+  container_port           = 8080
+  run_as_user              = 65532
+  needs_tmp_volume         = false
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "payment" }
+
+  tags = local.common_tags
+}
+
+#payment (Node) — authorize + post to ledger. Reachable only from the gateway.
+module "mesh_payment" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "payment"
+  namespace        = var.mesh_namespace
+  lang             = "node"
+  image            = var.mesh_payment_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+
+  env = {
+    NODE_ENV   = var.environment
+    LEDGER_URL = var.enable_mesh ? module.mesh_ledger[0].service_url : ""
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#projection-worker (Python) — Kinesis consumer building a read model. No
+#ingress (pulls from Kinesis); exposes /metrics for scraping.
+module "mesh_projection" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "projection-worker"
+  namespace        = var.mesh_namespace
+  lang             = "python"
+  image            = var.mesh_projection_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+
+  env = {
+    KINESIS_STREAM_NAME = var.enable_storefront_events ? module.storefront_events[0].stream_name : ""
+    AWS_REGION          = var.region
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  tags = local.common_tags
+}
+
+#api-gateway (Node) — mesh edge / trace root. Fans out to the whole chain.
 module "mesh_gateway" {
   count  = var.enable_mesh ? 1 : 0
   source = "../../modules/mesh"
@@ -574,10 +691,17 @@ module "mesh_gateway" {
   run_as_user      = 1001
   needs_tmp_volume = true
   replicas         = var.mesh_replicas
+  cpu_request      = "25m"
+  memory_request   = "64Mi"
+  cpu_limit        = "150m"
+  memory_limit     = "128Mi"
 
   env = {
-    NODE_ENV    = var.environment
-    PRICING_URL = var.enable_mesh ? module.mesh_pricing[0].service_url : ""
+    NODE_ENV      = var.environment
+    PRICING_URL   = var.enable_mesh ? module.mesh_pricing[0].service_url : ""
+    INVENTORY_URL = var.enable_mesh ? module.mesh_inventory[0].service_url : ""
+    FRAUD_URL     = var.enable_mesh ? module.mesh_fraud[0].service_url : ""
+    PAYMENT_URL   = var.enable_mesh ? module.mesh_payment[0].service_url : ""
   }
 
   otel_endpoint            = local.mesh_otel_endpoint
