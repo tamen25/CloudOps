@@ -179,6 +179,10 @@ STOREFRONT_AUTH_BACKOFF_MAX_MS=60000 \
 STOREFRONT_AUTH_BACKOFF_RESET_MS=900000 \
 OTEL_ENDPOINT=https://otel.example.com \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
+TEMPO_URL=http://tempo.monitoring.svc.cluster.local:3200 \
+MIMIR_URL=http://mimir.monitoring.svc.cluster.local:8080 \
+LOKI_URL=http://loki.monitoring.svc.cluster.local:3100 \
+LOADGEN_URL=http://loadgen.cloudops.svc.cluster.local \
   apps/storefront/node_modules/.bin/tsx apps/storefront/scripts/render-k8s.ts apps/storefront/k8s "$STOREFRONT_OUT"
 
 #── 3. Validate ──────────────────────────────────────────────────────────────

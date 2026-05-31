@@ -80,9 +80,16 @@ spec:
             #as the OAuth `redirect_uri` base. Derived in CI from tfvars.
             - name: STOREFRONT_ORIGIN
               value: "${STOREFRONT_ORIGIN}"
+            #Privacy contact shown on the public privacy page.
+            - name: PRIVACY_CONTACT_EMAIL
+              value: "${PRIVACY_CONTACT_EMAIL}"
             #Cart Dynamo (wired in #84; empty until then).
             - name: CART_TABLE_NAME
               value: "${CART_TABLE_NAME}"
+            #Realtime connection registry used to close active user sockets
+            #during privacy erasure.
+            - name: REALTIME_CONNECTIONS_TABLE_NAME
+              value: "${REALTIME_CONNECTIONS_TABLE_NAME}"
             #Checkout Step Functions (wired in #87; empty until then).
             - name: CHECKOUT_STATE_MACHINE_ARN
               value: "${CHECKOUT_STATE_MACHINE_ARN}"
@@ -94,6 +101,24 @@ spec:
               value: "${STOREFRONT_WS_BASE_URL}"
             - name: NEXT_PUBLIC_WS_BASE_URL
               value: "${STOREFRONT_WS_BASE_URL}"
+            #In-process storefront throttles. WAF is still the perimeter layer,
+            #but the app keeps local safety budgets for direct pod traffic too.
+            - name: STOREFRONT_API_RATE_LIMIT_WINDOW_MS
+              value: "${STOREFRONT_API_RATE_LIMIT_WINDOW_MS}"
+            - name: STOREFRONT_API_IP_RATE_LIMIT_MAX
+              value: "${STOREFRONT_API_IP_RATE_LIMIT_MAX}"
+            - name: STOREFRONT_API_USER_RATE_LIMIT_MAX
+              value: "${STOREFRONT_API_USER_RATE_LIMIT_MAX}"
+            - name: STOREFRONT_AUTH_RATE_LIMIT_WINDOW_MS
+              value: "${STOREFRONT_AUTH_RATE_LIMIT_WINDOW_MS}"
+            - name: STOREFRONT_AUTH_IP_RATE_LIMIT_MAX
+              value: "${STOREFRONT_AUTH_IP_RATE_LIMIT_MAX}"
+            - name: STOREFRONT_AUTH_BACKOFF_BASE_MS
+              value: "${STOREFRONT_AUTH_BACKOFF_BASE_MS}"
+            - name: STOREFRONT_AUTH_BACKOFF_MAX_MS
+              value: "${STOREFRONT_AUTH_BACKOFF_MAX_MS}"
+            - name: STOREFRONT_AUTH_BACKOFF_RESET_MS
+              value: "${STOREFRONT_AUTH_BACKOFF_RESET_MS}"
             #Session cookie HMAC + WS-token HMAC secrets. Sourced via External
             #Secrets in non-dev envs; in dev these stay empty.
             - name: SESSION_SECRET
@@ -107,6 +132,26 @@ spec:
                 secretKeyRef:
                   name: storefront-secrets
                   key: ws-token-secret
+                  optional: true
+            #Observability BFF — the /console reads the service map, metrics,
+            #and traces from these in-cluster backends (server-side only; no
+            #creds reach the browser). Empty in dev = console shows empty map.
+            - name: TEMPO_URL
+              value: "${TEMPO_URL}"
+            - name: MIMIR_URL
+              value: "${MIMIR_URL}"
+            - name: LOKI_URL
+              value: "${LOKI_URL}"
+            #Loadgen control API (the /load console). INTERNAL_HMAC_SECRET is
+            #the shared mesh secret used to sign control requests. Both empty in
+            #dev = the /load page reports loadgen_not_configured.
+            - name: LOADGEN_URL
+              value: "${LOADGEN_URL}"
+            - name: INTERNAL_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mesh-internal
+                  key: hmac-secret
                   optional: true
             #OTel — wired through the same SSM-published config as order-api
             #(closes backlog #61).
