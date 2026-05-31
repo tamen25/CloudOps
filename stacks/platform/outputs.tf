@@ -214,3 +214,8 @@ output "mesh_service_dns" {
     projection-worker = module.mesh_projection[0].service_dns
   } : null
 }
+
+output "mesh_event_bus_name" {
+  description = "EventBridge bus carrying enriched mesh order events."
+  value       = var.enable_mesh ? module.mesh_events[0].event_bus_name : null
+}

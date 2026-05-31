@@ -652,6 +652,19 @@ module "mesh_payment" {
   tags = local.common_tags
 }
 
+#mesh-events — serverless async fan-out: Kinesis → enrichment-lambda →
+#EventBridge → analytics-lambda. Reuses the storefront-events order stream.
+module "mesh_events" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh-events"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  kinesis_stream_arn = var.enable_storefront_events ? module.storefront_events[0].stream_arn : ""
+
+  tags = local.common_tags
+}
+
 #projection-worker (Python) — Kinesis consumer building a read model. No
 #ingress (pulls from Kinesis); exposes /metrics for scraping.
 module "mesh_projection" {

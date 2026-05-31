@@ -29,6 +29,8 @@ LAMBDA_DIRS=(
   "modules/storefront-realtime/lambdas/fanout"
   "modules/storefront-checkout/lambdas/email"
   "modules/storefront-assets/lambda/resize"
+  "modules/mesh-events/lambdas/enrichment"
+  "modules/mesh-events/lambdas/analytics"
 )
 
 #Handles needs install.
