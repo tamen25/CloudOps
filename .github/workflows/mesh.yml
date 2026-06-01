@@ -68,8 +68,11 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Test
-        run: npm test
+      - name: Test (coverage-gated)
+        # Gates live in each service's package.json test:coverage script
+        # (api-gateway 90/80/90, payment 85/75/85 lines/branches/functions).
+        # Matches the Go (>=70%) and Java (JaCoCo 60%) gates — backlog #147.
+        run: npm run test:coverage
       - name: Contract check (env-var drift)
         run: npm run contract-check
       - name: Build
@@ -132,8 +135,12 @@ jobs:
           python-version: '3.12'
       - name: Install (with test extras)
         run: pip install -e ".[test]"
-      - name: Test
-        run: pytest -q
+      - name: Test (coverage-gated >=90%)
+        # Both services exclude their live-AWS boundary from coverage
+        # (inventory: tracing.py; projection-worker: poller.py) via
+        # [tool.coverage.run] omit. Testable code sits at 94%/99% — gate at
+        # 90% for headroom, matching the Go/Java gates — backlog #147.
+        run: pytest -q --cov --cov-report=term-missing --cov-fail-under=90
       - name: pip-audit
         run: |
           pip install pip-audit

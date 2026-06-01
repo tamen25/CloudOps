@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "pytest==8.3.4",
+  "pytest-cov==6.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -29,3 +30,10 @@ packages = ["src/projection"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["projection"]
+# poller.py is the boto3 Kinesis poll loop (live AWS I/O) — excluded like the
+# tracing/server boundaries elsewhere in the mesh. The foldable logic it drives
+# (decode_record, ReadModel.apply) lives in readmodel.py and is fully covered.
+omit = ["src/projection/poller.py"]
