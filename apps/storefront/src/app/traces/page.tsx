@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ConsoleHeader } from "@/components/console/ConsoleHeader";
 import { usePoll } from "@/components/console/usePoll";
+import { TraceWaterfall } from "@/components/console/TraceWaterfall";
 import type { TraceSummary } from "@/lib/observe";
 
 export default function TracesPage() {
@@ -56,12 +57,7 @@ export default function TracesPage() {
           </table>
         </div>
 
-        {selected && (
-          <p className="mt-4 font-mono text-[11px] text-fg-subtle">
-            selected <span className="text-brand-400">{selected}</span> — full span waterfall opens in Grafana Tempo
-            (deep-link wired with the Grafana datasource in a follow-up).
-          </p>
-        )}
+        {selected && <TraceWaterfall traceId={selected} />}
       </div>
     </main>
   );
