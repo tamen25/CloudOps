@@ -875,3 +875,9 @@ variable "loadgen_trickle_duration_seconds" {
   type    = number
   default = 60
 }
+
+variable "loadgen_enable_chaos" {
+  description = "Grant loadgen namespace-scoped pod-delete RBAC + expose /chaos/kill for real pod-kill fault injection (#143). OFF by default; app guards (mesh allowlist + dry-run default) still apply when on."
+  type        = bool
+  default     = false
+}

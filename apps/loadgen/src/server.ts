@@ -7,11 +7,17 @@ import pino from 'pino';
 import { createApp } from './app';
 import { LoadRunner } from './runner';
 import { isScenario, type ScenarioName } from './scenarios';
+import { ChaosController } from './chaos';
+import { createInClusterPodClient } from './k8s';
 
 const PORT = Number(process.env.PORT) || 8080;
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://api-gateway';
 const HMAC_SECRET = process.env.INTERNAL_HMAC_SECRET || '';
 const HMAC_SECRET_PREVIOUS = process.env.INTERNAL_HMAC_SECRET_PREVIOUS || '';
+// Chaos is OFF unless explicitly enabled AND the RBAC exists (rbac.tf). When
+// off, no k8s client is constructed and POST /chaos/kill is a 404.
+const CHAOS_ENABLED = process.env.CHAOS_ENABLED === '1';
+const MESH_NAMESPACE = process.env.MESH_NAMESPACE || 'cloudops';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -42,7 +48,26 @@ if (runOnStart && isScenario(runOnStart)) {
     process.exit(0);
   }, params.durationSeconds * 1000 + 2000);
 } else {
-  const app = createApp({ runner, hmacSecret: HMAC_SECRET, hmacSecretPrevious: HMAC_SECRET_PREVIOUS });
+  // Construct the chaos controller only when enabled — building it loads
+  // in-cluster k8s config, which only works inside the pod with the RBAC token.
+  const chaos = CHAOS_ENABLED
+    ? new ChaosController({
+        client: createInClusterPodClient(),
+        namespace: MESH_NAMESPACE,
+        logger: {
+          info: (...a) => logger.info(...(a as [object])),
+          error: (...a) => logger.error(...(a as [object])),
+        },
+      })
+    : undefined;
+  if (CHAOS_ENABLED) logger.info({ namespace: MESH_NAMESPACE }, 'chaos pod-kill ENABLED');
+
+  const app = createApp({
+    runner,
+    hmacSecret: HMAC_SECRET,
+    hmacSecretPrevious: HMAC_SECRET_PREVIOUS,
+    chaos,
+  });
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info({ port: PORT, gatewayUrl: GATEWAY_URL }, 'loadgen control API started');

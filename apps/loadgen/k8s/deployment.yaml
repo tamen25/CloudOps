@@ -61,6 +61,13 @@ spec:
               value: "${LOG_LEVEL}"
             - name: GATEWAY_URL
               value: "${GATEWAY_URL}"
+            # Chaos pod-kill (#143). Off unless modules/loadgen sets enable_chaos
+            # (which injects CHAOS_ENABLED=1 + MESH_NAMESPACE). Defaults here keep
+            # /chaos/kill a 404. See docs/runbooks/security/chaos-pod-kill.md.
+            - name: CHAOS_ENABLED
+              value: "${CHAOS_ENABLED}"
+            - name: MESH_NAMESPACE
+              value: "${MESH_NAMESPACE}"
             # Long-running control API never auto-runs; the CronJob sets these.
             - name: RUN_ON_START
               value: ""

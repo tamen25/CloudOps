@@ -94,6 +94,7 @@ render_mesh() {
     PROJECTION_REPLICAS=1 PROJECTION_SERVICE_ACCOUNT=projection-worker PROJECTION_IMAGE=example.com/projection@${digest} \
     PROJECTION_POLL_INTERVAL_SECONDS=2 \
     LOADGEN_REPLICAS=1 LOADGEN_SERVICE_ACCOUNT=loadgen LOADGEN_IMAGE=example.com/loadgen@${digest} \
+    CHAOS_ENABLED="" MESH_NAMESPACE=cloudops \
     GATEWAY_URL=http://api-gateway.cloudops.svc.cluster.local \
       apps/api-gateway/node_modules/.bin/tsx apps/api-gateway/scripts/render-k8s.ts \
       "apps/${svc}/k8s" "$MESH_OUT/${svc}"

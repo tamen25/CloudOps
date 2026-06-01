@@ -727,5 +727,7 @@ module "loadgen" {
   trickle_rps              = var.loadgen_trickle_rps
   trickle_duration_seconds = var.loadgen_trickle_duration_seconds
 
+  enable_chaos = var.loadgen_enable_chaos
+
   tags = local.common_tags
 }

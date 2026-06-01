@@ -8,12 +8,17 @@ import helmet from 'helmet';
 import { LoadRunner } from './runner';
 import { isScenario } from './scenarios';
 import { verifyInternalHmac } from './hmac';
+import type { ChaosController } from './chaos';
 
 export interface ControlDeps {
   runner: LoadRunner;
   hmacSecret: string;
   hmacSecretPrevious?: string;
   now?: () => number;
+  // Present only when chaos is enabled (CHAOS_ENABLED + the RBAC from
+  // modules/loadgen/rbac.tf). Absent => POST /chaos/kill returns 404, so the
+  // endpoint does not exist at all unless the operator turned chaos on.
+  chaos?: ChaosController;
 }
 
 export function createApp(deps: ControlDeps): Express {
@@ -83,6 +88,26 @@ export function createApp(deps: ControlDeps): Express {
     if (!requireHmac(req, res)) return;
     deps.runner.stop();
     res.status(200).json({ status: 'stopped' });
+  });
+
+  // POST /chaos/kill — real pod-kill fault injection (#143). HMAC-gated like
+  // /run; the BFF adds the admin Cognito gate. The endpoint only exists when a
+  // ChaosController was injected (CHAOS_ENABLED + RBAC). Body: {service,dryRun}.
+  // dryRun defaults to true in the controller, so a real kill needs an explicit
+  // {"dryRun": false}. The target service is checked against a fixed mesh
+  // allowlist — never free-form (structural guard, like the SSRF target).
+  app.post('/chaos/kill', async (req, res) => {
+    if (!deps.chaos) {
+      res.status(404).json({ error: 'chaos_disabled' });
+      return;
+    }
+    if (!requireHmac(req, res)) return;
+    const service = String(req.body?.service ?? '');
+    // Only an explicit boolean false performs a real kill; anything else (absent,
+    // true, "false" string) stays a dry-run.
+    const dryRun = req.body?.dryRun === false ? false : true;
+    const result = await deps.chaos.killPod(service, { dryRun });
+    res.status(result.ok ? 200 : 400).json(result);
   });
 
   return app;

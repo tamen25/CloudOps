@@ -64,3 +64,18 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+#─── Chaos pod-kill (#143) ────────────────────────────────────────────────────
+variable "enable_chaos" {
+  description = <<-EOT
+    Grant the loadgen control SA a namespace-scoped Role to get/list/delete pods
+    so the chaos scenario can kill ONE live mesh pod and let self-healing
+    reschedule it. OFF by default — when false, no RBAC is created and the
+    loadgen's POST /chaos/kill returns 404 (the env flag CHAOS_ENABLED is also
+    not set). The app re-checks the target against a fixed mesh allowlist and
+    defaults to dry-run, so this permission alone cannot kill loadgen itself or
+    any infra pod.
+  EOT
+  type        = bool
+  default     = false
+}

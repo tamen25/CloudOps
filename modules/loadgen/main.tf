@@ -26,10 +26,18 @@ module "control" {
   otel_endpoint            = var.otel_endpoint
   otel_resource_attributes = var.otel_resource_attributes
 
-  env = {
-    NODE_ENV    = var.environment
-    GATEWAY_URL = var.gateway_url
-  }
+  # CHAOS_ENABLED + MESH_NAMESPACE are only set when chaos is on; the app builds
+  # the k8s client (and exposes /chaos/kill) only when CHAOS_ENABLED=1.
+  env = merge(
+    {
+      NODE_ENV    = var.environment
+      GATEWAY_URL = var.gateway_url
+    },
+    var.enable_chaos ? {
+      CHAOS_ENABLED  = "1"
+      MESH_NAMESPACE = var.namespace
+    } : {},
+  )
 
   tags = var.tags
 }
