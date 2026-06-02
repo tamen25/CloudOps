@@ -488,6 +488,10 @@ module "finops" {
   cost_alert_email               = var.cost_alert_email
   cost_anomaly_threshold_percent = var.cost_anomaly_threshold_percent
 
+  enable_budget_hardcap_action     = var.enable_budget_hardcap_action
+  budget_hardcap_threshold_percent = var.budget_hardcap_threshold_percent
+  budget_hardcap_target_role_names = var.budget_hardcap_target_role_names
+
   #Idle detector inputs — optional, checks are skipped when empty
   eks_cluster_name = var.enable_eks ? local.eks_cluster_name : ""
   rds_instance_id  = var.enable_database ? module.database[0].rds_instance_id : ""

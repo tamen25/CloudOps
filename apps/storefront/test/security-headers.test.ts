@@ -23,6 +23,28 @@ test("CSP locks down default + ancestors + base + form-action + objects", async 
   assert.match(v, /upgrade-insecure-requests/);
 });
 
+// 'unsafe-eval' is a DEV-ONLY concession for the Next.js Fast Refresh runtime
+// (#151). It must never appear in a production build's CSP (guards #132). The
+// config picks script-src by `NODE_ENV !== 'production'`, so re-derive both
+// branches the same way and assert the prod branch is eval-free.
+test("script-src never allows 'unsafe-eval' in production", async () => {
+  const isDevBranch = "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+  const prodBranch = "script-src 'self' 'unsafe-inline'";
+  assert.ok(!prodBranch.includes("unsafe-eval"), "prod script-src must be eval-free");
+
+  const [{ headers }] = await headersFn();
+  const v = headers.find((h) => h.key === "Content-Security-Policy")!.value;
+  // The live header (under the current NODE_ENV) must equal exactly one branch.
+  const scriptSrc = v.split("; ").find((d) => d.startsWith("script-src"));
+  assert.ok(
+    scriptSrc === prodBranch || scriptSrc === isDevBranch,
+    `unexpected script-src: ${scriptSrc}`,
+  );
+  if (process.env.NODE_ENV === "production") {
+    assert.equal(scriptSrc, prodBranch);
+  }
+});
+
 test("HSTS is at least one year with subdomains", async () => {
   const [{ headers }] = await headersFn();
   const hsts = headers.find((h) => h.key === "Strict-Transport-Security");

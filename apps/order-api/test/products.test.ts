@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'crypto';
+import http from 'http';
 import { createApp } from '../src/app';
 
 interface MockClient {
@@ -42,7 +43,6 @@ function hmacFor(opts: { secret: string; timestamp: string; tenant: string; body
 
 async function request(app: any, method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   return new Promise<{ status: number; body: any }>((resolve, reject) => {
-    const http = require('http');
     const server = app.listen(0, () => {
       const port = (server.address() as { port: number }).port;
       const data = body !== undefined ? JSON.stringify(body) : undefined;

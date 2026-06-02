@@ -1,10 +1,7 @@
 // This file contains migrations test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { withAdvisoryLock, LOCK_KEY_HIGH, LOCK_KEY_LOW, runMigrations } = require('../src/migrations');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { withAdvisoryLock, LOCK_KEY_HIGH, LOCK_KEY_LOW, runMigrations } from '../src/migrations';
 
 // Creates logger.
 function createLogger() {
@@ -71,8 +68,9 @@ test('runMigrations releases the client when no migrations are pending', async (
             { name: '004_idempotency_keys.sql' },
             { name: '005_audit_events.sql' },
             { name: '006_products.sql' },
+            { name: '007_order_ownership.sql' },
           ],
-          rowCount: 6,
+          rowCount: 7,
         };
       }
       return { rows: [], rowCount: 0 };

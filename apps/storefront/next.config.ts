@@ -5,10 +5,21 @@ import type { NextConfig } from "next";
  * 'unsafe-inline' on script/style is required by Next.js 15 app-router runtime
  * (inline bootstrap chunks + styled-jsx); promote to nonce-based CSP once the
  * middleware rewrite lands. connect-src includes wss: because the realtime WS
- * lives on a separate API Gateway origin (#86). */
+ * lives on a separate API Gateway origin (#86).
+ *
+ * 'unsafe-eval' is added ONLY in dev: the Next.js dev runtime (React Fast
+ * Refresh + chunk eval) calls eval(), and without it the CSP blocks ALL client
+ * hydration in `next dev` — every "use client" island stays inert (this is why
+ * the /pipeline animation appeared dead locally, #151). Production builds never
+ * eval, so the prod CSP stays exactly as #132 hardened it. */
+const isDev = process.env.NODE_ENV !== "production";
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",

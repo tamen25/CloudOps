@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Boxes } from "lucide-react";
+import { designPreviewEnabled } from "@/lib/flags";
 
 export function Footer() {
   return (
@@ -19,12 +20,13 @@ export function Footer() {
 
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
-            Browse
+            Console
           </h4>
           <ul className="space-y-1 text-sm">
-            <li><Link href="/products" className="text-fg-base hover:text-brand-400">Catalog</Link></li>
-            <li><Link href="/cart" className="text-fg-base hover:text-brand-400">Cart</Link></li>
-            <li><Link href="/orders" className="text-fg-base hover:text-brand-400">Orders</Link></li>
+            <li><Link href="/console" className="text-fg-base hover:text-brand-400">Service map</Link></li>
+            <li><Link href="/services" className="text-fg-base hover:text-brand-400">Services</Link></li>
+            <li><Link href="/traces" className="text-fg-base hover:text-brand-400">Traces</Link></li>
+            <li><Link href="/load" className="text-fg-base hover:text-brand-400">Load</Link></li>
           </ul>
         </div>
 
@@ -34,8 +36,9 @@ export function Footer() {
           </h4>
           <ul className="space-y-1 text-sm">
             <li><Link href="/login" className="text-fg-base hover:text-brand-400">Sign in</Link></li>
-            <li><Link href="/design" className="text-fg-base hover:text-brand-400">Design system</Link></li>
-            <li><Link href="/admin" className="text-fg-base hover:text-brand-400">Admin</Link></li>
+            {designPreviewEnabled ? (
+              <li><Link href="/design" className="text-fg-base hover:text-brand-400">Design system</Link></li>
+            ) : null}
             <li><Link href="/privacy" className="text-fg-base hover:text-brand-400">Privacy</Link></li>
             <li><Link href="/cookies" className="text-fg-base hover:text-brand-400">Cookies</Link></li>
           </ul>

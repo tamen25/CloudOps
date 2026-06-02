@@ -3,7 +3,7 @@ variable "environment" { type = string }
 variable "region" { type = string }
 
 variable "order_api_url" {
-  description = "Internal URL for the order-api (e.g. http://order-api.cloudops.svc.cluster.local:3000). Step Functions calls POST /order here."
+  description = "Deprecated compatibility input retained for existing stacks; order creation now happens in the authenticated storefront route."
   type        = string
 }
 

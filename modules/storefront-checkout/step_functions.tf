@@ -1,8 +1,6 @@
-#Checkout saga state machine. CreateOrder calls Express POST /order with
-#the SF execution name as Idempotency-Key so retries hit #72's path.
-#EnqueueEmail drops a message on SQS; the email Lambda renders and sends.
-#On any failure the Compensate state writes a final message; full inventory
-#reservation would attach here when products carry per-tenant stock count.
+#Post-order workflow. The authenticated storefront route creates the order
+#before starting this state machine so end-user writes never depend on an
+#anonymous X-Tenant-Id path. This workflow keeps durable email dispatch.
 
 resource "aws_cloudwatch_log_group" "sfn" {
   name              = "/aws/states/${local.state_machine}"
@@ -16,45 +14,16 @@ resource "aws_sfn_state_machine" "checkout" {
   type     = "STANDARD"
 
   definition = jsonencode({
-    Comment = "Checkout saga: reserve → create order → enqueue email."
-    StartAt = "CreateOrder"
+    Comment = "Post-order workflow: enqueue confirmation email."
+    StartAt = "EnqueueEmail"
     States = {
-      CreateOrder = {
-        Type     = "Task"
-        Resource = "arn:aws:states:::http:invoke"
-        Parameters = {
-          ApiEndpoint = "${var.order_api_url}/order"
-          Method      = "POST"
-          Authentication = {
-            ConnectionArn = ""
-          }
-          Headers = {
-            "Content-Type"      = "application/json"
-            "X-Tenant-Id.$"     = "$.tenant_id"
-            "Idempotency-Key.$" = "$$.Execution.Name"
-          }
-          RequestBody = {
-            "items.$" = "$.items"
-            "total.$" = "$.total"
-          }
-        }
-        ResultPath = "$.order"
-        Catch = [
-          {
-            ErrorEquals = ["States.ALL"]
-            ResultPath  = "$.error"
-            Next        = "Failed"
-          },
-        ]
-        Next = "EnqueueEmail"
-      }
       EnqueueEmail = {
         Type     = "Task"
         Resource = "arn:aws:states:::sqs:sendMessage"
         Parameters = {
           QueueUrl = aws_sqs_queue.email.url
           MessageBody = {
-            "order_id.$"  = "$.order.ResponseBody.order.order_id"
+            "order_id.$"  = "$.order_id"
             "tenant_id.$" = "$.tenant_id"
             "total.$"     = "$.total"
             "items.$"     = "$.items"
@@ -63,17 +32,14 @@ resource "aws_sfn_state_machine" "checkout" {
         }
         End = true
       }
-      Failed = {
-        Type  = "Fail"
-        Cause = "checkout_failed"
-        Error = "CheckoutSagaFailed"
-      }
     }
   })
 
   logging_configuration {
     log_destination        = "${aws_cloudwatch_log_group.sfn.arn}:*"
-    include_execution_data = true
+    # The execution payload contains the shopper's email address. Preserve
+    # error visibility without copying personal data into CloudWatch logs.
+    include_execution_data = false
     level                  = "ERROR"
   }
 
@@ -84,7 +50,7 @@ resource "aws_sfn_state_machine" "checkout" {
   tags = var.tags
 }
 
-#─── Email Lambda ──────────────────────────────────────────────────────────
+#â”€â”€â”€ Email Lambda â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data "archive_file" "email" {
   type        = "zip"
   source_dir  = "${path.module}/lambdas/email"

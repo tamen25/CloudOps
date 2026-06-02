@@ -136,6 +136,27 @@ variable "cost_anomaly_threshold_percent" {
   default     = 20
 }
 
+#FinOps hard-cap stop-loss (#139).
+variable "enable_budget_hardcap_action" {
+  description = "Attach a deny-policy budget action when ACTUAL spend crosses budget_hardcap_threshold_percent. OFF by default. Requires budget_hardcap_target_role_names."
+  type        = bool
+  default     = false
+}
+
+#Defines the budget hard-cap threshold percent input value.
+variable "budget_hardcap_threshold_percent" {
+  description = "Percentage of cost_budget_monthly_usd at which the hard-cap deny policy applies. Sit above the 100% CRITICAL alert (default 120%)."
+  type        = number
+  default     = 120
+}
+
+#Defines the budget hard-cap target role names input value.
+variable "budget_hardcap_target_role_names" {
+  description = "IAM role NAMES the hard-cap deny policy attaches to (e.g. the GitHub Actions deploy role). Empty disables the action."
+  type        = list(string)
+  default     = []
+}
+
 #Defines the enable alertmanager input value.
 variable "enable_alertmanager" {
   description = "Enable the kube-prometheus-stack Alertmanager pod. Required for SLO PrometheusRule alerts to surface in the Grafana unified Alerts UI via the Alertmanager datasource."

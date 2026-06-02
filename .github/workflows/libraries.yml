@@ -153,6 +153,9 @@ jobs:
           CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_DOTNET_REPOSITORY }}
         run: bash scripts/publish-dotnet-packages.sh --check
 
+      #Threshold raised 40 → 45 in #69. Java is at 0.50 (actual ~57%); .NET
+      #shape mirrors Java so 45 is a conservative lift with margin. Revert
+      #here if a future change drops below the new gate.
       - name: Test .NET logs package with coverage
         working-directory: libraries/dotnet/logs
         run: >
@@ -161,7 +164,7 @@ jobs:
           /p:CollectCoverage=true
           /p:CoverletOutputFormat=cobertura
           /p:CoverletOutput=TestResults/coverage/
-          /p:Threshold=40
+          /p:Threshold=45
           /p:ThresholdType=line
 
       - name: Upload .NET coverage report
@@ -588,3 +591,53 @@ jobs:
           | **Repository** | \`${CODEARTIFACT_PYTHON_REPOSITORY}\` |
           | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
           EOF
+
+  #Closes backlog #123 — single aggregate view of library coverage across
+  #all 6 languages. Downloads each per-language `coverage-summary.txt`
+  #artifact, extracts the headline number, writes a markdown table to the
+  #step summary. Best-effort: missing artifact = "—" (a per-language job
+  #may have failed before upload, or coverage uploads may have changed).
+  coverage-aggregate:
+    runs-on: ubuntu-latest
+    needs: [nodejs-check, java-check, dotnet-check, python-check, go-check, cpp-check]
+    if: always() && (github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true')
+    permissions:
+      contents: read
+    steps:
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage
+          pattern: coverage-*-logs
+          merge-multiple: false
+
+      - name: Aggregate and summarise
+        run: |
+          set -euo pipefail
+          {
+            echo "## Library Coverage Summary"
+            echo
+            echo "| Language | Line coverage | Gate | Source |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          extract() {
+            local lang="$1" file="$2" gate="$3" pattern="$4"
+            if [ ! -f "$file" ]; then
+              printf '| %s | — | %s | (no artifact) |\n' "$lang" "$gate" >> "$GITHUB_STEP_SUMMARY"
+              return
+            fi
+            local val
+            val=$(grep -E "$pattern" "$file" | head -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | head -1 || true)
+            if [ -z "$val" ]; then
+              val=$(grep -oE '[0-9]+(\.[0-9]+)?%' "$file" | tail -1 || echo "—")
+            fi
+            printf '| %s | %s | %s | `%s` |\n' "$lang" "${val:-—}" "$gate" "$file" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          extract "Node.js"  "coverage/coverage-nodejs-logs/coverage-summary.txt"      "80%" "Lines"
+          extract "Java"     "coverage/coverage-java-logs/jacoco.xml"                  "50%" "line-rate"
+          extract ".NET"     "coverage/coverage-dotnet-logs/coverage.cobertura.xml"    "45%" "line-rate"
+          extract "Python"   "coverage/coverage-python-logs/coverage-summary.txt"      "70%" "TOTAL"
+          extract "Go"       "coverage/coverage-go-logs/coverage-summary.txt"          "75%" "^total:"
+          extract "C++"      "coverage/coverage-cpp-logs/coverage-summary.txt"         "50%" "lines:"

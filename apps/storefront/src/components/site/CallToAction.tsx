@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { designPreviewEnabled } from "@/lib/flags";
 
 export function CallToAction() {
   return (
@@ -14,20 +15,21 @@ export function CallToAction() {
               Ready when you are.
             </h2>
             <p className="max-w-xl text-fg-muted">
-              The platform is wired top to bottom. Spin a demo environment
-              with the bring-up runbook or open the design system and
-              skim the components.
+              The platform is wired top to bottom. Open the live service map
+              or walk the architecture flows end to end.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" className="brand-glow">
-              <Link href="/products">
-                Start shopping
+              <Link href="/console">
+                Open the console
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="secondary" size="lg">
-              <Link href="/design">Design system</Link>
+              <Link href={designPreviewEnabled ? "/design" : "/architecture"}>
+                {designPreviewEnabled ? "Design system" : "See the architecture"}
+              </Link>
             </Button>
           </div>
         </div>

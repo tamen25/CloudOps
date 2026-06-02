@@ -195,3 +195,10 @@ eks_endpoint_public_access_cidrs = ["0.0.0.0/0"]   # ignored while public access
 cost_budget_monthly_usd        = 500
 cost_alert_email               = ""
 cost_anomaly_threshold_percent = 15
+
+# Hard-cap stop-loss (#139). OFF here too — fill the target role name(s) and flip
+# the toggle once you have verified the cap sits above real steady-state spend.
+# Target the GitHub Actions deploy role (and any node-launch role) by NAME.
+enable_budget_hardcap_action     = false
+budget_hardcap_threshold_percent = 120
+budget_hardcap_target_role_names = []

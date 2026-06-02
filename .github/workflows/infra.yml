@@ -261,11 +261,23 @@ jobs:
       - name: terraform plan (layered stacks)
         id: plan
         shell: bash
+        env:
+          #Closes backlog #120 — exit 2 from -detailed-exitcode = drift, not failure.
+          TF_PLAN_DETAILED_EXITCODE: '1'
         run: |
           set -o pipefail
           #Plan foundation -> cluster -> platform against separate state keys.
+          set +e
           bash scripts/terraform-stacks.sh plan -lock=false -out=tfplan -no-color \
             2>&1 | tee plan-output.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" = "2" ]; then
+            echo "::warning::Terraform plan reports drift / pending changes — review plan-output.txt"
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$rc"
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4

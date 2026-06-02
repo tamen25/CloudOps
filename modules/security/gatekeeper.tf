@@ -35,24 +35,10 @@ resource "helm_release" "gatekeeper" {
   })]
 }
 
-#Closes backlog #98 — Cosign Gatekeeper provider.
-#The K8sRequireImageSignature ConstraintTemplate calls
-#`external_data({"provider": "cosign-provider", ...})`. Without this sidecar
-#deployed, the constraint reports system errors on every admission and can
-#brick the cluster (every Pod create blocked). Hence:
-# - `enable_cosign_provider` defaults FALSE (no sidecar, no constraint).
-# - When TRUE, Terraform deploys `sigstore/cosign-gatekeeper-provider`.
-# - The constraint (in gatekeeper_policies.tf) has its own
-#   `enable_image_signature_constraint` toggle so operators can verify the
-#   provider is healthy before flipping enforcement on.
-#
-#Rollout (see docs/runbooks/cosign-gatekeeper.md):
-#  1. Set `enable_cosign_provider = true`, apply.
-#  2. Confirm sidecar pod healthy in `gatekeeper-system`.
-#  3. Confirm CI is signing images with `cosign sign --yes`.
-#  4. Audit-mode flip: leave `enable_image_signature_constraint = false`,
-#     verify no system errors via Gatekeeper logs.
-#  5. Enforce: set `enable_image_signature_constraint = true`, apply.
+#Cosign Gatekeeper provider (#98). Default off because the
+#K8sRequireImageSignature ConstraintTemplate hits system_error on every
+#admission without this sidecar, which blocks every Pod create.
+#Rollout + audit + enforce steps: docs/runbooks/cosign-gatekeeper.md.
 resource "helm_release" "cosign_provider" {
   count = var.enable_cosign_provider ? 1 : 0
 

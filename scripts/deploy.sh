@@ -248,6 +248,10 @@ if [ "$ENABLE_EKS" = "true" ] && [ "$ENABLE_INGRESS" = "true" ] && [ "$ENABLE_OB
         export ORDER_API_IRSA_ROLE_ARN
         export ORDER_API_IMAGE="${SAMPLE_APP_ECR_URI}:latest"
         export API_KEY_SECRET_ARN="${ORDER_API_KEY_SECRET_ARN:-}"
+        #Closes backlog #116 — replica count is templated; default 2 for the
+        #local-dev path. Set ORDER_API_REPLICAS before calling deploy.sh to
+        #override.
+        export ORDER_API_REPLICAS="${ORDER_API_REPLICAS:-2}"
 
         aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" >/dev/null
         ./apps/order-api/node_modules/.bin/tsx ./apps/order-api/scripts/render-k8s.ts ./apps/order-api/k8s /tmp/order-api-k8s
@@ -549,15 +553,13 @@ fi
 
 if [ "$ENABLE_OBSERVABILITY" = "true" ]; then
     GRAFANA_URL=$(terraform output -raw grafana_url 2>/dev/null || echo "(pending)")
-    GRAFANA_PASS=$(terraform output -raw grafana_admin_password 2>/dev/null || echo "(error retrieving)")
     OTEL_URL=$(terraform output -raw otel_endpoint 2>/dev/null || echo "(pending)")
-    OTEL_KEY=$(terraform output -raw otel_api_key 2>/dev/null || echo "(error retrieving)")
 
     echo -e "${BOLD}${CYAN}╠══════════════════════════════════════════════════════════════╣${NC}"
     printf "${BOLD}${CYAN}║${NC}  %-24s %s\n" "Grafana URL:" "$GRAFANA_URL"
-    printf "${BOLD}${CYAN}║${NC}  %-24s %s  ${YELLOW}[SENSITIVE]${NC}\n" "Grafana Password:" "$GRAFANA_PASS"
+    printf "${BOLD}${CYAN}║${NC}  %-24s %s\n" "Grafana Password:" "[sensitive output hidden]"
     printf "${BOLD}${CYAN}║${NC}  %-24s %s\n" "OTel Endpoint:" "$OTEL_URL"
-    printf "${BOLD}${CYAN}║${NC}  %-24s %s  ${YELLOW}[SENSITIVE]${NC}\n" "OTel API Key:" "$OTEL_KEY"
+    printf "${BOLD}${CYAN}║${NC}  %-24s %s\n" "OTel API Key:" "[sensitive output hidden]"
 fi
 
 if [ "$ENABLE_SLO" = "true" ]; then

@@ -14,6 +14,7 @@ import {
 export interface OrderEvent {
   tenantId: string;
   orderId: string;
+  ownerSub?: string | null;
   type: string;
   payload?: Record<string, unknown>;
 }
@@ -56,6 +57,7 @@ export function createPublisher(deps: PublisherDeps = {}) {
         type: event.type,
         tenant_id: event.tenantId,
         order_id: event.orderId,
+        ...(event.ownerSub ? { owner_sub: event.ownerSub } : {}),
         payload: event.payload ?? {},
         ts: new Date().toISOString(),
       })

@@ -35,79 +35,76 @@ const CAT_COLORS: Record<Category, string> = {
   analytics: "#5a4fcf",
 };
 
+// Flows mirror the real platform. The mesh fan-out is the showcase: one
+// synthetic place-order crosses six languages. The async lanes are the two
+// Kinesis consumers. IDs double as scroll anchors (#mesh, #search, #realtime,
+// #saga) — chrome links in Bento/FeatureGrid point at them (#148/#152).
 const FLOWS: Flow[] = [
   {
-    id: "page-load",
-    label: "Page load",
-    accent: "#539bf5",
-    note: "SSR · ALB → Next.js pod · 60ms p95",
-    steps: [
-      { name: "CloudFront", cat: "networking", desc: "edge cache" },
-      { name: "ALB + WAF", cat: "security", desc: "5 rules · TLS 1.3" },
-      {
-        name: "EKS · storefront",
-        cat: "compute",
-        desc: "Next.js SSR · HPA 2–12",
-        primary: true,
-      },
-      { name: "Cognito", cat: "security", desc: "JWKS verify" },
-      { name: "S3 + CF", cat: "integration", desc: "static assets" },
-      { name: "RDS · Postgres", cat: "database", desc: "tenant_id RLS" },
-    ],
-  },
-  {
-    id: "search-read",
-    label: "Search read",
+    id: "mesh",
+    label: "Mesh fan-out",
     accent: CAT_COLORS.compute,
-    note: "API Gateway → Lambda + LRU → Express → Postgres FTS · warm <100ms",
+    note: "one synthetic place-order across 6 languages · loadgen → api-gateway",
     steps: [
-      { name: "Browser fetch", cat: "networking", desc: "POST /search" },
-      { name: "API Gateway", cat: "networking", desc: "JWT authoriser" },
-      {
-        name: "search-gateway λ",
-        cat: "compute",
-        desc: "LRU 60s + HMAC",
-        primary: true,
-      },
-      { name: "Express", cat: "compute", desc: "/_internal/search" },
-      { name: "Postgres · tsvector", cat: "database", desc: "GIN · trigram" },
+      { name: "api-gateway", cat: "compute", desc: "Node · BFF + HMAC" },
+      { name: "pricing", cat: "compute", desc: "Go · quote", primary: true },
+      { name: "inventory", cat: "compute", desc: "Python · reserve" },
+      { name: "fraud", cat: "compute", desc: "Java · score" },
+      { name: "payment", cat: "compute", desc: "Node · charge" },
+      { name: "ledger", cat: "database", desc: "Go · post entry" },
     ],
   },
   {
-    id: "order-realtime",
-    label: "Order + realtime",
+    id: "realtime",
+    label: "Async events",
     accent: CAT_COLORS.integration,
-    note: "Express POST → Kinesis → ws-fanout λ → API GW WS · push, never poll",
+    note: "Kinesis → enrichment λ → EventBridge → analytics λ · post-commit fan-out",
     steps: [
-      { name: "Express POST", cat: "compute", desc: "POST /order" },
-      { name: "Postgres INSERT", cat: "database", desc: "RLS-bound write" },
+      { name: "order-api", cat: "compute", desc: "POST /order" },
       {
         name: "Kinesis",
         cat: "integration",
-        desc: "4 shards · 24h",
+        desc: "tenant-partitioned",
         primary: true,
       },
-      { name: "ws-fanout λ", cat: "compute", desc: "route by tenant" },
-      { name: "API GW WS", cat: "networking", desc: "broadcast" },
-      { name: "Browser WS", cat: "networking", desc: "reconnect ≤30s" },
+      { name: "enrichment λ", cat: "compute", desc: "mesh-events" },
+      { name: "EventBridge", cat: "integration", desc: "event bus" },
+      { name: "analytics λ", cat: "analytics", desc: "rollups" },
     ],
   },
   {
-    id: "checkout-saga",
+    id: "search",
+    label: "Projection read",
+    accent: "#539bf5",
+    note: "Kinesis → projection-worker (Python) → read model · CQRS-style",
+    steps: [
+      { name: "Kinesis", cat: "integration", desc: "same stream" },
+      {
+        name: "projection-worker",
+        cat: "compute",
+        desc: "Python · poller",
+        primary: true,
+      },
+      { name: "read model", cat: "database", desc: "query-optimised" },
+      { name: "console", cat: "compute", desc: "Tempo/Mimir BFF" },
+    ],
+  },
+  {
+    id: "saga",
     label: "Checkout saga",
     accent: CAT_COLORS.analytics,
     note: "Step Functions Standard · idempotent · compensate on failure",
     steps: [
-      { name: "Express /checkout", cat: "compute", desc: "Idempotency-Key" },
+      { name: "order-api /order", cat: "compute", desc: "Idempotency-Key" },
       {
         name: "Step Functions",
         cat: "analytics",
         desc: "Standard SM · 99.0% SLO",
         primary: true,
       },
-      { name: "CreateOrder λ", cat: "compute", desc: "pg INSERT" },
+      { name: "Postgres INSERT", cat: "database", desc: "RLS-bound write" },
       { name: "SQS · email", cat: "integration", desc: "durable buffer" },
-      { name: "DeliverEmail λ", cat: "compute", desc: "SES + retry" },
+      { name: "email λ", cat: "compute", desc: "SES + retry" },
       { name: "Audit · CW", cat: "analytics", desc: "execution log" },
     ],
   },
@@ -225,7 +222,7 @@ function FlowRow({ flow, idx, hoveredIdx, onEnter, onLeave }: FlowRowProps) {
   const isLast = idx === FLOWS.length - 1;
   return (
     <div
-      id={`flow-${flow.id}`}
+      id={flow.id}
       className="relative scroll-mt-32 py-6 transition-opacity duration-300"
       style={{
         opacity: dimmed ? 0.45 : 1,
@@ -311,7 +308,7 @@ export function ArchitectureFlow() {
           {FLOWS.map((f) => (
             <Link
               key={f.id}
-              href={`#flow-${f.id}`}
+              href={`#${f.id}`}
               className="rounded-md border border-border-default bg-bg-raised/60 px-2.5 py-1.5 font-mono text-[11.5px] text-fg-muted transition-all hover:border-brand-500 hover:bg-bg-elev hover:text-fg-base"
               style={{ borderLeft: `2px solid ${f.accent}` }}
             >

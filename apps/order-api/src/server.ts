@@ -3,7 +3,7 @@
 import './tracing';
 
 import * as fs from 'fs';
-import pino from 'pino';
+import { createLogger } from './logger';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { Pool, type PoolConfig } from 'pg';
 import type { Server } from 'http';
@@ -30,7 +30,7 @@ const OIDC_REQUIRED_SCOPES = (process.env.OIDC_REQUIRED_SCOPES || '')
   .split(/\s+/)
   .filter(Boolean);
 
-const logger = pino({ level: 'info' });
+const logger = createLogger();
 
 let pool: Pool;
 
@@ -104,7 +104,15 @@ async function resolveApiKey(): Promise<string> {
   try {
     const parsed = JSON.parse(response.SecretString || '');
     return parsed.api_key || parsed.apiKey || parsed.value || '';
-  } catch {
+  } catch (err) {
+    //SM SecretString was not valid JSON — fall back to treating the whole
+    //value as the plaintext key (closes backlog #106). Logged at warn so an
+    //operator notices if a JSON-encoded secret is rotated to plaintext or
+    //vice versa.
+    logger.warn(
+      { secret_arn: API_KEY_SECRET_ARN, error: err instanceof Error ? err.message : String(err) },
+      'secrets-manager SecretString is not JSON; using raw value as api key',
+    );
     return response.SecretString || '';
   }
 }

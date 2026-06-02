@@ -46,6 +46,14 @@ data "aws_iam_policy_document" "connect" {
     actions   = ["dynamodb:PutItem"]
     resources = [aws_dynamodb_table.connections.arn]
   }
+  dynamic "statement" {
+    for_each = var.ws_token_secret_arn != "" ? [1] : []
+    content {
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [var.ws_token_secret_arn]
+    }
+  }
 }
 
 data "aws_iam_policy_document" "disconnect" {
@@ -92,6 +100,17 @@ data "aws_iam_policy_document" "fanout" {
   }
 }
 
+data "aws_iam_policy_document" "storefront_cleanup" {
+  statement {
+    effect  = "Allow"
+    actions = ["dynamodb:Query", "dynamodb:DeleteItem"]
+    resources = [
+      aws_dynamodb_table.connections.arn,
+      "${aws_dynamodb_table.connections.arn}/index/by-tenant",
+    ]
+  }
+}
+
 resource "aws_iam_role_policy" "connect" {
   name   = "${local.name_prefix}-ws-connect"
   role   = aws_iam_role.connect.id
@@ -106,4 +125,11 @@ resource "aws_iam_role_policy" "fanout" {
   name   = "${local.name_prefix}-ws-fanout"
   role   = aws_iam_role.fanout.id
   policy = data.aws_iam_policy_document.fanout.json
+}
+
+resource "aws_iam_role_policy" "storefront_cleanup" {
+  count  = var.storefront_irsa_role_name != "" ? 1 : 0
+  name   = "${local.name_prefix}-ws-storefront-cleanup"
+  role   = var.storefront_irsa_role_name
+  policy = data.aws_iam_policy_document.storefront_cleanup.json
 }

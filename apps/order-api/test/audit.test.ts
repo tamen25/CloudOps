@@ -1,14 +1,10 @@
 // This file contains audit test logic for order API test.
-'use strict';
-
 // Backlog #73 — verify the audit log write is wired into the order create
 // path and uses the same tenant transaction. The actual RLS policy is
 // enforced by Postgres in deployed envs (see migrations/005_audit_events.sql).
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { createApp } = require('../src/app');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp } from '../src/app';
 
 // Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
@@ -22,9 +18,13 @@ function makeRecordingPool({ failOrderInsert = false } = {}) {
       calls.push({ sql, params });
       if (/^BEGIN$|^COMMIT$|^ROLLBACK$/i.test(sql)) return { rows: [], rowCount: 0 };
       if (/set_config/i.test(sql)) return { rows: [], rowCount: 0 };
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 100 })), rowCount: skus.length };
+      }
       if (/^INSERT INTO orders/i.test(sql)) {
         if (failOrderInsert) throw new Error('insert blew up');
-        return { rows: [{ id: 1, order_id: params[0], items: params[1], total: params[2], environment: params[3], tenant_id: params[4] }], rowCount: 1 };
+        return { rows: [{ id: 1, order_id: params[0], items: params[1], total: params[2], environment: params[3], tenant_id: params[4], owner_sub: params[5] }], rowCount: 1 };
       }
       if (/^INSERT INTO audit_events/i.test(sql)) return { rows: [], rowCount: 1 };
       return { rows: [], rowCount: 0 };

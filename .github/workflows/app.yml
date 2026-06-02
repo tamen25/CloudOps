@@ -141,19 +141,24 @@ jobs:
         run: npm ci
         working-directory: apps/order-api
 
+      #All ARN values below are AWS-documentation example account (123456789012)
+      #placeholders used ONLY to satisfy kubeconform schema validation
+      #(closes backlog #119). They never reach a cluster — real ARNs come from
+      #terraform outputs in the deploy job below.
       - name: Render Kubernetes manifests
         env:
           ORDER_API_NAMESPACE: cloudops
           ORDER_API_SERVICE_ACCOUNT: order-api
-          ORDER_API_IRSA_ROLE_ARN: arn:aws:iam::123456789012:role/cloudops-order-api-irsa
+          ORDER_API_IRSA_ROLE_ARN: arn:aws:iam::123456789012:role/PLACEHOLDER-not-real
           ORDER_API_IMAGE: example.com/order-api:latest
           ORDER_API_ENVIRONMENT: dev
+          ORDER_API_REPLICAS: "2"
           AWS_REGION: us-east-1
           DB_NAME: cloudops
-          DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudops-db
+          DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:123456789012:secret:PLACEHOLDER-not-real
           OTEL_ENDPOINT: https://otel.example.com
           OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,k8s.cluster.name=cloudops-dev-cluster
-          ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/example
+          ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/PLACEHOLDER-not-real
           ORDER_API_HOST: api.example.com
           API_KEY_SECRET_ARN: ""
           IMAGE_TAG: validate
@@ -847,6 +852,7 @@ jobs:
             echo "OIDC_REQUIRED_SCOPES=${OIDC_REQUIRED_SCOPES:-}"
             echo "KINESIS_STREAM_NAME=${KINESIS_STREAM_NAME:-}"
             echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}"
+            echo "ORDER_API_REPLICAS=${ORDER_API_REPLICAS:-2}"
           } >> "$GITHUB_ENV"
 
       #── Signature gate ────────────────────────────────────────────────────────

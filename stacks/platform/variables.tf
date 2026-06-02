@@ -533,6 +533,24 @@ variable "cost_anomaly_threshold_percent" {
   default = 20
 }
 
+#FinOps hard-cap stop-loss (#139).
+variable "enable_budget_hardcap_action" {
+  type    = bool
+  default = false
+}
+
+#Defines the budget hard-cap threshold percent input value.
+variable "budget_hardcap_threshold_percent" {
+  type    = number
+  default = 120
+}
+
+#Defines the budget hard-cap target role names input value.
+variable "budget_hardcap_target_role_names" {
+  type    = list(string)
+  default = []
+}
+
 #─── Auth (#80) — Cognito User Pool + Hosted UI ────────────────────────────
 variable "enable_auth" {
   description = "Provision Cognito User Pool + storefront app client (closes backlog #80)."

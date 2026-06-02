@@ -1,16 +1,12 @@
 // This file contains idempotency test logic for order API test.
-'use strict';
-
 // Backlog #72 — Idempotency-Key support for POST /order. The actual
 // concurrency fence (PRIMARY KEY + ON CONFLICT DO NOTHING + SELECT FOR
 // UPDATE) is enforced by Postgres in deployed envs. These tests prove the
 // app issues the right SQL, replays a stored response on retry, and 409s
 // on payload reuse with a different body.
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { createApp, hashOrderPayload } = require('../src/app');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp, hashOrderPayload } from '../src/app';
 
 // Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
@@ -24,7 +20,7 @@ function silentLogger() { return { info() {}, warn() {}, error() {} }; }
 //   - tenant scoping via SET LOCAL app.tenant_id
 function makePool() {
   const orders = [];
-  const idempotency = new Map(); // key: `${tenant}|${idempKey}` -> row
+  const idempotency = new Map(); // key: `${tenant}|${scope}|${idempKey}` -> row
 
   const client = {
     query: async (sql, params) => {
@@ -33,14 +29,20 @@ function makePool() {
       if (/^ROLLBACK$/i.test(sql)) return { rows: [], rowCount: 0 };
       if (/set_config/i.test(sql)) return { rows: [], rowCount: 0 };
 
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 100 })), rowCount: skus.length };
+      }
+
       if (/^INSERT INTO order_idempotency_keys/i.test(sql)) {
-        const [tenant, idempKey, requestHash /*, ttlMs */] = params;
-        const k = `${tenant}|${idempKey}`;
+        const [tenant, scope, idempKey, requestHash /*, ttlMs */] = params;
+        const k = `${tenant}|${scope}|${idempKey}`;
         if (idempotency.has(k)) {
           return { rows: [], rowCount: 0 };
         }
         idempotency.set(k, {
           tenant_id: tenant,
+          subject_scope: scope,
           idempotency_key: idempKey,
           request_hash: requestHash,
           status_code: 0,
@@ -51,16 +53,16 @@ function makePool() {
       }
 
       if (/^SELECT request_hash, status_code, response_body[\s\S]+FROM order_idempotency_keys/i.test(sql)) {
-        const [tenant, idempKey] = params;
-        const row = idempotency.get(`${tenant}|${idempKey}`);
+        const [tenant, scope, idempKey] = params;
+        const row = idempotency.get(`${tenant}|${scope}|${idempKey}`);
         return row
           ? { rows: [{ request_hash: row.request_hash, status_code: row.status_code, response_body: row.response_body }], rowCount: 1 }
           : { rows: [], rowCount: 0 };
       }
 
       if (/^UPDATE order_idempotency_keys/i.test(sql)) {
-        const [tenant, idempKey, statusCode, responseBody, orderId] = params;
-        const k = `${tenant}|${idempKey}`;
+        const [tenant, scope, idempKey, statusCode, responseBody, orderId] = params;
+        const k = `${tenant}|${scope}|${idempKey}`;
         const row = idempotency.get(k);
         if (row) {
           row.status_code = statusCode;
@@ -71,8 +73,8 @@ function makePool() {
       }
 
       if (/^INSERT INTO orders/i.test(sql)) {
-        const [order_id, items, total, environment, tenant_id] = params;
-        const row = { id: orders.length + 1, order_id, items, total, environment, tenant_id };
+        const [order_id, items, total, environment, tenant_id, owner_sub] = params;
+        const row = { id: orders.length + 1, order_id, items, total, environment, tenant_id, owner_sub };
         orders.push(row);
         return { rows: [row], rowCount: 1 };
       }
@@ -132,7 +134,7 @@ test('first POST /order with Idempotency-Key creates the order and stores the re
     assert.equal(res.status, 201);
     assert.equal(orders.length, 1);
     assert.equal(idempotency.size, 1);
-    const row = idempotency.get('acme|abc-123');
+    const row = idempotency.get('acme||abc-123');
     assert.equal(row.status_code, 201);
     assert.equal(row.order_id, orders[0].order_id);
   } finally {
@@ -225,6 +227,45 @@ test('malformed Idempotency-Key (whitespace) is rejected with 400', async () => 
     const body = await res.json();
     assert.equal(body.error, 'invalid_request');
     assert.equal(orders.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('JWT users in the same tenant get separate idempotency namespaces', async () => {
+  const { pool, orders } = makePool();
+  let currentSub = 'user-a';
+  const { app } = createApp({
+    pool,
+    logger: silentLogger(),
+    nodeEnv: 'test',
+    jwtVerifier: (req, _res, next) => {
+      req.user = { sub: currentSub, tenant_id: 'acme' };
+      next();
+    },
+    rateLimitMax: 1000,
+  });
+  const server = await new Promise((r) => {
+    const s = app.listen(0, '127.0.0.1', () => r(s));
+  });
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const first = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'shared-key' },
+      body: JSON.stringify(validBody),
+    });
+    assert.equal(first.status, 201);
+
+    currentSub = 'user-b';
+    const second = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'shared-key' },
+      body: JSON.stringify(validBody),
+    });
+    assert.equal(second.status, 201);
+    assert.equal(orders.length, 2);
+    assert.deepEqual(orders.map((o) => o.owner_sub), ['user-a', 'user-b']);
   } finally {
     server.close();
   }

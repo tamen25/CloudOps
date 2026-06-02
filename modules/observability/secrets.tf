@@ -19,19 +19,12 @@ resource "kubernetes_namespace" "application" {
   }
 }
 
-#OTel API key — 32-char alphanumeric token used by bearertokenauth extension.
-#Closes backlog #95: when var.otel_token_rotation_days > 0, the `keepers` map
-#binds the token to a window bucket. Each window boundary forces a new
-#random_password, which propagates through the SM secret + the k8s
-#`otel-auth` Secret. Pods that mount the secret pick up the new token after
-#the kubelet's standard projection refresh (60s default).
-#
-#Window formula:   bucket = floor((year * 366 + day_of_year) / rotation_days)
-#Example (30-day): 2026-05-14 → floor((2026*366 + 134) / 30) = floor(24705) = 24705
-#                  2026-06-13 → floor((2026*366 + 164) / 30) = floor(24706) = 24706
-#The outer floor() must wrap the *quotient*, not the numerator. Before #95
-#the floor() was applied to (year*366+day) only, so the keeper string changed
-#daily regardless of rotation_days. Force a manual rotation with:
+#OTel API key — 32-char alphanumeric bearer token.
+#When var.otel_token_rotation_days > 0, the `keepers` map binds the token
+#to a rotation-window bucket: floor((year*366 + day_of_year) / rotation_days).
+#The outer floor() must wrap the *quotient*, not the numerator — pre-#95 it
+#wrapped the numerator, so the keeper string changed daily.
+#Force a manual rotation:
 #  terraform apply -replace=module.observability.random_password.otel_api_key
 resource "random_password" "otel_api_key" {
   length  = 32

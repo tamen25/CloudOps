@@ -66,9 +66,18 @@ above the configured `rateLimitMax`.
 3. If the source is a single tenant: revoke their API key in Secrets
    Manager (`aws secretsmanager update-secret-version-stage` to retire
    the active version) so order-api stops accepting it on next read.
-4. If the budget hard-cap action lands (`Backlog #139`), the IAM/SCP
-   deny will already have kicked in — skip steps 2-3 and focus on root
-   cause + lifting the cap.
+4. The budget hard-cap action (`Backlog #139`) is wired in
+   `modules/finops/budget_action.tf`, OFF by default. When enabled
+   (`enable_budget_hardcap_action = true` + `budget_hardcap_target_role_names`),
+   ACTUAL spend crossing `budget_hardcap_threshold_percent` (default 120%)
+   auto-attaches a deny policy (`ec2:RunInstances`, `eks:Create*`,
+   `autoscaling:*Capacity/*Group`) to the target roles — so new compute/cluster
+   growth fails immediately and steps 2-3 are moot. **Lifting the cap after a
+   fire:** raise `cost_budget_monthly_usd` or `budget_hardcap_threshold_percent`
+   and re-apply, OR detach `<project>-<env>-budget-hardcap-deny` from the
+   affected roles out-of-band (`aws iam detach-role-policy`). Root-cause before
+   re-enabling. The platform already running keeps running — the deny only
+   blocks NEW spend.
 
 ## A4 — credential stuffing / brute-force against Cognito
 
@@ -94,5 +103,8 @@ events; CloudTrail `InitiateAuth` failures spike.
 
 ## Open follow-ups
 
-- `Backlog #139` — wire AWS Budgets action for hard-cap enforcement.
-- `Backlog #140` — CSAM / NCMEC hash scan on storefront upload pipeline.
+- ~~`Backlog #139` — wire AWS Budgets action for hard-cap enforcement.~~
+  Resolved 2026-06-02: `modules/finops/budget_action.tf` (see A3 step 4).
+- ~~`Backlog #140` — CSAM / NCMEC hash scan on storefront upload pipeline.~~
+  Closed as moot 2026-06-02: the storefront upload pipeline was removed
+  2026-05-31 (see A1). No user-facing upload surface remains.

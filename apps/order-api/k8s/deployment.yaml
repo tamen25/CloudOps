@@ -5,7 +5,7 @@ metadata:
   name: order-api
   namespace: "${ORDER_API_NAMESPACE}"
 spec:
-  replicas: 2
+  replicas: ${ORDER_API_REPLICAS}
   selector:
     matchLabels:
       app: order-api

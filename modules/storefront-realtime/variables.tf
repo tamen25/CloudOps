@@ -37,6 +37,12 @@ variable "cognito_client_id" {
   type        = string
 }
 
+variable "ws_token_secret_arn" {
+  description = "Secrets Manager ARN containing the WS ticket signing secret used by the storefront and ws-connect Lambda."
+  type        = string
+  default     = ""
+}
+
 variable "kinesis_stream_arn" {
   description = "Kinesis stream ARN — fanout Lambda is subscribed via event source mapping."
   type        = string
@@ -44,6 +50,12 @@ variable "kinesis_stream_arn" {
 
 variable "fanout_dlq_arn" {
   description = "Optional SQS DLQ ARN for fanout failures. Empty disables DLQ."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_irsa_role_name" {
+  description = "Optional storefront IRSA role name; when set, grants privacy erasure cleanup access to the connections table."
   type        = string
   default     = ""
 }

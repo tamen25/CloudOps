@@ -118,20 +118,34 @@ jobs:
   #attempt AWS access until the prerequisites exist. Flip the if-guard on
   #per-story when each prerequisite lands.
 
+  #Closes backlog #121 — skeleton job intentionally `if: false`. Activation
+  #depends on storefront ECR repo + IRSA from backlog #84. When activated,
+  #mirror the app.yml build-and-push pattern (buildx, sign via cosign, push
+  #immutable digest, expose digest as output).
   build-and-push:
     runs-on: ubuntu-latest
     needs: [test, manifest-validation]
     if: false  #Activated in #84 once storefront ECR repo + IRSA exist.
     steps:
-      - run: echo "build-and-push placeholder"
+      - run: echo "build-and-push placeholder — see #121 for activation criteria"
 
+  #Closes backlog #121 — skeleton job intentionally `if: false`. Activation
+  #criteria: storefront IRSA role exists, ACM cert is provisioned, and the
+  #cluster has a storefront namespace. When activated, mirror app.yml's
+  #deploy job (cosign verify → manifest render → kubectl apply → rollout).
   deploy:
     runs-on: ubuntu-latest
     needs: [test, manifest-validation, build-and-push]
     if: false  #Activated in #84 once storefront cluster prerequisites exist.
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     steps:
-      - run: echo "deploy placeholder"
+      #Closes backlog #118 — when this skeleton is activated in #84, real
+      #cert ARN must come from terraform output, NOT a hardcoded value.
+      #Pattern mirrors app.yml's deploy job (`terraform -chdir=stacks/platform
+      #output -raw acm_certificate_arn`). The placeholder used in
+      #manifest-validation (validate-k8s-manifests.sh) is schema-only and
+      #never reaches a cluster.
+      - run: echo "deploy placeholder — see #118 for ACM_CERT_ARN sourcing"
 
   notify:
     runs-on: ubuntu-latest

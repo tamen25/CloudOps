@@ -31,6 +31,7 @@ test('publishOrderEvent uses tenantId as the partition key', async () => {
   const res = await publishOrderEvent({
     tenantId: 'acme',
     orderId: 'ORD-1',
+    ownerSub: 'user-1',
     type: 'order.created',
     payload: { total: 42.48, item_count: 2 },
   });
@@ -42,6 +43,7 @@ test('publishOrderEvent uses tenantId as the partition key', async () => {
   const payload = JSON.parse(stub.sent[0].Data!.toString());
   assert.equal(payload.tenant_id, 'acme');
   assert.equal(payload.order_id, 'ORD-1');
+  assert.equal(payload.owner_sub, 'user-1');
   assert.equal(payload.type, 'order.created');
   assert.equal(payload.schema_version, 1);
   assert.equal(payload.payload.total, 42.48);

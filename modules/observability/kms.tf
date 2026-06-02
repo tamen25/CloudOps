@@ -5,6 +5,8 @@
 #CloudTrail KMS events for audit.
 #
 #One CMK per signal type so a key compromise scopes to one data domain.
+#Decision recorded in docs/adr/023-observability-kms-signal-separation.md
+#(closes backlog #110).
 
 locals {
   cmk_count = var.buckets_kms_cmk ? 1 : 0

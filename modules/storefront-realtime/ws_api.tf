@@ -41,6 +41,7 @@ resource "aws_lambda_function" "connect" {
       COGNITO_ISSUER_URL     = var.cognito_issuer_url
       COGNITO_CLIENT_ID      = var.cognito_client_id
       COGNITO_JWKS_URL       = "${var.cognito_issuer_url}/.well-known/jwks.json"
+      WS_TOKEN_SECRET_ARN    = var.ws_token_secret_arn
     }
   }
   lifecycle {

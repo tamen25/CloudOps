@@ -11,34 +11,37 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '';
 if (!endpoint) {
-  console.warn('OTEL_EXPORTER_OTLP_ENDPOINT not set — traces/metrics/logs will not be exported');
-}
-const headers = { Authorization: `Bearer ${process.env.OTEL_API_KEY || ''}` };
+  //Skip SDK startup entirely when no endpoint is configured (closes backlog
+  //#107). Starting the SDK with no endpoint creates exporters that retry
+  //against `undefined/v1/...` forever, filling logs with ECONNREFUSED noise.
+  console.warn('OTEL_EXPORTER_OTLP_ENDPOINT not set — OTel SDK not started');
+} else {
+  const headers = { Authorization: `Bearer ${process.env.OTEL_API_KEY || ''}` };
 
-// OTel SDK shims types across multiple sub-packages with mismatched
-// generations; the whole config object is cast to `any` so the runtime
-// shapes (which match) are accepted.
-const sdkConfig: any = {
-  traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces`, headers }),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics`, headers }),
-    exportIntervalMillis: 30_000,
-  }),
-  logRecordProcessors: [
-    new BatchLogRecordProcessor(new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers })),
-  ],
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      '@opentelemetry/instrumentation-fs': { enabled: false },
+  // OTel SDK shims types across multiple sub-packages with mismatched
+  // generations; the whole config object is cast to `any` so the runtime
+  // shapes (which match) are accepted.
+  const sdkConfig: any = {
+    traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces`, headers }),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics`, headers }),
+      exportIntervalMillis: 30_000,
     }),
-  ],
-};
-const sdk = new NodeSDK(sdkConfig);
+    logRecordProcessors: [
+      new BatchLogRecordProcessor(new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers })),
+    ],
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+      }),
+    ],
+  };
+  const sdk = new NodeSDK(sdkConfig);
+  sdk.start();
 
-sdk.start();
-
-process.on('SIGTERM', () => {
-  sdk.shutdown()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
-});
+  process.on('SIGTERM', () => {
+    sdk.shutdown()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  });
+}

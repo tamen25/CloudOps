@@ -1,13 +1,10 @@
 // This file contains auth JWT test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const http = require('http');
-const { generateKeyPair, exportJWK, SignJWT } = require('jose');
-
-const { createApp } = require('../src/app');
-const { createJwtVerifier, hasAllScopes, parseScopes, classifyJwtError } = require('../src/auth-jwt');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'http';
+import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { createApp } from '../src/app';
+import { createJwtVerifier, hasAllScopes, parseScopes, classifyJwtError } from '../src/auth-jwt';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +54,15 @@ async function newSigner({ issuer, audience, kid = 'test-key' }) {
 
 // Handles start app.
 async function startApp({ issuer, audience, jwksUrl, requiredScopes = [], apiKey = '' }) {
-  const pool = { query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }) };
+  const pool = {
+    query: async (sql, params) => {
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 100 })), rowCount: skus.length };
+      }
+      return { rows: [{ order_id: 'ok' }], rowCount: 1 };
+    },
+  };
   const jwtVerifier = createJwtVerifier({
     issuer,
     audience,
@@ -290,6 +295,26 @@ test('no Bearer header falls through to API-key path', async () => {
       body: validBody,
     });
     assert.equal(withKey.status, 201);
+  } finally {
+    await stopServer(server);
+    await jwks.close();
+  }
+});
+
+test('JWT-only deployment rejects missing bearer token instead of trusting X-Tenant-Id', async () => {
+  const issuer = 'https://issuer.test/realms/cloudops';
+  const audience = 'order-api';
+  const signer = await newSigner({ issuer, audience });
+  const jwks = await startJwks(signer.jwk);
+  const { server, baseUrl } = await startApp({ issuer, audience, jwksUrl: jwks.jwksUrl });
+
+  try {
+    const r = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(r.status, 401);
   } finally {
     await stopServer(server);
     await jwks.close();

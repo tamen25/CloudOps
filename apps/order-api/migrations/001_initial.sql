@@ -1,6 +1,6 @@
 /* This migration prepares 001 initial database changes for CloudOps. */
--- Initial schema for order-api.
--- Applied by src/migrations.ts on startup via the `schema_migrations` tracking table.
+/* Initial schema for order-api.
+   Applied by src/migrations.ts on startup via the `schema_migrations` tracking table. */
 
 CREATE TABLE IF NOT EXISTS orders (
   id          SERIAL         PRIMARY KEY,

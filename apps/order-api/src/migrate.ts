@@ -4,9 +4,9 @@
 // Closes backlog #21.
 
 import * as fs from 'fs';
-import pino from 'pino';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { Pool, type PoolConfig } from 'pg';
+import { createLogger } from './logger';
 import { runMigrations } from './migrations';
 
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -16,7 +16,7 @@ const NODE_ENV = process.env.NODE_ENV || 'dev';
 const DB_SSL_CA_BUNDLE = process.env.DB_SSL_CA_BUNDLE || '';
 const DB_SSL_DISABLED = process.env.DB_SSL_DISABLED === 'true';
 
-const logger = pino({ level: 'info' });
+const logger = createLogger();
 
 // Runs the main workflow for the requested work.
 async function main(): Promise<void> {

@@ -109,14 +109,19 @@ export async function POST() {
 
     try {
       const res = await sfn.send(command);
+      // Do not return the executionArn — a SFN ARN embeds the AWS account ID +
+      // region (internal infra metadata). The confirmation UI only needs the
+      // orderId. (Closes #138 / F-138-1.)
       return NextResponse.json({
         orderId,
-        executionArn: res.executionArn,
         startDate: res.startDate?.toISOString() ?? null,
       });
     } catch (err) {
+      // Collapse the raw SDK error to a fixed reason (mirror of #142) — log the
+      // detail server-side instead of leaking it to the browser.
+      console.error("checkout StartExecution failed", err);
       return NextResponse.json(
-        { error: "start_execution_failed", detail: err instanceof Error ? err.message : "unknown" },
+        { error: "start_execution_failed" },
         { status: 500 }
       );
     }

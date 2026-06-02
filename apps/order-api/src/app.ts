@@ -1,8 +1,8 @@
 // This file contains app logic for order API src.
 import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
-import pino from 'pino';
 import rateLimit from 'express-rate-limit';
+import { createLogger } from './logger';
 import { createHash, timingSafeEqual } from 'crypto';
 import { Registry, Counter, Histogram } from 'prom-client';
 import type { OrderEvent } from './kinesis';
@@ -12,6 +12,11 @@ const MAX_ITEMS = 50;
 const MAX_SKU_LEN = 64;
 const MAX_QUANTITY = 999;
 const MAX_TOTAL = 1_000_000;
+/* Closes #135 — SKU character set is enforced at every entry point so the
+ * order-confirmation email Lambda (and any other downstream HTML/text
+ * renderer) cannot receive payload-bearing SKUs. ASCII alphanumerics plus
+ * `._-` covers every legitimate SKU shape we ship. */
+export const SKU_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
 interface OrderItem { sku: string; quantity: number; }
 interface OrderBody { items: OrderItem[]; total: number; }
@@ -34,7 +39,7 @@ export function validateOrderPayload(body: any): ValidationResult {
   for (let i = 0; i < items.length; i += 1) {
     const it = items[i];
     if (!it || typeof it !== 'object' || Array.isArray(it)) return { ok: false, error: `items[${i}] must be an object` };
-    if (typeof it.sku !== 'string' || it.sku.length < 1 || it.sku.length > MAX_SKU_LEN) return { ok: false, error: `items[${i}].sku must be a 1–${MAX_SKU_LEN} char string` };
+    if (typeof it.sku !== 'string' || !SKU_RE.test(it.sku)) return { ok: false, error: `items[${i}].sku must match ${SKU_RE} (1–${MAX_SKU_LEN} chars, [A-Za-z0-9._-])` };
     if (!Number.isInteger(it.quantity) || it.quantity < 1 || it.quantity > MAX_QUANTITY) return { ok: false, error: `items[${i}].quantity must be an integer 1–${MAX_QUANTITY}` };
   }
 
@@ -66,22 +71,11 @@ export function createMetrics({ serviceName = 'order-api', environment = 'dev' }
     registers: [registry],
   });
 
-  // JWT verify outcome counter (closes backlog #104). `outcome` is one of:
-  //   ok                  — token verified
-  //   invalid_signature   — signature did not match any JWKS key
-  //   expired             — token past `exp`
-  //   wrong_issuer        — `iss` claim mismatch
-  //   wrong_audience      — `aud` claim mismatch
-  //   missing_scope       — required scope not present
-  //   jwks_unreachable    — JWKS endpoint fetch failed (network / DNS / 5xx)
-  //   other               — anything else from jose
-  // The `jwks_unreachable` bucket is the signal for the PrometheusRule
-  // `OIDCJWKSUnreachable` (modules/observability/jwks_alerts.tf). When that
-  // rate spikes the IdP (Cognito) is unreachable and every Bearer auth call
-  // is failing — page on it.
+  // Outcome label values are the JwtOutcome union in auth-jwt.ts.
+  // `jwks_unreachable` drives the OIDCJWKSUnreachable PrometheusRule (#104).
   const jwtVerifyTotal = new Counter({
     name: 'jwt_verify_total',
-    help: 'JWT verification outcomes (closes backlog #104)',
+    help: 'JWT verification outcomes',
     labelNames: ['outcome'],
     registers: [registry],
   });
@@ -102,6 +96,9 @@ export interface CreateAppArgs {
   jwtVerifier?: ((req: Request, res: Response, next: NextFunction) => void) | null;
   rateLimitWindowMs?: number;
   rateLimitMax?: number;
+  ipRateLimitMax?: number;
+  tenantRateLimitMax?: number;
+  userRateLimitMax?: number;
   metrics?: ReturnType<typeof createMetrics>;
   publishOrderEvent?: (event: OrderEvent) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -111,7 +108,7 @@ type RequestWithCtx = Request & { user?: any; tenantId?: string };
 // Creates app.
 export function createApp({
   pool,
-  logger = pino({ level: 'info' }) as unknown as Logger,
+  logger = createLogger() as unknown as Logger,
   nodeEnv = 'dev',
   awsRegion = 'us-east-1',
   serviceName = 'order-api',
@@ -119,6 +116,9 @@ export function createApp({
   jwtVerifier = null,
   rateLimitWindowMs = 60 * 1000,
   rateLimitMax = 60,
+  ipRateLimitMax = Math.max(rateLimitMax * 2, 120),
+  tenantRateLimitMax = rateLimitMax,
+  userRateLimitMax = rateLimitMax,
   metrics = createMetrics({ serviceName, environment: nodeEnv }),
   publishOrderEvent,
 }: CreateAppArgs) {
@@ -131,18 +131,36 @@ export function createApp({
   const app = express();
   app.set('trust proxy', 1);
 
-  // Security headers (closes backlog #101). This is a JSON API — no HTML
-  // ever rendered — so the CSP defaults are off (`contentSecurityPolicy: false`).
-  // Everything else is on: HSTS (1y, include subdomains), X-Content-Type-Options
-  // nosniff, X-Frame-Options DENY (no iframe embedding), Referrer-Policy no-referrer,
-  // hide X-Powered-By. crossOriginResourcePolicy is "same-origin" so a browser
-  // cannot embed JSON responses cross-origin (defense in depth alongside #97).
+  // Public API responses never render HTML, so use a deny-all CSP rather than
+  // omitting the header entirely. This keeps scanners and browsers on the same
+  // strict footing as the storefront while preserving the API's JSON-only role.
   app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    frameguard: { action: 'deny' },
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
     referrerPolicy: { policy: 'no-referrer' },
     crossOriginResourcePolicy: { policy: 'same-origin' },
   }));
+
+  // Cheap first-line shield for every public API route, including health and
+  // readiness. WAF still handles the outer perimeter, but the app must retain
+  // its own budget when traffic reaches a pod directly or after WAF admission.
+  const ipLimiter = rateLimit({
+    windowMs: rateLimitWindowMs,
+    max: ipRateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'too_many_requests' },
+  });
+  app.use(ipLimiter);
 
   app.use(express.json({ limit: '64kb' }));
 
@@ -157,15 +175,9 @@ export function createApp({
     return next(err);
   });
 
-  // CSRF Origin check (#97). The API is normally called server-to-server
-  // (Next.js RSC, Lambda, Step Functions) — those fetches do NOT send an
-  // Origin header, so they pass through. A browser-initiated cross-origin
-  // POST/PUT/PATCH/DELETE WILL carry Origin; we reject any value not on
-  // the allow-list. ALLOWED_ORIGINS is a comma-separated list (e.g.
-  // "https://app.example.com,https://admin.example.com"). Empty/unset =
-  // permissive (dev + back-compat). The check skips `/_internal/*` because
-  // those routes are HMAC-gated and never reachable from a browser
-  // anyway, and skips safe methods (GET/HEAD/OPTIONS).
+  // CSRF Origin allow-list (#97). Server-to-server callers (Next.js RSC,
+  // Lambda, Step Functions) send no Origin and bypass; _internal/* is
+  // HMAC-gated. Empty ALLOWED_ORIGINS = permissive (dev default).
   const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
     .split(',').map((s) => s.trim()).filter(Boolean);
   const STATE_CHANGING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -213,27 +225,26 @@ export function createApp({
     } /* node:coverage ignore next 2 */
   });
 
-
-  // Two-tier rate limit (closes backlog #45).
-  const unauthLimiter = rateLimit({
+  // Keep tenant fairness from #45, but add a real authenticated-user bucket
+  // beside it. JWT callers pass through both buckets; API-key callers only
+  // have tenant identity, so they keep tenant-scoped fairness.
+  const userLimiter = rateLimit({
     windowMs: rateLimitWindowMs,
-    max: Math.max(rateLimitMax * 2, 120),
+    max: userRateLimitMax,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'too_many_requests' },
+    skip: (req: RequestWithCtx) => !(req.user && typeof req.user.sub === 'string' && req.user.sub.length > 0),
+    keyGenerator: (req: RequestWithCtx) => `user:${req.user.sub}`,
   });
 
-  const dataLimiter = rateLimit({
+  const tenantLimiter = rateLimit({
     windowMs: rateLimitWindowMs,
-    max: rateLimitMax,
+    max: tenantRateLimitMax,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'too_many_requests' },
-    keyGenerator: (req: RequestWithCtx) => {
-      if (req.tenantId) return `tenant:${req.tenantId}`;
-      if (req.user && req.user.sub) return `user:${req.user.sub}`;
-      return `ip:${req.ip}`;
-    },
+    keyGenerator: (req: RequestWithCtx) => `tenant:${req.tenantId ?? 'unknown'}`,
   });
 
   // Requires API key.
@@ -248,6 +259,21 @@ export function createApp({
       return res.status(401).json({ error: 'unauthorized' });
     }
     next();
+  };
+
+  // Orders are sensitive, unlike the public catalog routes. If a deployment
+  // is JWT-only, "no bearer token" must not silently degrade into an
+  // unauthenticated tenant-header path. JWT-backed order access also needs a
+  // stable subject so ownership can be enforced below.
+  const requireOrderPrincipal = (req: RequestWithCtx, res: Response, next: NextFunction) => {
+    if (req.user) {
+      if (typeof req.user.sub === 'string' && req.user.sub.length > 0) return next();
+      return res.status(401).json({ error: 'unauthorized', detail: 'subject missing' });
+    }
+    if (jwtVerifier && !apiKey) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    return next();
   };
 
   const TENANT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -297,11 +323,18 @@ export function createApp({
   };
 
   const authChain = jwtVerifier
-    ? [unauthLimiter, jwtVerifier, requireApiKey, requireTenant, dataLimiter]
-    : [unauthLimiter, requireApiKey, requireTenant, dataLimiter];
+    ? [jwtVerifier, requireApiKey, requireTenant, userLimiter, tenantLimiter]
+    : [requireApiKey, requireTenant, userLimiter, tenantLimiter];
+  const orderAuthChain = jwtVerifier
+    ? [jwtVerifier, requireApiKey, requireOrderPrincipal, requireTenant, userLimiter, tenantLimiter]
+    : [requireApiKey, requireOrderPrincipal, requireTenant, userLimiter, tenantLimiter];
 
   // Closes backlog #51 — RLS transaction wrapper.
-  async function withTenant<T>(tenantId: string, fn: (client: any) => Promise<T>): Promise<T> {
+  async function withTenant<T>(
+    tenantId: string,
+    fn: (client: any) => Promise<T>,
+    userSub: string | null = null,
+  ): Promise<T> {
     if (typeof pool.connect !== 'function') {
       return fn(pool);
     }
@@ -309,6 +342,9 @@ export function createApp({
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+      if (userSub) {
+        await client.query("SELECT set_config('app.user_sub', $1, true)", [userSub]);
+      }
       const result = await fn(client);
       await client.query('COMMIT');
       return result;
@@ -322,22 +358,40 @@ export function createApp({
 
   // Idempotency SQL kept as single-line constants so v8 source-map line
   // counting does not penalise the closing braces of multi-line calls.
-  const IDEMP_INSERT_SQL = `INSERT INTO order_idempotency_keys (tenant_id, idempotency_key, request_hash, status_code, response_body, order_id, expires_at) VALUES ($1, $2, $3, 0, '{}'::jsonb, NULL, NOW() + ($4 || ' milliseconds')::interval) ON CONFLICT (tenant_id, idempotency_key) DO NOTHING RETURNING tenant_id`;
-  const IDEMP_SELECT_SQL = `SELECT request_hash, status_code, response_body FROM order_idempotency_keys WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE`;
-  const IDEMP_UPDATE_SQL = `UPDATE order_idempotency_keys SET status_code = $3, response_body = $4, order_id = $5 WHERE tenant_id = $1 AND idempotency_key = $2`;
-  const ORDER_INSERT_SQL = 'INSERT INTO orders (order_id, items, total, environment, tenant_id) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+  const IDEMP_INSERT_SQL = `INSERT INTO order_idempotency_keys (tenant_id, subject_scope, idempotency_key, request_hash, status_code, response_body, order_id, expires_at) VALUES ($1, $2, $3, $4, 0, '{}'::jsonb, NULL, NOW() + ($5 || ' milliseconds')::interval) ON CONFLICT (tenant_id, subject_scope, idempotency_key) DO NOTHING RETURNING tenant_id`;
+  const IDEMP_SELECT_SQL = `SELECT request_hash, status_code, response_body FROM order_idempotency_keys WHERE tenant_id = $1 AND subject_scope = $2 AND idempotency_key = $3 FOR UPDATE`;
+  const IDEMP_UPDATE_SQL = `UPDATE order_idempotency_keys SET status_code = $4, response_body = $5, order_id = $6 WHERE tenant_id = $1 AND subject_scope = $2 AND idempotency_key = $3`;
+  const ORDER_SAFE_COLUMNS = 'id, order_id, items, total, environment, tenant_id, created_at';
+  const ORDER_INSERT_SQL = `INSERT INTO orders (order_id, items, total, environment, tenant_id, owner_sub) VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${ORDER_SAFE_COLUMNS}`;
+  const ORDER_LIST_SQL = `SELECT ${ORDER_SAFE_COLUMNS} FROM orders WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`;
+  const ORDER_LIST_OWNED_SQL = `SELECT ${ORDER_SAFE_COLUMNS} FROM orders WHERE tenant_id = $1 AND owner_sub = $2 ORDER BY created_at DESC LIMIT 100`;
+  const ORDER_GET_SQL = `SELECT ${ORDER_SAFE_COLUMNS} FROM orders WHERE tenant_id = $1 AND order_id = $2 LIMIT 1`;
+  const ORDER_GET_OWNED_SQL = `SELECT ${ORDER_SAFE_COLUMNS} FROM orders WHERE tenant_id = $1 AND owner_sub = $2 AND order_id = $3 LIMIT 1`;
+  const PRIVACY_EXPORT_ORDERS_SQL = `SELECT ${ORDER_SAFE_COLUMNS} FROM orders WHERE tenant_id = $1 AND owner_sub = $2 ORDER BY created_at DESC`;
+  const PRIVACY_EXPORT_AUDIT_SQL = `SELECT action, request_id, resource_id, status_code, result, error_code, metadata, created_at FROM audit_events WHERE tenant_id = $1 AND actor_id = $2 ORDER BY created_at DESC`;
+  const PRIVACY_EXPORT_IDEMPOTENCY_SQL = `SELECT idempotency_key, status_code, order_id, expires_at, created_at FROM order_idempotency_keys WHERE tenant_id = $1 AND subject_scope = $2 ORDER BY created_at DESC`;
+  const PRIVACY_ERASE_ORDERS_SQL = `UPDATE orders SET owner_sub = NULL WHERE tenant_id = $1 AND owner_sub = $2`;
+  const PRIVACY_ERASE_AUDIT_SQL = `UPDATE audit_events SET actor_id = NULL WHERE tenant_id = $1 AND actor_id = $2`;
+  const PRIVACY_ERASE_IDEMPOTENCY_SQL = `DELETE FROM order_idempotency_keys WHERE tenant_id = $1 AND subject_scope = $2`;
+  //Authoritative re-pricing (closes price-tampering finding from 2026-05-15
+  //security review). Resolves each item.sku to its current price_cents in
+  //the tenant-scoped products table and recomputes total inside the same
+  //tenant transaction as ORDER_INSERT_SQL. Caller-supplied total is only
+  //accepted when it matches; mismatch = 422 invalid_total. Inactive or
+  //unknown SKUs fail with 422 unknown_sku.
+  const PRODUCT_PRICE_LOOKUP_SQL = 'SELECT sku, price_cents FROM products WHERE sku = ANY($1::text[]) AND is_active = true';
   // Audit events (closes backlog #73). Written inside the same tenant
   // transaction as the order INSERT, so the audit row commits or rolls
   // back atomically with the business change.
   const AUDIT_INSERT_SQL = `INSERT INTO audit_events (tenant_id, actor_id, action, request_id, resource_id, status_code, result, error_code, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`;
 
-  app.post('/order', ...authChain, async (req: RequestWithCtx, res: Response) => {
+  app.post('/order', ...orderAuthChain, async (req: RequestWithCtx, res: Response) => {
     const validation = validateOrderPayload(req.body);
     if (validation.ok === false) return res.status(400).json({ success: false, error: 'invalid_request', detail: validation.error });
 
     // Idempotency-Key is optional but, when supplied, must be well-formed
-    // (closes backlog #72). Tenant scoping is enforced via the composite
-    // primary key + RLS on `order_idempotency_keys`.
+    // (closes backlog #72). JWT callers are subject-scoped; API-key callers
+    // remain tenant-scoped. The composite key + RLS enforce both cases.
     const idempotencyKey = req.get('idempotency-key');
     if (idempotencyKey !== undefined && !IDEMPOTENCY_KEY_RE.test(idempotencyKey)) return res.status(400).json({ success: false, error: 'invalid_request', detail: 'Idempotency-Key must be 1–255 ASCII printable chars' });
 
@@ -346,14 +400,16 @@ export function createApp({
     const requestHash = idempotencyKey ? hashOrderPayload(validation.value) : '';
 
     const actorId = (req.user && (req.user.sub || req.user.client_id)) || null;
+    const ownerSub = typeof req.user?.sub === 'string' && req.user.sub.length > 0 ? req.user.sub : null;
+    const idempotencyScope = ownerSub ?? '';
     const requestId = req.get('x-request-id') || null;
 
     try {
       const outcome = await withTenant(req.tenantId!, async (client) => {
         if (idempotencyKey) {
-          const claim = await client.query(IDEMP_INSERT_SQL, [req.tenantId, idempotencyKey, requestHash, String(IDEMPOTENCY_TTL_MS)]);
+          const claim = await client.query(IDEMP_INSERT_SQL, [req.tenantId, idempotencyScope, idempotencyKey, requestHash, String(IDEMPOTENCY_TTL_MS)]);
           if (claim.rowCount === 0) {
-            const existing = await client.query(IDEMP_SELECT_SQL, [req.tenantId, idempotencyKey]);
+            const existing = await client.query(IDEMP_SELECT_SQL, [req.tenantId, idempotencyScope, idempotencyKey]);
             if (existing.rowCount === 0) throw new Error('idempotency lookup race — row vanished after conflict');
             const row = existing.rows[0];
             if (row.request_hash !== requestHash) return { status: 409, body: { success: false, error: 'idempotency_conflict', detail: 'Idempotency-Key reused with a different payload' } };
@@ -361,12 +417,38 @@ export function createApp({
           }
         }
 
-        const result: any = await client.query(ORDER_INSERT_SQL, [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId]);
+        //Re-price against the products table inside the tenant tx so RLS
+        //scopes the lookup to req.tenantId. Caller-supplied `total` must
+        //match the recomputed sum exactly; a mismatch indicates client
+        //price tampering.
+        const priceRows: any = await client.query(PRODUCT_PRICE_LOOKUP_SQL, [items.map((it) => it.sku)]);
+        const priceBySku = new Map<string, number>();
+        for (const row of priceRows.rows ?? []) priceBySku.set(String(row.sku), Number(row.price_cents));
+        const missing: string[] = [];
+        let recomputedCents = 0;
+        for (const it of items) {
+          const cents = priceBySku.get(it.sku);
+          if (cents === undefined) {
+            missing.push(it.sku);
+            continue;
+          }
+          recomputedCents += cents * it.quantity;
+        }
+        if (missing.length > 0) {
+          return { status: 422, body: { success: false, error: 'unknown_sku', detail: `unknown or inactive SKUs: ${missing.join(', ')}` } };
+        }
+        const expectedTotal = recomputedCents / 100;
+        if (Math.round(total * 100) !== recomputedCents) {
+          logger.warn({ tenant: req.tenantId, supplied_total: total, expected_total: expectedTotal }, 'order total mismatch — rejecting');
+          return { status: 422, body: { success: false, error: 'invalid_total', detail: `total does not match catalog price; expected ${expectedTotal.toFixed(2)}` } };
+        }
+
+        const result: any = await client.query(ORDER_INSERT_SQL, [orderId, JSON.stringify(items), total, nodeEnv, req.tenantId, ownerSub]);
         const responseBody = { success: true, order: result.rows[0] };
-        if (idempotencyKey) await client.query(IDEMP_UPDATE_SQL, [req.tenantId, idempotencyKey, 201, JSON.stringify(responseBody), orderId]);
+        if (idempotencyKey) await client.query(IDEMP_UPDATE_SQL, [req.tenantId, idempotencyScope, idempotencyKey, 201, JSON.stringify(responseBody), orderId]);
         await client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.create', requestId, orderId, 201, 'success', null, JSON.stringify({ total, item_count: items.length })]);
         return { status: 201, body: responseBody };
-      });
+      }, ownerSub);
 
       logger.info({ orderId, total, tenant: req.tenantId, status: outcome.status }, 'order request processed');
       // Post-commit Kinesis publish (closes backlog #85). Outside withTenant
@@ -377,6 +459,7 @@ export function createApp({
           const publish = await publishOrderEvent({
             tenantId: req.tenantId!,
             orderId,
+            ownerSub,
             type: 'order.created',
             payload: { total, item_count: items.length },
           });
@@ -384,7 +467,7 @@ export function createApp({
             logger.warn({ orderId, err: publish.error }, 'kinesis publish failed; writing audit row');
             try {
               await withTenant(req.tenantId!, (client) =>
-                client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.created', requestId, orderId, 201, 'kinesis_publish_failed', publish.error ?? null, JSON.stringify({ total, item_count: items.length })]));
+                client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.created', requestId, orderId, 201, 'kinesis_publish_failed', publish.error ?? null, JSON.stringify({ total, item_count: items.length })]), ownerSub);
             } catch (auditErr) {
               logger.error({ auditErr }, 'failed to write audit event for kinesis_publish_failed');
             }
@@ -400,7 +483,7 @@ export function createApp({
       // because the original one is rolled back. RLS still scopes the row.
       try {
         await withTenant(req.tenantId!, (client) =>
-          client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.create.failed', requestId, orderId, 500, 'failure', 'internal_error', JSON.stringify({ total, item_count: items.length })]));
+          client.query(AUDIT_INSERT_SQL, [req.tenantId, actorId, 'order.create.failed', requestId, orderId, 500, 'failure', 'internal_error', JSON.stringify({ total, item_count: items.length })]), ownerSub);
       } catch (auditErr) {
         logger.error({ auditErr }, 'failed to write audit event for order.create.failed');
       }
@@ -408,18 +491,92 @@ export function createApp({
     }
   });
 
-  app.get('/orders', ...authChain, async (req: RequestWithCtx, res: Response) => {
+  app.get('/orders', ...orderAuthChain, async (req: RequestWithCtx, res: Response) => {
     try {
+      const ownerSub = typeof req.user?.sub === 'string' && req.user.sub.length > 0 ? req.user.sub : null;
       const result: any = await withTenant(req.tenantId!, (client) =>
-        client.query(
-          'SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100',
-          [req.tenantId],
-        ),
-      );
+        ownerSub
+          ? client.query(ORDER_LIST_OWNED_SQL, [req.tenantId, ownerSub])
+          : client.query(ORDER_LIST_SQL, [req.tenantId]),
+      ownerSub);
       res.status(200).json({ orders: result.rows, count: result.rowCount });
     } catch (err) {
       logger.error({ err }, 'failed to fetch orders');
       res.status(500).json({ success: false, error: 'Failed to fetch orders' });
+    }
+  });
+
+  app.get('/orders/:orderId', ...orderAuthChain, async (req: RequestWithCtx, res: Response) => {
+    const orderId = req.params.orderId;
+    if (!ORDER_ID_RE.test(orderId)) {
+      return res.status(400).json({ success: false, error: 'invalid_order_id' });
+    }
+    try {
+      const ownerSub = typeof req.user?.sub === 'string' && req.user.sub.length > 0 ? req.user.sub : null;
+      const result: any = await withTenant(req.tenantId!, (client) =>
+        ownerSub
+          ? client.query(ORDER_GET_OWNED_SQL, [req.tenantId, ownerSub, orderId])
+          : client.query(ORDER_GET_SQL, [req.tenantId, orderId]),
+      ownerSub);
+      if (!result.rows || result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'not_found' });
+      }
+      return res.status(200).json({ success: true, order: result.rows[0] });
+    } catch (err) {
+      logger.error({ err }, 'failed to fetch order');
+      return res.status(500).json({ success: false, error: 'Failed to fetch order' });
+    }
+  });
+
+  const requireUserPrincipal = (req: RequestWithCtx, res: Response, next: NextFunction) => {
+    if (typeof req.user?.sub === 'string' && req.user.sub.length > 0) return next();
+    return res.status(401).json({ error: 'unauthorized' });
+  };
+
+  app.get('/privacy/export', ...authChain, requireUserPrincipal, async (req: RequestWithCtx, res: Response) => {
+    const ownerSub = req.user.sub as string;
+    try {
+      const data = await withTenant(req.tenantId!, async (client) => {
+        const [orders, auditEvents, idempotencyKeys] = await Promise.all([
+          client.query(PRIVACY_EXPORT_ORDERS_SQL, [req.tenantId, ownerSub]),
+          client.query(PRIVACY_EXPORT_AUDIT_SQL, [req.tenantId, ownerSub]),
+          client.query(PRIVACY_EXPORT_IDEMPOTENCY_SQL, [req.tenantId, ownerSub]),
+        ]);
+        return {
+          orders: orders.rows,
+          audit_events: auditEvents.rows,
+          idempotency_keys: idempotencyKeys.rows,
+        };
+      }, ownerSub);
+      return res.status(200).json({ success: true, ...data });
+    } catch (err) {
+      logger.error({ err }, 'failed to export personal data');
+      return res.status(500).json({ success: false, error: 'privacy_export_failed' });
+    }
+  });
+
+  app.post('/privacy/erase', ...authChain, requireUserPrincipal, async (req: RequestWithCtx, res: Response) => {
+    const ownerSub = req.user.sub as string;
+    try {
+      // Erasure policy: preserve commercial records but remove the direct
+      // person-link. Run as tenant-scoped service work (no app.user_sub) so
+      // the row-level WITH CHECK policy permits owner_sub -> NULL.
+      const erased = await withTenant(req.tenantId!, async (client) => {
+        const [orders, auditEvents, idempotencyKeys] = await Promise.all([
+          client.query(PRIVACY_ERASE_ORDERS_SQL, [req.tenantId, ownerSub]),
+          client.query(PRIVACY_ERASE_AUDIT_SQL, [req.tenantId, ownerSub]),
+          client.query(PRIVACY_ERASE_IDEMPOTENCY_SQL, [req.tenantId, ownerSub]),
+        ]);
+        return {
+          order_links: orders.rowCount ?? 0,
+          audit_actor_links: auditEvents.rowCount ?? 0,
+          idempotency_keys: idempotencyKeys.rowCount ?? 0,
+        };
+      });
+      return res.status(200).json({ success: true, erased });
+    } catch (err) {
+      logger.error({ err }, 'failed to erase personal data');
+      return res.status(500).json({ success: false, error: 'privacy_erase_failed' });
     }
   });
 
@@ -464,16 +621,10 @@ export function createApp({
     }
   });
 
-  // HMAC middleware for internal routes — signed by the search-gateway
-  // Lambda (#82) and admin UI server (#88). Secret rotates via External
-  // Secrets / Secrets Manager.
-  //
-  // Dual-accept rotation (#96): INTERNAL_HMAC_SECRET is the active key;
-  // INTERNAL_HMAC_SECRET_PREVIOUS is an optional grace-window key accepted
-  // for the rotation overlap. During rotation, External Secrets writes the
-  // new value to `hmac-secret` and the old to `hmac-secret-previous`; once
-  // every caller has rolled, clear the previous slot. Both checks run in
-  // constant time so timing does not leak which slot matched.
+  // HMAC middleware for internal routes (signed by search-gateway #82 +
+  // admin server #88). Dual-accept rotation (#96): the PREVIOUS secret is
+  // an optional grace-window key. ExternalSecret writes new→active and
+  // old→previous; clear `previous` once every caller has rolled.
   const internalHmacSecret = process.env.INTERNAL_HMAC_SECRET ?? '';
   const internalHmacSecretPrevious = process.env.INTERNAL_HMAC_SECRET_PREVIOUS ?? '';
   const tryHmac = (timestamp: string, tenantHeader: string, raw: string, given: Buffer, secret: string): boolean => {
@@ -489,22 +640,25 @@ export function createApp({
     const tenantHeader = req.get('x-cloudops-tenant');
     if (!header || !timestamp || !tenantHeader) return res.status(401).json({ success: false, error: 'hmac_missing' });
     const ts = parseInt(timestamp, 10);
+    //5-minute skew window. Replay within this window is accepted — see
+    //docs/adr/024-hmac-replay-window.md for the threat model and the
+    //triggers that would force us to add a nonce cache (closes #108).
     if (!Number.isInteger(ts) || Math.abs(Date.now() - ts) > 5 * 60 * 1000) {
       return res.status(401).json({ success: false, error: 'hmac_stale' });
     }
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(tenantHeader)) return res.status(401).json({ success: false, error: 'invalid_tenant' });
     const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
     const given = Buffer.from(header, 'hex');
-    const matchedActive = tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecret);
-    const matchedPrevious = tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecretPrevious);
-    if (!matchedActive && !matchedPrevious) {
-      return res.status(401).json({ success: false, error: 'hmac_invalid' });
+    if (tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecret)) {
+      (req as RequestWithCtx).tenantId = tenantHeader;
+      return next();
     }
-    if (matchedPrevious && !matchedActive) {
+    if (tryHmac(timestamp, tenantHeader, raw, given, internalHmacSecretPrevious)) {
       logger.warn({ tenant: tenantHeader }, 'internal HMAC accepted via PREVIOUS secret — caller still on old key');
+      (req as RequestWithCtx).tenantId = tenantHeader;
+      return next();
     }
-    (req as RequestWithCtx).tenantId = tenantHeader;
-    next();
+    return res.status(401).json({ success: false, error: 'hmac_invalid' });
   };
 
   app.post('/_internal/search', requireInternalHmac, async (req: RequestWithCtx, res: Response) => {
@@ -528,7 +682,7 @@ export function createApp({
     const sku = typeof body.sku === 'string' ? body.sku : '';
     const name = typeof body.name === 'string' ? body.name : '';
     const priceCents = typeof body.price_cents === 'number' && Number.isInteger(body.price_cents) ? body.price_cents : null;
-    if (!sku || sku.length > 64 || !name || name.length > 1000 || priceCents === null || priceCents < 0) {
+    if (!SKU_RE.test(sku) || !name || name.length > 1000 || priceCents === null || priceCents < 0) {
       return res.status(400).json({ success: false, error: 'invalid_product' });
     }
     const description = typeof body.description === 'string' ? body.description : null;
@@ -596,6 +750,9 @@ export function createApp({
         metrics: 'GET /metrics',
         createOrder: 'POST /order',
         getOrders: 'GET /orders',
+        getOrder: 'GET /orders/:orderId',
+        exportPrivacyData: 'GET /privacy/export',
+        erasePrivacyData: 'POST /privacy/erase',
         listProducts: 'GET /products',
         getProduct: 'GET /products/:id',
       },
@@ -620,6 +777,7 @@ export function createMetricsApp({ registry }: { registry: Registry }) {
 // ASCII printable, 1–255 chars. Mirrors the CHECK constraint on the table.
 const IDEMPOTENCY_KEY_RE = /^[\x21-\x7e]{1,255}$/;
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24h replay window
+const ORDER_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
 // Hashes order payload.
 export function hashOrderPayload(value: OrderBody): string {

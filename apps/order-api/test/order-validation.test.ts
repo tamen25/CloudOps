@@ -1,11 +1,8 @@
 // This file contains order validation test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
 // Validator is internal to app.ts — exercise it through POST /order.
-const { createApp, validateOrderPayload } = require('../src/app');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp, validateOrderPayload } from '../src/app';
 
 // Handles silent logger.
 function silentLogger() {
@@ -15,7 +12,14 @@ function silentLogger() {
 // Handles start server.
 async function startServer() {
   const pool = {
-    query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }),
+    query: async (sql, params) => {
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        //book-1 priced at $19.99 to make total=39.98 with qty 2.
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 1999 })), rowCount: skus.length };
+      }
+      return { rows: [{ order_id: 'ok' }], rowCount: 1 };
+    },
   };
   const { app } = createApp({
     pool,

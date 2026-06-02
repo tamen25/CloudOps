@@ -32,6 +32,27 @@ locals {
 }
 
 #Creates the AWS serverlessapplicationrepository cloudformation stack resource named rotation.
+#
+#Update procedure (closes backlog #112):
+#1. Find the latest version:
+#   aws serverlessrepo get-application \
+#     --application-id arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser \
+#     --query 'Version.SemanticVersion' --output text
+#2. Read its release notes — AWS occasionally tightens IAM or changes
+#   parameter shape. Skim them before bumping.
+#3. Open a PR that bumps the `rotation_sar_semantic_version` variable
+#   default (or the env tfvars override). Single-purpose PR — no other
+#   infra changes.
+#4. Apply in dev first. Confirm rotation succeeds end-to-end:
+#   aws secretsmanager rotate-secret --secret-id <db-master-secret-id>
+#   then check the new password works against the cluster.
+#5. Promote to staging → prod via the normal merge path.
+#
+#`lifecycle.ignore_changes = [parameters]` would let AWS drift the SAR
+#template internals without re-applying our CF stack, but we explicitly
+#do NOT want that — the SAR template owns the Lambda's IAM, and a
+#silent template bump could change permissions. Bumps are a code change
+#with a PR, not a quiet drift.
 resource "aws_serverlessapplicationrepository_cloudformation_stack" "rotation" {
   count = var.rotation_enabled && var.rotation_lambda_arn == "" && var.rotation_lambda_auto_deploy ? 1 : 0
 

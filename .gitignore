@@ -1,3 +1,10 @@
+# Environment files — never commit secrets. .env.example / .env.*.example
+# stay tracked as documented templates.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 # Personal interview-prep explainer — local only, never committed.
 # Agents (including Claude) must NOT read this file for context.
 # It is human-maintained narrative documentation, not part of the codebase.
@@ -112,3 +119,4 @@ libraries/dotnet/logs/obj/
 libraries/dotnet/logs/tests/bin/
 libraries/dotnet/logs/tests/obj/
 STOREFRONT_REDESIGN.md
+.gstack/

@@ -22,11 +22,6 @@ data "aws_iam_policy_document" "sfn" {
     resources = [aws_sqs_queue.email.arn]
   }
   statement {
-    effect    = "Allow"
-    actions   = ["states:InvokeHTTPEndpoint"]
-    resources = [aws_sfn_state_machine.checkout.arn]
-  }
-  statement {
     effect = "Allow"
     actions = [
       "logs:CreateLogDelivery",

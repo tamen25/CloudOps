@@ -17,7 +17,12 @@ name: Drift Detection
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # 02:00 UTC daily
+    #Daily 02:00 UTC. GitHub Actions cron is static YAML — to change
+    #cadence you edit this line. Closes backlog #122 — operators can also
+    #run drift mid-cycle via workflow_dispatch + the inputs below to
+    #focus on a single env/stack (effective cadence increase without
+    #editing the cron).
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       environment:
@@ -29,6 +34,11 @@ on:
           - dev
           - staging
           - prod
+      stacks:
+        description: 'Stacks to plan (space-separated subset of: foundation cluster platform). Empty = all three.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   id-token: write
@@ -41,19 +51,39 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  #Build the env list at runtime: schedule fan-outs across all envs;
-  #workflow_dispatch narrows to the operator-selected env.
+  #Build the env + stack lists at runtime: schedule fan-outs across all envs +
+  #all stacks; workflow_dispatch narrows to the operator-selected env and
+  #optionally to a stack subset via `inputs.stacks` (closes backlog #122).
   plan-matrix:
     runs-on: ubuntu-latest
     outputs:
       envs: ${{ steps.build.outputs.envs }}
+      stacks: ${{ steps.build.outputs.stacks }}
     steps:
       - id: build
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo 'envs=["${{ inputs.environment }}"]' >> "$GITHUB_OUTPUT"
+            requested='${{ inputs.stacks }}'
+            if [ -z "$requested" ]; then
+              echo 'stacks=["foundation","cluster","platform"]' >> "$GITHUB_OUTPUT"
+            else
+              json='['
+              first=1
+              for s in $requested; do
+                case "$s" in
+                  foundation|cluster|platform) ;;
+                  *) echo "::error::unknown stack '$s' (allowed: foundation cluster platform)"; exit 1 ;;
+                esac
+                if [ "$first" = "1" ]; then first=0; else json="${json},"; fi
+                json="${json}\"${s}\""
+              done
+              json="${json}]"
+              echo "stacks=${json}" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo 'envs=["dev","staging","prod"]' >> "$GITHUB_OUTPUT"
+            echo 'stacks=["foundation","cluster","platform"]' >> "$GITHUB_OUTPUT"
           fi
 
   detect-drift:
@@ -63,7 +93,7 @@ jobs:
       fail-fast: false
       matrix:
         environment: ${{ fromJson(needs.plan-matrix.outputs.envs) }}
-        stack: [foundation, cluster, platform]
+        stack: ${{ fromJson(needs.plan-matrix.outputs.stacks) }}
     environment: ${{ matrix.environment == 'prod' && 'production' || matrix.environment }}
     steps:
       - uses: actions/checkout@v5

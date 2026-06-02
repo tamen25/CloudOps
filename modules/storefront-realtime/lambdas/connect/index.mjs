@@ -1,18 +1,28 @@
-// ws-connect Lambda. Verifies the JWT (Cognito) supplied as the
-// Sec-WebSocket-Protocol header or ?token= query param, writes the
-// connection record to Dynamo with a 24h TTL, returns 200 to allow
-// the upgrade.
+// ws-connect Lambda. Verifies the short-lived storefront-minted WS ticket
+// supplied as the Sec-WebSocket-Protocol header or ?token= query param,
+// writes the connection record to Dynamo with a 24h TTL, and returns 200 to
+// allow the upgrade. A Cognito JWT fallback remains for older clients during
+// rollout.
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from "@aws-sdk/client-secrets-manager";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const ISSUER = process.env.COGNITO_ISSUER_URL;
 const AUDIENCE = process.env.COGNITO_CLIENT_ID;
 const JWKS_URL = process.env.COGNITO_JWKS_URL;
+const WS_TOKEN_SECRET_ARN = process.env.WS_TOKEN_SECRET_ARN;
+const WS_TICKET_ISSUER = "cloudops-storefront";
+const WS_TICKET_AUDIENCE = "cloudops-ws";
 
 const doc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const jwks = JWKS_URL ? createRemoteJWKSet(new URL(JWKS_URL)) : null;
+const secrets = WS_TOKEN_SECRET_ARN ? new SecretsManagerClient({}) : null;
+let cachedWsSecret = null;
 
 function extractToken(event) {
   const proto = event.headers?.["sec-websocket-protocol"] || event.headers?.["Sec-WebSocket-Protocol"];
@@ -24,8 +34,54 @@ function extractToken(event) {
   return event.queryStringParameters?.token || null;
 }
 
+async function getWsTokenSecret() {
+  if (cachedWsSecret) return cachedWsSecret;
+  if (!WS_TOKEN_SECRET_ARN || !secrets) return null;
+  const res = await secrets.send(
+    new GetSecretValueCommand({ SecretId: WS_TOKEN_SECRET_ARN })
+  );
+  const raw = res.SecretString ?? "";
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    cachedWsSecret =
+      parsed["ws-token-secret"] ??
+      parsed.ws_token_secret ??
+      parsed.wsTokenSecret ??
+      parsed.value ??
+      null;
+  } catch {
+    cachedWsSecret = raw;
+  }
+  return cachedWsSecret;
+}
+
+async function verifyWsTicket(token) {
+  const secret = await getWsTokenSecret();
+  if (!secret) return null;
+  const { payload } = await jwtVerify(
+    token,
+    new TextEncoder().encode(secret),
+    {
+      issuer: WS_TICKET_ISSUER,
+      audience: WS_TICKET_AUDIENCE,
+      algorithms: ["HS256"],
+    }
+  );
+  return payload;
+}
+
+async function verifyCognitoToken(token) {
+  if (!ISSUER || !AUDIENCE || !jwks) return null;
+  const { payload } = await jwtVerify(token, jwks, {
+    issuer: ISSUER,
+    audience: AUDIENCE,
+  });
+  return payload;
+}
+
 export const handler = async (event) => {
-  if (!TABLE || !ISSUER || !AUDIENCE || !jwks) {
+  if (!TABLE) {
     return { statusCode: 503, body: "ws_not_configured" };
   }
   const token = extractToken(event);
@@ -33,10 +89,28 @@ export const handler = async (event) => {
 
   let claims;
   try {
-    const { payload } = await jwtVerify(token, jwks, { issuer: ISSUER, audience: AUDIENCE });
-    claims = payload;
+    claims = await verifyWsTicket(token);
   } catch {
+    claims = null;
+  }
+  if (!claims) {
+    try {
+      claims = await verifyCognitoToken(token);
+    } catch {
+      claims = null;
+    }
+  }
+  if (!claims) {
+    if (!WS_TOKEN_SECRET_ARN && (!ISSUER || !AUDIENCE || !jwks)) {
+      return { statusCode: 503, body: "ws_not_configured" };
+    }
     return { statusCode: 401, body: "invalid_token" };
+  }
+
+  if (claims.iss === WS_TICKET_ISSUER && claims.aud === WS_TICKET_AUDIENCE) {
+    if (claims.token_use !== "ws") {
+      return { statusCode: 401, body: "invalid_token_use" };
+    }
   }
 
   const tenantId = claims["custom:tenant_id"] || claims.tenant_id;

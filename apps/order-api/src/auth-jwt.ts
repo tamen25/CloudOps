@@ -24,25 +24,36 @@ export function hasAllScopes(present: Set<string>, required: Set<string>): boole
   return true;
 }
 
-// Closes backlog #104. Maps a jose JWTVerify error onto a low-cardinality
-// outcome label for the jwt_verify_total Prometheus counter. The key
-// distinction is `jwks_unreachable` — that's the one a PrometheusRule
-// alerts on (Cognito JWKS down ⇒ every auth call fails).
-export function classifyJwtError(err: { code?: string; message?: string } | undefined): string {
+// Closes backlog #104. Outcome labels for the jwt_verify_total Prometheus
+// counter. `jwks_unreachable` is the one OIDCJWKSUnreachable alerts on —
+// keep the literal in sync with modules/observability/jwks_alerts.tf.
+export type JwtOutcome =
+  | 'ok'
+  | 'expired'
+  | 'wrong_issuer'
+  | 'wrong_audience'
+  | 'invalid_claim'
+  | 'invalid_signature'
+  | 'missing_scope'
+  | 'jwks_unreachable'
+  | 'other';
+
+const JWT_ERROR_CODE_OUTCOMES: Record<string, JwtOutcome> = {
+  ERR_JWT_EXPIRED: 'expired',
+  ERR_JWS_SIGNATURE_VERIFICATION_FAILED: 'invalid_signature',
+};
+
+export function classifyJwtError(err: { code?: string; message?: string } | undefined): JwtOutcome {
   if (!err) return 'other';
   const code = (err.code || '').toUpperCase();
-  if (code === 'ERR_JWT_EXPIRED') return 'expired';
+  const mapped = JWT_ERROR_CODE_OUTCOMES[code];
+  if (mapped) return mapped;
+  const msg = (err.message || '').toLowerCase();
   if (code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
-    const msg = (err.message || '').toLowerCase();
     if (msg.includes('iss')) return 'wrong_issuer';
     if (msg.includes('aud')) return 'wrong_audience';
     return 'invalid_claim';
   }
-  if (code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED') return 'invalid_signature';
-  // JWKS fetch errors surface as JWKSNoMatchingKey / JWKSInvalid / generic
-  // fetch failures. jose tags fetch failures via the `cause` chain;
-  // pattern-match the message for transport failures.
-  const msg = (err.message || '').toLowerCase();
   if (msg.includes('fetch') || msg.includes('econn') || msg.includes('jwks') || msg.includes('timeout')) {
     return 'jwks_unreachable';
   }
@@ -56,10 +67,7 @@ export interface CreateJwtVerifierArgs {
   requiredScopes?: Iterable<string>;
   logger?: Logger;
   jwksOptions?: Record<string, unknown>;
-  // Optional Prometheus counter for verify outcomes (#104). Receives the
-  // outcome label (`ok`, `jwks_unreachable`, `expired`, ...). Wiring is in
-  // createApp via the metrics block; tests can pass a sink for assertions.
-  onOutcome?: (outcome: string) => void;
+  onOutcome?: (outcome: JwtOutcome) => void;
 }
 
 // Creates JWT verifier.
@@ -100,7 +108,9 @@ export function createJwtVerifier(args: CreateJwtVerifierArgs = {} as CreateJwtV
       if (required.size > 0) {
         const present = parseScopes(payload as { scp?: unknown; scope?: unknown });
         if (!hasAllScopes(present, required)) {
-          logger.warn({ sub: payload.sub, present: [...present], required: [...required] }, 'jwt missing required scope');
+          // `sub` is a stable personal identifier. Keep enough signal for
+          // troubleshooting without writing the raw user handle to logs.
+          logger.warn({ hasSub: Boolean(payload.sub), present: [...present], required: [...required] }, 'jwt missing required scope');
           onOutcome('missing_scope');
           return res.status(403).json({ error: 'forbidden', detail: 'missing scope' }); /* node:coverage ignore next */
         }

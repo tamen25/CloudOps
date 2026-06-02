@@ -1,22 +1,22 @@
 /* This migration prepares 003 rls database changes for CloudOps. */
--- Backlog #51 — DB-level tenant isolation via Row Level Security.
---
--- App-side filtering (#8) is necessary but not sufficient: a missing WHERE
--- tenant_id clause anywhere — a future query, an analytics tool, an
--- emergency hotfix — leaks every tenant's data. RLS makes the filter
--- impossible to forget.
---
--- Strategy: enable + FORCE row level security on orders, then add a single
--- policy that requires the session's `app.tenant_id` setting to match the
--- row's tenant_id for both reads (USING) and writes (WITH CHECK). The app
--- sets this via `SET LOCAL app.tenant_id = $1` inside a transaction
--- wrapping every query. FORCE ensures even the table owner (the RDS master
--- user used in dev) cannot bypass — superuser is the only escape, and the
--- master user is not a Postgres superuser on RDS.
+/* Backlog #51 — DB-level tenant isolation via Row Level Security.
 
--- The runtime app role is created lazily — production wires a separate
--- credential via Secrets Manager (#37 ARN scoping); dev keeps using the
--- master credential. Either way, FORCE RLS makes both paths equivalent.
+   App-side filtering (#8) is necessary but not sufficient: a missing WHERE
+   tenant_id clause anywhere — a future query, an analytics tool, an
+   emergency hotfix — leaks every tenant's data. RLS makes the filter
+   impossible to forget.
+
+   Strategy: enable + FORCE row level security on orders, then add a single
+   policy that requires the session's `app.tenant_id` setting to match the
+   row's tenant_id for both reads (USING) and writes (WITH CHECK). The app
+   sets this via `SET LOCAL app.tenant_id = $1` inside a transaction
+   wrapping every query. FORCE ensures even the table owner (the RDS master
+   user used in dev) cannot bypass — superuser is the only escape, and the
+   master user is not a Postgres superuser on RDS. */
+
+/* The runtime app role is created lazily — production wires a separate
+   credential via Secrets Manager (#37 ARN scoping); dev keeps using the
+   master credential. Either way, FORCE RLS makes both paths equivalent. */
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'order_api_app') THEN

@@ -1,6 +1,6 @@
 // ws-fanout Lambda. Kinesis consumer; for each order event, queries the
-// `by-tenant` GSI for active connections and PostToConnection's the JSON
-// payload to each. 410 Gone -> stale connection -> Dynamo delete.
+// `by-tenant` GSI and filters to the owning JWT subject before pushing.
+// 410 Gone -> stale connection -> Dynamo delete.
 import { Buffer } from "node:buffer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
@@ -21,13 +21,15 @@ const apigw = ENDPOINT
   ? new ApiGatewayManagementApiClient({ endpoint: ENDPOINT })
   : null;
 
-async function dispatch(tenantId, payload) {
+async function dispatch(tenantId, ownerSub, payload) {
   const res = await doc.send(
     new QueryCommand({
       TableName: TABLE,
       IndexName: "by-tenant",
       KeyConditionExpression: "tenantId = :t",
-      ExpressionAttributeValues: { ":t": tenantId },
+      FilterExpression: "#sub = :s",
+      ExpressionAttributeNames: { "#sub": "sub" },
+      ExpressionAttributeValues: { ":t": tenantId, ":s": ownerSub },
     })
   );
   const conns = (res.Items ?? []);
@@ -63,8 +65,9 @@ export const handler = async (event) => {
       const text = Buffer.from(record.kinesis.data, "base64").toString("utf8");
       const payload = JSON.parse(text);
       const tenantId = payload.tenant_id;
-      if (!tenantId) continue;
-      await dispatch(tenantId, payload);
+      const ownerSub = payload.owner_sub;
+      if (!tenantId || !ownerSub) continue;
+      await dispatch(tenantId, ownerSub, payload);
     } catch (err) {
       console.error("fanout record failed", { err: err?.message });
     }

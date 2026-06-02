@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Activity, Boxes } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { designPreviewEnabled } from "@/lib/flags";
 
 interface NavItem {
   href: string;
@@ -18,11 +19,13 @@ const console_: NavItem[] = [
   { href: "/load", label: "Load" },
 ];
 
+// /design is an internal preview gated by NEXT_PUBLIC_DESIGN_PREVIEW (it
+// notFound()s otherwise) — only surface the link when the flag is set (#149).
 const platform: NavItem[] = [
   { href: "/platform", label: "Platform" },
   { href: "/architecture", label: "Architecture" },
   { href: "/pipeline", label: "Pipeline" },
-  { href: "/design", label: "Design" },
+  ...(designPreviewEnabled ? [{ href: "/design", label: "Design" }] : []),
 ];
 
 function isActive(pathname: string, href: string): boolean {
