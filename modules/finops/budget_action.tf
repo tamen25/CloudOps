@@ -34,6 +34,11 @@ resource "aws_iam_policy" "budget_hardcap_deny" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Deny only verbs that CREATE / LAUNCH new spend. Deliberately omit
+        # autoscaling:SetDesiredCapacity / UpdateAutoScalingGroup — those are
+        # also how an operator scales a runaway ASG back DOWN during cost
+        # containment, so denying them would block remediation. Scale-up via a
+        # NEW ASG is still blocked by CreateAutoScalingGroup.
         Sid    = "DenyNewCompute"
         Effect = "Deny"
         Action = [
@@ -41,8 +46,6 @@ resource "aws_iam_policy" "budget_hardcap_deny" {
           "eks:CreateNodegroup",
           "eks:CreateCluster",
           "autoscaling:CreateAutoScalingGroup",
-          "autoscaling:SetDesiredCapacity",
-          "autoscaling:UpdateAutoScalingGroup",
         ]
         Resource = "*"
       }

@@ -70,8 +70,10 @@ above the configured `rateLimitMax`.
    `modules/finops/budget_action.tf`, OFF by default. When enabled
    (`enable_budget_hardcap_action = true` + `budget_hardcap_target_role_names`),
    ACTUAL spend crossing `budget_hardcap_threshold_percent` (default 120%)
-   auto-attaches a deny policy (`ec2:RunInstances`, `eks:Create*`,
-   `autoscaling:*Capacity/*Group`) to the target roles — so new compute/cluster
+   auto-attaches a deny policy (`ec2:RunInstances`, `eks:CreateNodegroup`,
+   `eks:CreateCluster`, `autoscaling:CreateAutoScalingGroup` — creation/launch
+   verbs only; scale-DOWN is intentionally still allowed so you can shrink a
+   runaway ASG during containment) to the target roles — so new compute/cluster
    growth fails immediately and steps 2-3 are moot. **Lifting the cap after a
    fire:** raise `cost_budget_monthly_usd` or `budget_hardcap_threshold_percent`
    and re-apply, OR detach `<project>-<env>-budget-hardcap-deny` from the
