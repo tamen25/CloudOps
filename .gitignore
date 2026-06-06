@@ -120,3 +120,4 @@ libraries/dotnet/logs/tests/bin/
 libraries/dotnet/logs/tests/obj/
 STOREFRONT_REDESIGN.md
 .gstack/
+.dual-graph/
