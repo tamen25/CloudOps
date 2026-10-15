@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync/atomic"
+	"time"
 )
 
 type quoteRequest struct {
@@ -34,7 +36,7 @@ func NewMux() *http.ServeMux {
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = w.Write([]byte("# TYPE pricing_quote_total counter\n"))
-		_, _ = w.Write([]byte("pricing_quote_total " + itoa(quoteCount.Load()) + "\n"))
+		_, _ = w.Write([]byte("pricing_quote_total " + strconv.FormatInt(quoteCount.Load(), 10) + "\n"))
 	})
 
 	mux.HandleFunc("/quote", func(w http.ResponseWriter, r *http.Request) {
@@ -60,26 +62,18 @@ func NewMux() *http.ServeMux {
 	return mux
 }
 
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
+// newServer is the HTTP server main runs. The timeouts bound how long one
+// client can hold a connection: without ReadHeaderTimeout, a client that
+// sends its headers a byte at a time keeps a goroutine and a socket forever.
+func newServer(port string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
-	var buf [20]byte
-	i := len(buf)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
 
 func main() {
@@ -94,7 +88,7 @@ func main() {
 	handler := withTracing("pricing", NewMux())
 
 	log.Printf("pricing listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
+	if err := newServer(port, handler).ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
