@@ -1,0 +1,12 @@
+# Actions are pinned to commit SHAs with the version as a comment
+# (`@<sha> # v4`), so a moved tag cannot change what runs. Dependabot keeps
+# the pins current: it proposes a new SHA, and a person reviews the bump.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -76,15 +76,15 @@ jobs:
       security-events: write
       actions: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -114,7 +114,7 @@ jobs:
           terraform -chdir=stacks/platform validate
 
       - name: Setup tflint
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
 
       - name: tflint init
         run: tflint --init
@@ -141,14 +141,14 @@ jobs:
       #silently anymore. `soft_fail: false` is the default; making it
       #explicit so a future contributor can't flip it back without reviewing.
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           soft_fail: false
           format: sarif
           additional_args: --minimum-severity HIGH
 
       - name: Upload tfsec results (artifact)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always() && hashFiles('results.sarif') != ''
         with:
           name: tfsec-results
@@ -167,12 +167,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
       - name: Setup Infracost
-        uses: infracost/actions/setup@v3
+        uses: infracost/actions/setup@e9d6e6cd65e168e76b0de50ff9957d2fe8bb1832 # v3
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
@@ -206,7 +206,7 @@ jobs:
           echo "✓ Cost change (\$$DIFF/month) is within the \$50 threshold"
 
       - name: Post PR cost comment
-        uses: infracost/actions/comment@v1
+        uses: infracost/actions/comment@e6a81841e9660a313ac6553cbd0a3705084d6426 # v1
         with:
           path: /tmp/infracost-diff.json
           behavior: update
@@ -226,10 +226,10 @@ jobs:
     #correct order and succeed regardless; plan is informational only.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
 
@@ -239,12 +239,12 @@ jobs:
         run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           role-session-name: github-actions-plan
@@ -280,7 +280,7 @@ jobs:
           exit "$rc"
 
       - name: Upload plan artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tfplan
           path: stacks/**/tfplan
@@ -299,10 +299,10 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
 
@@ -310,7 +310,7 @@ jobs:
         run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -330,7 +330,7 @@ jobs:
 
       - name: Post plan to PR
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const fs = require('fs');
@@ -389,7 +389,7 @@ jobs:
       security-events: write
       actions: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       #Closes backlog #39 — Trivy was previously pinned to the mutable
       #`@master` ref. Now pinned to a tagged release; HIGH/CRITICAL findings
@@ -397,7 +397,7 @@ jobs:
       #intentional finding, add a `# trivy:ignore:<id>` comment in the TF
       #source and document the reason in PROJECT_EXPLAINER or a runbook.
       - name: Run Trivy on Terraform config
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -407,7 +407,7 @@ jobs:
           output: trivy-results.sarif
 
       - name: Upload Trivy results (artifact)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           name: trivy-results
@@ -437,7 +437,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install kubeconform
         run: |
@@ -472,7 +472,7 @@ jobs:
       PLURALITH_PROJECT_ID: ${{ secrets.PLURALITH_PROJECT_ID }}
       PLURALITH_PROJECT_NAME: ${{ secrets.PLURALITH_PROJECT_NAME }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
@@ -480,7 +480,7 @@ jobs:
         run: cp terraform.tfvars.example terraform.tfvars
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
@@ -489,7 +489,7 @@ jobs:
         run: terraform init -backend=false
 
       - name: Pluralith Init
-        uses: Pluralith/actions/init@v1.4.0
+        uses: Pluralith/actions/init@7f562c43f337f0065c827b27d0ba88f4f5a0775d # v1.4.0
         with:
           terraform-path: ${{ github.workspace }}
           api-key: ${{ secrets.PLURALITH_API_KEY }}
@@ -531,7 +531,7 @@ jobs:
             --file-name diagram
 
       - name: Pluralith Comment
-        uses: Pluralith/actions/comment@v1.4.0
+        uses: Pluralith/actions/comment@7f562c43f337f0065c827b27d0ba88f4f5a0775d # v1.4.0
         with:
           terraform-path: ${{ github.workspace }}
 
@@ -561,10 +561,10 @@ jobs:
     if: vars.AWS_DEPLOY_ENABLED == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
 
@@ -574,12 +574,12 @@ jobs:
         run: bash scripts/build-lambdas.sh
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           role-session-name: github-actions-apply
@@ -827,7 +827,7 @@ jobs:
       TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           role-session-name: github-actions-compliance-scan
