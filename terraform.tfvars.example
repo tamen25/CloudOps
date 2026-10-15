@@ -125,7 +125,7 @@ bootstrap_kms_deletion_window = 30  # Days before key is permanently deleted (7â
 
 # IAM deployer role (optional cross-account / MFA setup)
 bootstrap_additional_trusted_arns = []
-bootstrap_require_mfa             = false
+bootstrap_require_mfa             = true
 bootstrap_external_id             = ""
 bootstrap_max_session_duration    = 3600  # Seconds (3600â€“43200)
 bootstrap_additional_policy_arns  = []

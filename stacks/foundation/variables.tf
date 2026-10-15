@@ -109,8 +109,9 @@ variable "bootstrap_additional_trusted_arns" {
 
 #Defines the bootstrap require mfa input value.
 variable "bootstrap_require_mfa" {
-  type    = bool
-  default = false
+  description = "Require MFA to assume the human deployer role (CI uses the OIDC role and is unaffected)"
+  type        = bool
+  default     = true
 }
 
 #Defines the bootstrap external ID input value.

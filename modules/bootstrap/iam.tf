@@ -67,6 +67,7 @@ data "aws_iam_policy_document" "deployer_state_access" {
     ]
   }
 
+  #tfsec:ignore:aws-iam-no-policy-wildcards The state files are objects in this one bucket.
   statement {
     sid    = "TerraformStateS3ObjectAccess"
     effect = "Allow"
@@ -107,36 +108,128 @@ resource "aws_iam_role_policy" "deployer_state_access" {
   policy = data.aws_iam_policy_document.deployer_state_access.json
 }
 
-#Defines broad permissions for deploying AWS infrastructure resources
+# What Terraform needs to deploy the platform. Shared by the human deployer
+# role and the GitHub Actions role (github_oidc.tf), so the two cannot drift.
+#
+# IAM is the one service scoped to names: with iam:* on every resource, the
+# role could create or edit any role in the account and grant itself anything
+# (admin in effect). Write access is limited to the project's own roles,
+# policies and instance profiles (every one is named "<project_name>-…"),
+# OIDC providers (EKS and GitHub) and service-linked roles, whose permissions
+# AWS defines. Reading IAM stays account-wide: Terraform reads to plan.
+# S3 is scoped the same way: every bucket the modules create is named
+# "<project_name>-…".
+# trivy:ignore:AVD-AWS-0345 s3:* is limited to the project's own buckets (S3ProjectBuckets).
 data "aws_iam_policy_document" "deployer_infrastructure" {
   #checkov:skip=CKV_AWS_356:Deployer role requires broad infrastructure permissions for Terraform
   #checkov:skip=CKV_AWS_111:Deployer role requires write access for infrastructure deployment
-  #checkov:skip=CKV_AWS_110:Deployer role requires IAM permissions for creating service roles
   #checkov:skip=CKV_AWS_108:Deployer role requires S3/ECR access for artifact management
-  #checkov:skip=CKV_AWS_109:Deployer role requires IAM management permissions for infrastructure
   #checkov:skip=CKV_AWS_107:Deployer role requires ECR credentials for image management
+  #tfsec:ignore:aws-iam-no-policy-wildcards Service-wide actions are what a Terraform deployer creates and destroys; IAM, the escalation path, is scoped below.
   statement {
     sid    = "InfrastructureDeployment"
     effect = "Allow"
+    # One entry per AWS service the modules create resources in (derived
+    # from their aws_* resource types). A module that adds a service adds it
+    # here too, and in scripts/oidc.sh.
     actions = [
-      "ec2:*",
-      "ecs:*",
-      "ecr:*",
-      "elasticloadbalancing:*",
-      "autoscaling:*",
-      "cloudwatch:*",
-      "logs:*",
-      "iam:*",
-      "rds:*",
-      "vpc:*",
-      "route53:*",
       "acm:*",
-      "secretsmanager:*",
-      "ssm:*",
+      "apigateway:*",
+      "backup:*",
+      "backup-storage:*",
+      "budgets:*",
+      "cloudformation:*", # the SAR rotation Lambda is a CloudFormation stack
+      "cloudtrail:*",
+      "cloudwatch:*",
       "codeartifact:*",
+      "cognito-idp:*",
+      "config:*",
+      "dynamodb:*",
+      "ec2:*", # VPC, subnets, routes, NAT, security groups, endpoints, launch templates
+      "ecr:*",
+      "eks:*",
+      "elasticloadbalancing:*",
+      "events:*",
+      "guardduty:*",
+      "kinesis:*",
+      "kms:*",
+      "lambda:*",
+      "logs:*",
+      "rds:*",
+      "route53:*",
+      "secretsmanager:*",
+      "securityhub:*",
+      "serverlessrepo:*",
+      "sns:*",
+      "sqs:*",
+      "ssm:*",
+      "states:*",
+      "wafv2:*",
       "sts:GetServiceBearerToken",
     ]
     resources = ["*"]
+  }
+
+  #tfsec:ignore:aws-iam-no-policy-wildcards Scoped to the project's own buckets and their objects.
+  statement {
+    sid     = "S3ProjectBuckets"
+    effect  = "Allow"
+    actions = ["s3:*"]
+    resources = [
+      "arn:aws:s3:::${var.project_name}-*",
+      "arn:aws:s3:::${var.project_name}-*/*",
+    ]
+  }
+
+  statement {
+    sid    = "S3Account"
+    effect = "Allow"
+    actions = [
+      "s3:ListAllMyBuckets",
+      "s3:GetAccountPublicAccessBlock",
+    ]
+    resources = ["*"]
+  }
+
+  # The RDS rotation Lambda is a Serverless Application Repository app; its
+  # code is read from the repository's change-set bucket on deploy.
+  statement {
+    sid       = "S3ServerlessRepoChangeSets"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::awsserverlessrepo-changesets*/*"]
+  }
+
+  #tfsec:ignore:aws-iam-no-policy-wildcards Read-only: Terraform reads IAM to plan.
+  statement {
+    sid       = "IAMRead"
+    effect    = "Allow"
+    actions   = ["iam:Get*", "iam:List*"]
+    resources = ["*"]
+  }
+
+  #tfsec:ignore:aws-iam-no-policy-wildcards Scoped to the project's own name prefix: iam:* on roles and policies it creates.
+  statement {
+    sid     = "IAMProjectResources"
+    effect  = "Allow"
+    actions = ["iam:*"]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.project_name}-*",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/${var.project_name}-*",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/*",
+    ]
+  }
+
+  statement {
+    sid    = "IAMServiceLinkedRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateServiceLinkedRole",
+      "iam:DeleteServiceLinkedRole",
+      "iam:GetServiceLinkedRoleDeletionStatus",
+    ]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/*"]
   }
 }
 
