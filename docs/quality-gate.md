@@ -36,7 +36,20 @@ PR runs:
   tfvars (closes backlog #48).
 
 Push to `main` and `workflow_dispatch` runs the full pipeline including
-deploy paths.
+deploy paths, **but only when the repository variable `AWS_DEPLOY_ENABLED`
+is `true`.** Every job that assumes the AWS role (build-and-push, image
+scan, budget check, deploy, integration test, Terraform plan/apply,
+compliance scan, library publishing, drift detection) checks it first and
+is skipped otherwise, so the static checks keep running on `main` while
+nothing touches the account. Set it when the platform is deployed:
+
+```bash
+gh variable set AWS_DEPLOY_ENABLED --body true   # deploy paths on
+gh variable delete AWS_DEPLOY_ENABLED            # off again
+```
+
+The manual workflows (Destroy, EKS Emergency Access) are not gated: a
+human starts them, and tearing down must work when deploys are off.
 
 ## Authoritative answers when something fails
 

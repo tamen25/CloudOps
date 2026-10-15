@@ -87,6 +87,7 @@ jobs:
           fi
 
   detect-drift:
+    if: vars.AWS_DEPLOY_ENABLED == 'true'
     needs: plan-matrix
     runs-on: ubuntu-latest
     strategy:

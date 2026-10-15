@@ -417,7 +417,7 @@ jobs:
     needs:
       - nodejs-check
       - publish-plan
-    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.nodejs == 'true'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && needs.publish-plan.outputs.nodejs == 'true')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -461,7 +461,7 @@ jobs:
     needs:
       - java-check
       - publish-plan
-    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.java == 'true'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && needs.publish-plan.outputs.java == 'true')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -506,7 +506,7 @@ jobs:
     needs:
       - dotnet-check
       - publish-plan
-    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.dotnet == 'true'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && needs.publish-plan.outputs.dotnet == 'true')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -550,7 +550,7 @@ jobs:
     needs:
       - python-check
       - publish-plan
-    if: github.event_name != 'pull_request' && needs.publish-plan.outputs.python == 'true'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && needs.publish-plan.outputs.python == 'true')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
