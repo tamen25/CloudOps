@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-20
 **Status:** Draft (awaiting user review)
-**Source:** Claude Design bundle `cloudops-frontend` (CloudOps Platform v2) — extracted into `apps/storefront/design/cloudops-frontend/`
+**Source:** design bundle `cloudops-frontend` (CloudOps Platform v2) — extracted into `apps/storefront/design/cloudops-frontend/`
 
 ---
 
@@ -488,7 +488,7 @@ During the implementation phase, the following plugins/agents are explicitly req
 - **`21st.dev`** — referenced as a visual style + component pattern source. When frontend-design needs precedent for things like the bento grid, the SLO gauge, or the timeline, browse 21st.dev for proven patterns before writing custom code. **Do not copy code verbatim** — match the aesthetic and structural pattern, port to our token system.
 - **`code-simplifier` plugin** — invoked **after** every batch of new components is written, before committing. Code-simplifier reviews the recently modified code for clarity, consistency, and maintainability, and applies cleanups that don't change behaviour. Runs as the final pre-commit step on each phase.
 
-The implementation plan (`docs/superpowers/plans/...`) will sequence these tools explicitly at each phase boundary.
+The implementation plan (`the implementation plan ...`) will sequence these tools explicitly at each phase boundary.
 
 ---
 
