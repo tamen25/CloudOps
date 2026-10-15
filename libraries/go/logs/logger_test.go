@@ -98,22 +98,24 @@ func TestRuntimeResourceAttributesServiceNameOverride(t *testing.T) {
 	}
 }
 
-// Handles test sampler error always processes.
-func TestSamplerErrorAlwaysProcesses(t *testing.T) {
-	os.Unsetenv("OTEL_LOGS_SAMPLING_RATE")
+// With sampling off (rate 0) an entry is processed at once, never held in an
+// invocation batch; with sampling on, an entry carrying an invocation ID is
+// held until its batch is flushed. Checking both shows the rate decides it.
+func TestSamplerRateZeroProcessesImmediately(t *testing.T) {
 	t.Setenv("OTEL_LOGS_SAMPLING_RATE", "0")
 	l := NewCloudOpsLogger("test")
-	processed := 0
-	wrapped := *l
-	wrapped.useConsole = false // suppress fmt output during tests
+	l.useConsole = false // keep test output quiet
 
-	// We can't intercept ProcessLog without patching; instead exercise the
-	// path that always processes (rate=0). Just verify no panic and counts.
-	wrapped.sampler = newLogSampler(&wrapped, 0)
-	wrapped.sampler.add(LogEntry{Level: LevelError, Message: "boom"})
-	processed++
-	if processed != 1 {
-		t.Fatal("error path should run")
+	immediate := newLogSampler(l, 0)
+	immediate.add(LogEntry{Level: LevelError, Message: "boom", InvocationID: "inv-1"})
+	if len(immediate.batch) != 0 {
+		t.Fatalf("rate 0 held %d batch(es); want the entry processed at once", len(immediate.batch))
+	}
+
+	sampled := newLogSampler(l, 50)
+	sampled.add(LogEntry{Level: LevelInfo, Message: "held", InvocationID: "inv-1"})
+	if len(sampled.batch) != 1 {
+		t.Fatalf("rate 50 held %d batch(es); want the entry batched under its invocation", len(sampled.batch))
 	}
 }
 

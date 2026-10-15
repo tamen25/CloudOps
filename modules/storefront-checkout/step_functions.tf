@@ -36,7 +36,7 @@ resource "aws_sfn_state_machine" "checkout" {
   })
 
   logging_configuration {
-    log_destination        = "${aws_cloudwatch_log_group.sfn.arn}:*"
+    log_destination = "${aws_cloudwatch_log_group.sfn.arn}:*"
     # The execution payload contains the shopper's email address. Preserve
     # error visibility without copying personal data into CloudWatch logs.
     include_execution_data = false
