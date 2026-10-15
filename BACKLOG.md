@@ -13,23 +13,25 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 
 - [ ] **S01** — CI could become account admin from any branch. Done on
   GitHub (environments limited to `main`, `production` needs a reviewer,
-  `main` ruleset) and in code (#13: IAM write scoped to the project's names,
-  one policy for both bootstrap paths, oidc.sh trust matches Terraform).
+  `main` ruleset) and in code (#13: IAM and S3 write scoped to the
+  project's names, one policy for both bootstrap paths, oidc.sh trust
+  matches Terraform).
   Open: verify on the first apply (AWS phase), and check whether a role
   created by the old oidc.sh still exists with its any-branch trust.
 - [ ] **S08** — Permissions boundary on the roles the deployer creates.
   Name-scoped IAM still lets a `<project>-*` role be given broad rights.
-  Done when every `aws_iam_role` sets `permissions_boundary` and the deployer
-  policy requires it on create.
+  In code behind a switch (#25, stacked on #13); open: switch it on and
+  verify in the AWS phase (docs/runbooks/security/permissions-boundary.md).
 
 ## P1 — correctness, supply chain, process
 
 - [ ] **A01** — Two Terraform layouts (root `main.tf` and `stacks/`) manage
   the same modules. Retire the root layout (ADR, state-migration runbook).
   Includes old #16 (layered-stack runbook not validated on a live env).
-- [ ] **T01** — 13 Lambdas have no tests, including the write paths
-  (self-healing, scale-in, auto-remediation). Unit tests with the AWS SDK
-  stubbed; dry-run behaviour covered.
+- [ ] **T01** — 13 Lambdas had no tests. The three write paths
+  (self-healing, scale-in, auto-remediation) are covered, with four bugs
+  fixed (#23); 10 remain. Unit tests with the AWS SDK stubbed; dry-run
+  behaviour covered.
 - [ ] **D01** — Review Dependabot's actions bump (#12): 20 updates, some
   majors.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
@@ -63,16 +65,16 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 
 ## In review
 
+- **S01** — IAM and S3 write scoped to the project; MFA default (#13).
+- **S08** — permissions boundary, off by default (#25).
 - **S05** — self-healing resizes only this cluster's node groups (#14).
-- **S06** — gitleaks over the whole history (#15, merged).
+- **T01** (part) — tests for the three write-path Lambdas, four fixes (#23).
 - **C03** — 1,419 machine-written comments removed (#17).
 - **L01** — shellcheck findings; jobs that cannot run on a PR removed;
   manifests validated after rendering (#16 merged, #18).
 - **SC1** — Trivy config findings: read-only init containers, tracked EKS
-  suppressions (#20).
-- **P04** — Node traces library on OpenTelemetry 2.x; exporter key no
-  longer logged (#21).
-- **P05** — no AI tooling in tracked files; specs to docs/design (#22).
+  suppressions; the Trivy gates filter by severity again (SARIF output had
+  turned the filter off) and tfsec authenticates its release lookup (#20).
 
 ## Done
 
@@ -90,4 +92,8 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [x] **C01, C02** — `go vet` and `terraform fmt` (#9).
 - [x] **M01** — scripts not executable; ledger and pricing without server
   timeouts and under the coverage gate (#11).
+- [x] **S06** — gitleaks over the whole history (#15).
+- [x] **P04** — Node traces library on OpenTelemetry 2.x; exporter key no
+  longer logged (#21).
+- [x] **P05** — no AI tooling in tracked files; specs to docs/design (#22).
 - [x] **P06** — this file.
