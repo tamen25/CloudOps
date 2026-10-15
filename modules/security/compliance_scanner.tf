@@ -121,9 +121,10 @@ data "aws_iam_policy_document" "compliance_scanner_assume_role" {
 
 #Creates the AWS IAM role resource named compliance scanner.
 resource "aws_iam_role" "compliance_scanner" {
-  name               = "${var.project_name}-compliance-scanner"
-  assume_role_policy = data.aws_iam_policy_document.compliance_scanner_assume_role.json
-  description        = "Execution role for the ${var.project_name} compliance scanner Lambda"
+  name                 = "${var.project_name}-compliance-scanner"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.compliance_scanner_assume_role.json
+  description          = "Execution role for the ${var.project_name} compliance scanner Lambda"
 
   tags = var.tags
 }

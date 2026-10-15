@@ -115,9 +115,10 @@ data "aws_iam_policy_document" "idle_detector_assume" {
 
 #Creates the AWS IAM role resource named idle detector.
 resource "aws_iam_role" "idle_detector" {
-  name               = "${var.project_name}-idle-detector-role"
-  assume_role_policy = data.aws_iam_policy_document.idle_detector_assume.json
-  tags               = var.tags
+  name                 = "${var.project_name}-idle-detector-role"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.idle_detector_assume.json
+  tags                 = var.tags
 }
 
 #Reads the AWS IAM policy document data source named idle detector.

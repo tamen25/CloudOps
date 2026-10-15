@@ -8,7 +8,8 @@
 resource "aws_iam_role" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
 
-  name = "${var.project_name}-${var.environment}-external-secrets-irsa"
+  name                 = "${var.project_name}-${var.environment}-external-secrets-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

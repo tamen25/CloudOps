@@ -10,21 +10,24 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "connect" {
-  name               = "${local.name_prefix}-ws-connect"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-ws-connect"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 resource "aws_iam_role" "disconnect" {
-  name               = "${local.name_prefix}-ws-disconnect"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-ws-disconnect"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 resource "aws_iam_role" "fanout" {
-  name               = "${local.name_prefix}-ws-fanout"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-ws-fanout"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "connect_basic" {

@@ -63,7 +63,8 @@ resource "aws_s3_bucket_versioning" "thanos" {
 resource "aws_iam_role" "thanos" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 
-  name = "${local.name}-thanos-irsa"
+  name                 = "${local.name}-thanos-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

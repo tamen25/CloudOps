@@ -24,6 +24,8 @@ locals {
 module "eks" {
   source = "../../modules/eks"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   name_prefix  = local.name_prefix
   environment  = var.environment
   cluster_name = local.eks_cluster_name

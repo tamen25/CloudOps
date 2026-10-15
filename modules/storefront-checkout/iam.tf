@@ -10,9 +10,10 @@ data "aws_iam_policy_document" "sfn_assume" {
 }
 
 resource "aws_iam_role" "sfn" {
-  name               = "${local.name_prefix}-checkout-sfn"
-  assume_role_policy = data.aws_iam_policy_document.sfn_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-checkout-sfn"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.sfn_assume.json
+  tags                 = var.tags
 }
 
 data "aws_iam_policy_document" "sfn" {
@@ -56,9 +57,10 @@ data "aws_iam_policy_document" "lambda_assume" {
 }
 
 resource "aws_iam_role" "email" {
-  name               = "${local.name_prefix}-order-email"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-order-email"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "email_basic" {

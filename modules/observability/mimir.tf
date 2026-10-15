@@ -139,7 +139,8 @@ resource "aws_s3_bucket_replication_configuration" "mimir" {
 resource "aws_iam_role" "mimir" {
   count = var.metrics_long_term_storage == "mimir" ? 1 : 0
 
-  name = "${local.name}-mimir-irsa"
+  name                 = "${local.name}-mimir-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
