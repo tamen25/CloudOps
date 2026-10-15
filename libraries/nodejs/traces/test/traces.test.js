@@ -327,3 +327,20 @@ test("service registry gates propagation to supported services", () => {
   assert.equal(registry.requestPropagationAttributes({}, "dynamodb"), undefined);
   assert.equal(registry.retrievePropagationAttributes({}, "dynamodb"), undefined);
 });
+
+// The backend decides the span processor: OTLP when OTEL_BACKEND_EXPORTERS is
+// "otel" and exporter parameters are present, the console otherwise.
+test("otel backend exports over OTLP only when exporter parameters are present", () => {
+  resetEnv({
+    OTEL_BACKEND_EXPORTERS: "otel",
+    OTEL_SERVICE_NAME: "orders-api",
+    OTEL_SSM_PARAMETERS: JSON.stringify({ otel: { trace: { url: "https://collector.example.com/v1/traces", api_key: "k" } } }),
+  });
+  assert.ok(freshRequire(instrumentationPath).tracer.batchProcessorConfig, "OTLP batch processor in use");
+
+  resetEnv({ OTEL_BACKEND_EXPORTERS: "otel", OTEL_SERVICE_NAME: "orders-api", OTEL_SSM_PARAMETERS: "{}" });
+  assert.equal(freshRequire(instrumentationPath).tracer.batchProcessorConfig, undefined, "empty parameters fall back to the console");
+
+  resetEnv({ OTEL_SERVICE_NAME: "orders-api" });
+  assert.equal(freshRequire(instrumentationPath).tracer.batchProcessorConfig, undefined, "console is the default");
+});
