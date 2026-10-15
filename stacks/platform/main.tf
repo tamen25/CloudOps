@@ -103,6 +103,12 @@ locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
   cluster    = var.use_remote_state_cluster ? data.terraform_remote_state.cluster[0].outputs : null
 
+  permissions_boundary_arn = (
+    var.use_remote_state_foundation
+    ? try(local.foundation.permissions_boundary_arn, null)
+    : var.permissions_boundary_arn
+  )
+
   name_prefix = var.use_remote_state_foundation ? local.foundation.name_prefix : var.project_name
   account_id = (
     var.aws_account_id != ""
@@ -192,6 +198,8 @@ module "ingress" {
   count  = var.enable_ingress ? 1 : 0
   source = "../../modules/ingress"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   name_prefix  = local.name_prefix
   environment  = var.environment
   cluster_name = local.eks_cluster_name
@@ -223,6 +231,8 @@ module "ingress" {
 module "observability" {
   count  = var.enable_observability ? 1 : 0
   source = "../../modules/observability"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   name_prefix    = local.name_prefix
   environment    = var.environment
@@ -280,6 +290,8 @@ module "slo" {
   count  = var.enable_slo ? 1 : 0
   source = "../../modules/slo"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name = var.project_name
   environment  = var.environment
 
@@ -295,6 +307,8 @@ module "slo" {
 module "security" {
   count  = var.enable_security ? 1 : 0
   source = "../../modules/security"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   eks_cluster_name = local.eks_cluster_name
   otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
@@ -338,6 +352,8 @@ module "finops" {
   count  = var.enable_finops ? 1 : 0
   source = "../../modules/finops"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name   = var.project_name
   environment    = var.environment
   aws_account_id = local.account_id
@@ -362,6 +378,8 @@ module "finops" {
 module "self_healing" {
   count  = var.enable_self_healing ? 1 : 0
   source = "../../modules/self_healing"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   project_name   = var.project_name
   environment    = var.environment
@@ -427,6 +445,8 @@ module "storefront_search" {
   count  = var.enable_storefront_search ? 1 : 0
   source = "../../modules/storefront-search"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name = var.project_name
   environment  = var.environment
   region       = var.region
@@ -459,6 +479,8 @@ module "storefront_checkout" {
   count  = var.enable_storefront_checkout ? 1 : 0
   source = "../../modules/storefront-checkout"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name              = var.project_name
   environment               = var.environment
   region                    = var.region
@@ -473,6 +495,8 @@ module "storefront_checkout" {
 module "storefront_realtime" {
   count  = var.enable_storefront_realtime ? 1 : 0
   source = "../../modules/storefront-realtime"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   project_name = var.project_name
   environment  = var.environment
@@ -515,6 +539,8 @@ module "storefront_events" {
 module "storefront_cart" {
   count  = var.enable_storefront_cart ? 1 : 0
   source = "../../modules/storefront-cart"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   project_name = var.project_name
   environment  = var.environment
@@ -648,6 +674,8 @@ module "mesh_payment" {
 module "mesh_events" {
   count  = var.enable_mesh ? 1 : 0
   source = "../../modules/mesh-events"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   project_name       = var.project_name
   environment        = var.environment

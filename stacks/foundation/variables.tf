@@ -114,6 +114,12 @@ variable "bootstrap_require_mfa" {
   default     = true
 }
 
+variable "bootstrap_enable_permissions_boundary" {
+  description = "Put the workload permissions boundary on every project role (modules/bootstrap/permissions_boundary.tf). Applied by an administrator; see docs/runbooks/security/permissions-boundary.md."
+  type        = bool
+  default     = false
+}
+
 #Defines the bootstrap external ID input value.
 variable "bootstrap_external_id" {
   type    = string

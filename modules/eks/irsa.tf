@@ -1,7 +1,8 @@
 #This file defines irsa settings for CloudOps.
 #IRSA role for the EBS CSI driver controller (kube-system/ebs-csi-controller-sa)
 resource "aws_iam_role" "ebs_csi_driver" {
-  name = "${local.name}-ebs-csi-driver"
+  name                 = "${local.name}-ebs-csi-driver"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -30,7 +31,8 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
 #IRSA role for order-api pods — annotate the service account with:
 #eks.amazonaws.com/role-arn: <order_api_irsa_role_arn>
 resource "aws_iam_role" "order_api" {
-  name = "${local.name}-order-api-irsa"
+  name                 = "${local.name}-order-api-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

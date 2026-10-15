@@ -118,3 +118,8 @@ output "name_prefix" {
 output "account_id" {
   value = local.account_id
 }
+
+output "permissions_boundary_arn" {
+  description = "Workload permissions boundary, put on every role the cluster and platform stacks create (null while it is off)"
+  value       = local.permissions_boundary_arn
+}

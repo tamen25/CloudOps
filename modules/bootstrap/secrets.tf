@@ -51,6 +51,6 @@ resource "aws_secretsmanager_secret_version" "github_token" {
 #Exposes the github token secret arn output value.
 output "github_token_secret_arn" {
   description = "Secrets Manager ARN for the GitHub PAT — pass to security module as github_token_secret_arn. Empty string when github_token is not provided."
-  value       = var.github_token != "" ? aws_secretsmanager_secret.github_token[0].arn : ""
-  sensitive   = false
+  # Whether a token is set is not secret; the token is.
+  value = nonsensitive(var.github_token != "") ? aws_secretsmanager_secret.github_token[0].arn : ""
 }

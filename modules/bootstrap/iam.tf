@@ -231,6 +231,69 @@ data "aws_iam_policy_document" "deployer_infrastructure" {
     ]
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/*"]
   }
+
+  # With the permissions boundary on (permissions_boundary.tf), a project
+  # role is created, or has a policy put on it, only while it carries the
+  # boundary, so no role the deployer makes can do more than the boundary
+  # allows.
+  dynamic "statement" {
+    for_each = var.enable_permissions_boundary ? [1] : []
+    content {
+      sid    = "ProjectRolesCarryTheBoundary"
+      effect = "Deny"
+      actions = [
+        "iam:CreateRole",
+        "iam:PutRolePermissionsBoundary",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+      ]
+      resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*"]
+      condition {
+        test     = "StringNotEquals"
+        variable = "iam:PermissionsBoundary"
+        values   = [local.permissions_boundary_arn]
+      }
+    }
+  }
+
+  # ...and may never take it off, edit it, or change the two bootstrap
+  # roles, its own included. Those are applied by an administrator.
+  dynamic "statement" {
+    for_each = var.enable_permissions_boundary ? [1] : []
+    content {
+      sid         = "BoundaryAndBootstrapRolesAreFixed"
+      effect      = "Deny"
+      not_actions = ["iam:Get*", "iam:List*"]
+      resources = [
+        local.permissions_boundary_arn,
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.deployer_role_name}",
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-github-actions",
+      ]
+    }
+  }
+
+  # A project role it makes could trust the deployer; assuming it would give
+  # the deployer whatever the role holds (the boundary allows S3 beyond the
+  # project's buckets, for the compliance scanner and auto-remediation).
+  dynamic "statement" {
+    for_each = var.enable_permissions_boundary ? [1] : []
+    content {
+      sid       = "NoAssumingProjectRoles"
+      effect    = "Deny"
+      actions   = ["sts:AssumeRole", "sts:TagSession", "sts:SetSourceIdentity"]
+      resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.enable_permissions_boundary ? [1] : []
+    content {
+      sid       = "BoundaryStaysOn"
+      effect    = "Deny"
+      actions   = ["iam:DeleteRolePermissionsBoundary"]
+      resources = ["*"]
+    }
+  }
 }
 
 #Attaches the infrastructure deployment policy to the deployer role

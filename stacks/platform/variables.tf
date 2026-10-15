@@ -899,3 +899,9 @@ variable "loadgen_enable_chaos" {
   type        = bool
   default     = false
 }
+
+variable "permissions_boundary_arn" {
+  description = "Workload permissions boundary when use_remote_state_foundation is false (otherwise the foundation output is used)"
+  type        = string
+  default     = null
+}

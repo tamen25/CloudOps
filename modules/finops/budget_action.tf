@@ -59,8 +59,9 @@ resource "aws_iam_policy" "budget_hardcap_deny" {
 #execution role even for IAM-policy actions; it must trust budgets.amazonaws.com
 #and be allowed to attach the deny policy to the configured target roles.
 resource "aws_iam_role" "budget_action" {
-  count = local.budget_hardcap_enabled ? 1 : 0
-  name  = "${var.project_name}-${var.environment}-budget-action"
+  count                = local.budget_hardcap_enabled ? 1 : 0
+  name                 = "${var.project_name}-${var.environment}-budget-action"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

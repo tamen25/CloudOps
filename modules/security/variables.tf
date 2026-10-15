@@ -177,3 +177,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "permissions_boundary_arn" {
+  description = "Permissions boundary for every role this module creates (bootstrap output; null for none)"
+  type        = string
+  default     = null
+}

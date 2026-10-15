@@ -14,9 +14,10 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 
 #Creates the AWS IAM role resource named lambda.
 resource "aws_iam_role" "lambda" {
-  name               = "${var.project_name}-error-budget-tracker"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-  description        = "Execution role for the ${var.project_name} SLO error-budget tracker Lambda"
+  name                 = "${var.project_name}-error-budget-tracker"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume_role.json
+  description          = "Execution role for the ${var.project_name} SLO error-budget tracker Lambda"
 
   tags = var.tags
 }

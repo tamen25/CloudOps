@@ -71,7 +71,8 @@ resource "aws_s3_bucket_policy" "config" {
 resource "aws_iam_role" "config" {
   count = var.enable_config ? 1 : 0
 
-  name = "${var.name_prefix}-config-role"
+  name                 = "${var.name_prefix}-config-role"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
