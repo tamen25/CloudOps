@@ -51,6 +51,7 @@ spec:
               mountPath: /etc/rds
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true # writes only to the /etc/rds emptyDir
             runAsNonRoot: true
             runAsUser: 1001
             runAsGroup: 1001

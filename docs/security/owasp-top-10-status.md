@@ -2,7 +2,7 @@
 
 Consolidates the 2026-05-14 and 2026-05-15 security review findings against the
 OWASP Top 10 (2021) categories. Each row points at the resolved backlog ID(s)
-in [`../../CLAUDE.md`](../../CLAUDE.md), plus any open gap.
+in [`../../BACKLOG.md`](../../BACKLOG.md) and `docs/backlog-archive.md`, plus any open gap.
 
 Last refreshed: 2026-05-17.
 
@@ -35,7 +35,7 @@ Not strictly OWASP, but tracked here for visibility — see
 ## How this map is maintained
 
 - One row per OWASP 2021 category; do not split rows by sub-finding.
-- "Resolved IDs" links to backlog rows in `CLAUDE.md`. When a row is
+- "Resolved IDs" refer to backlog rows (`BACKLOG.md`, older ones in `docs/backlog-archive.md`). When a row is
   archived to `docs/backlog-archive.md`, leave the ID — readers grep both.
 - "Open gaps" is the source of truth for what still needs work in that
   category. Empty cell = no known gap.

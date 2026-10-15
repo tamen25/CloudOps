@@ -670,7 +670,7 @@ function SecurityA() {
             </div>
           ))}
         </div>
-        <div className="label soft" style={{ fontSize: 14 }}>→ link to detailed findings (CLAUDE.md backlog)</div>
+        <div className="label soft" style={{ fontSize: 14 }}>→ link to detailed findings (BACKLOG.md backlog)</div>
       </div>
       <div className="stamp" style={{ position: 'absolute', top: 24, right: 24, fontSize: 14 }}>A · 3×3 badge grid</div>
     </div>
@@ -727,7 +727,7 @@ function FooterA() {
           </div>
           {[
             ['Product', ['API Docs', 'Architecture', 'Security', 'Performance']],
-            ['Resources', ['GitHub', 'CLAUDE.md', 'ADRs', 'Runbooks']],
+            ['Resources', ['GitHub', 'Backlog', 'ADRs', 'Runbooks']],
             ['Community', ['Discussions', 'Issues', 'Contributing', 'Code of Conduct']],
             ['Legal', ['Privacy', 'Terms', 'MIT License']],
           ].map(([h, items]) => (
@@ -768,7 +768,7 @@ function FooterB() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, flex: 1 }}>
           {[
             ['→ docs',          ['api reference','architecture','security','performance']],
-            ['→ source',        ['github repo','ADRs','runbooks','CLAUDE.md']],
+            ['→ source',        ['github repo','ADRs','runbooks','Backlog']],
             ['→ community',     ['discussions','issues','contributing','CoC']],
             ['→ legal',         ['privacy','terms','MIT license']],
           ].map(([h, items]) => (
