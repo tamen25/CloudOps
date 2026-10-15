@@ -13,7 +13,7 @@ const {
   UpdateAutoScalingGroupCommand,
   StartInstanceRefreshCommand,
 } = require('@aws-sdk/client-auto-scaling');
-const { RDSClient, DescribeDBInstancesCommand, RebootDBInstanceCommand } = require('@aws-sdk/client-rds');
+const { RDSClient, DescribeDBInstancesCommand } = require('@aws-sdk/client-rds');
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const { fromNodeProviderChain } = require('@aws-sdk/credential-providers');
@@ -31,6 +31,8 @@ const RDS_INSTANCE_ID        = process.env.RDS_INSTANCE_ID        || '';
 const MIN_HEALTHY_PODS       = parseInt(process.env.MIN_HEALTHY_PODS       || '2', 10);
 const MAX_SCALE_OUT_PODS     = parseInt(process.env.MAX_SCALE_OUT_PODS     || '10', 10);
 const ROLLBACK_ON_ERROR_RATE = parseFloat(process.env.ROLLBACK_ON_ERROR_RATE || '5');
+const ROLLBACK_SETTLE_MS     = parseInt(process.env.ROLLBACK_SETTLE_MS || '30000', 10); // wait before checking recovery
+const MIN_ERRORS_FOR_ROLLBACK = 10; // fewer 5xx than this in 5 minutes is too few to judge a rate
 const SNS_TOPIC_ARN          = process.env.SNS_TOPIC_ARN          || '';
 const GITHUB_REPO            = process.env.GITHUB_REPO            || '';
 const GITHUB_TOKEN_SECRET_ARN = process.env.GITHUB_TOKEN_SECRET_ARN || '';
@@ -299,8 +301,12 @@ async function handleHighErrorRate(alarmName) {
   const errorRate = totalRequests > 0 ? (errorCount / totalRequests) * 100 : 0;
   log('info', { action: 'rollback_check', errorRate, errorCount, totalRequests, threshold: ROLLBACK_ON_ERROR_RATE });
 
-  if (errorRate < ROLLBACK_ON_ERROR_RATE && errorCount < 10) {
-    log('info', { action: 'rollback_skip', reason: 'error rate below threshold, alarm may have resolved', errorRate });
+  // Both must hold: the rate is over the threshold, and there are enough
+  // errors for the rate to mean something. Either alone is not a reason to
+  // roll back: 10 errors in a million requests is 0.001%, and 1 error in 2
+  // requests is 50%.
+  if (errorRate < ROLLBACK_ON_ERROR_RATE || errorCount < MIN_ERRORS_FOR_ROLLBACK) {
+    log('info', { action: 'rollback_skip', reason: 'error rate or error count below threshold', errorRate, errorCount });
     return;
   }
 
@@ -320,9 +326,9 @@ async function handleHighErrorRate(alarmName) {
     }
   }
 
-  // Wait 30 seconds, check recovery
+  // Wait for the rollback to settle, then check recovery
   if (!DRY_RUN) {
-    await new Promise(r => setTimeout(r, 30000));
+    await new Promise(r => setTimeout(r, ROLLBACK_SETTLE_MS));
     const postErrorCount = await getMetricLast5Min(
       'AWS/ApplicationELB', 'HTTPCode_Target_5XX_Count', 'Sum',
       [{ Name: 'LoadBalancer', Value: process.env.ALB_ARN_SUFFIX || '' }]
@@ -349,7 +355,7 @@ async function handleHighErrorRate(alarmName) {
     reason:         'high_error_rate',
     previous_image: currentImage,
     error_rate:     errorRate,
-    result:         DRY_RUN ? 'dry_run' : 'rollback_triggered',
+    result:         DRY_RUN ? 'dry_run' : (rolledBackTo ? 'rollback_triggered' : 'rollback_failed'),
     duration_ms:    Date.now() - start,
     timestamp:      new Date().toISOString(),
   };
@@ -696,6 +702,7 @@ async function handleNodeNotReady(alarmName) {
   }
 
   const notReadyNodes = [];
+  const affectedNodeGroups = new Set(); // node groups that own a NotReady node
 
   if (!DRY_RUN) {
     try {
@@ -708,6 +715,8 @@ async function handleNodeNotReady(alarmName) {
         if (ready && ready.status !== 'True') {
           const nodeName = node.metadata?.name;
           notReadyNodes.push(nodeName);
+          const nodeGroup = node.metadata?.labels?.['eks.amazonaws.com/nodegroup'];
+          if (nodeGroup) affectedNodeGroups.add(nodeGroup);
 
           // Cordon: mark unschedulable
           await k8sPatch(`/api/v1/nodes/${nodeName}`, { spec: { unschedulable: true } });
@@ -741,11 +750,13 @@ async function handleNodeNotReady(alarmName) {
       log('error', { action: 'node_replacement_k8s_failed', error: err.message });
     }
 
-    // Trigger ASG instance refresh to replace the NotReady node(s)
-    if (notReadyNodes.length > 0) {
+    // Replace the NotReady nodes: an instance refresh of each node group that
+    // owns one, and only those. Refreshing every group would replace healthy
+    // nodes too. A node without the EKS node-group label is reported, not
+    // refreshed.
+    if (affectedNodeGroups.size > 0) {
       try {
-        const ngs = await eks.send(new ListNodegroupsCommand({ clusterName: EKS_CLUSTER_NAME }));
-        for (const ngName of (ngs.nodegroups || [])) {
+        for (const ngName of affectedNodeGroups) {
           const asgs = await asg.send(new DescribeAutoScalingGroupsCommand({
             Filters: [{ Name: 'tag:eks:nodegroup-name', Values: [ngName] }],
           }));
