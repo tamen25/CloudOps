@@ -1,4 +1,3 @@
-// This file contains tracer test logic for go traces.
 package traces
 
 import (
@@ -15,7 +14,6 @@ import (
 	"time"
 )
 
-// Handles test parse string list.
 func TestParseStringList(t *testing.T) {
 	got := parseStringList(`["console","otel"]`, []string{"x"})
 	if len(got) != 2 || got[0] != "console" || got[1] != "otel" {
@@ -33,7 +31,6 @@ func TestParseStringList(t *testing.T) {
 	}
 }
 
-// Handles test normalize endpoint.
 func TestNormalizeEndpoint(t *testing.T) {
 	if got := normalizeEndpoint("https://otel.example.com/"); got != "https://otel.example.com/v1/traces" {
 		t.Fatal(got)
@@ -46,7 +43,6 @@ func TestNormalizeEndpoint(t *testing.T) {
 	}
 }
 
-// Handles test runtime resource attributes lambda.
 func TestRuntimeResourceAttributesLambda(t *testing.T) {
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "fn-test")
 	t.Setenv("OTEL_SERVICE_NAME", "fn-svc")
@@ -62,7 +58,6 @@ func TestRuntimeResourceAttributesLambda(t *testing.T) {
 	}
 }
 
-// Handles test runtime resource attributes service name override.
 func TestRuntimeResourceAttributesServiceNameOverride(t *testing.T) {
 	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=from-resource,deployment.environment=dev")
 	t.Setenv("OTEL_SERVICE_NAME", "from-env")
@@ -76,7 +71,6 @@ func TestRuntimeResourceAttributesServiceNameOverride(t *testing.T) {
 	}
 }
 
-// Handles test sampler ratio.
 func TestSamplerRatio(t *testing.T) {
 	t.Setenv("TRACEID_RATIO_BASED_SAMPLER", "0.25")
 	if got := samplerRatio(); got != 0.25 {
@@ -92,7 +86,6 @@ func TestSamplerRatio(t *testing.T) {
 	}
 }
 
-// Handles test read ssmparameters from JSON.
 func TestReadSSMParametersFromJSON(t *testing.T) {
 	t.Setenv("OTEL_SSM_PARAMETERS", `{"otel":{"trace":{"url":"https://collector.example.com/v1/traces","api_key":"secret"}}}`)
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
@@ -109,7 +102,6 @@ func TestReadSSMParametersFromJSON(t *testing.T) {
 	}
 }
 
-// Handles test read ssmparameters from file.
 func TestReadSSMParametersFromFile(t *testing.T) {
 	paramsFile := filepath.Join(t.TempDir(), "otelExporterParams.json")
 	if err := os.WriteFile(paramsFile, []byte(`{"otel":{"trace":{"url":"https://file.example.com/v1/traces","api_key":"file-secret"}}}`), 0o600); err != nil {
@@ -127,7 +119,6 @@ func TestReadSSMParametersFromFile(t *testing.T) {
 	}
 }
 
-// Handles test read ssmparameters falls back when file is invalid.
 func TestReadSSMParametersFallsBackWhenFileIsInvalid(t *testing.T) {
 	paramsFile := filepath.Join(t.TempDir(), "otelExporterParams.json")
 	if err := os.WriteFile(paramsFile, []byte(`{not-json`), 0o600); err != nil {
@@ -145,7 +136,6 @@ func TestReadSSMParametersFallsBackWhenFileIsInvalid(t *testing.T) {
 	}
 }
 
-// Handles test console tracer starts span and renders on end.
 func TestConsoleTracerStartsSpanAndRendersOnEnd(t *testing.T) {
 	t.Setenv("OTEL_BACKEND_EXPORTERS", "console")
 	t.Setenv("OTEL_SERVICE_NAME", "orders-api")
@@ -170,7 +160,6 @@ func TestConsoleTracerStartsSpanAndRendersOnEnd(t *testing.T) {
 	}
 }
 
-// Handles test child span inherits active trace context.
 func TestChildSpanInheritsActiveContext(t *testing.T) {
 	t.Setenv("OTEL_BACKEND_EXPORTERS", "console")
 	tracer := NewTraceInstrumentation("ctx-test")
@@ -189,7 +178,6 @@ func TestChildSpanInheritsActiveContext(t *testing.T) {
 	})
 }
 
-// Handles test fetch and extract trace attributes round trip.
 func TestFetchAndExtractTraceAttrs(t *testing.T) {
 	t.Setenv("OTEL_BACKEND_EXPORTERS", "console")
 	tracer := NewTraceInstrumentation("prop-test")
@@ -210,7 +198,6 @@ func TestFetchAndExtractTraceAttrs(t *testing.T) {
 	}
 }
 
-// Handles test export spans falls back to console on httpfailure.
 func TestExportSpansFallsBackToConsoleOnHTTPFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "collector down", http.StatusBadGateway)
@@ -235,7 +222,6 @@ func TestExportSpansFallsBackToConsoleOnHTTPFailure(t *testing.T) {
 	}
 }
 
-// Handles test xray trace id encodes epoch.
 func TestXRayTraceIDEncodesEpoch(t *testing.T) {
 	id := newXRayTraceID()
 	if len(id) != 32 {
@@ -251,7 +237,6 @@ func TestXRayTraceIDEncodesEpoch(t *testing.T) {
 	}
 }
 
-// Handles test stringify variants.
 func TestStringifyVariants(t *testing.T) {
 	if got := stringify(nil); got != "" {
 		t.Fatal(got)

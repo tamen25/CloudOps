@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "certificate_arn" {
   description = "ACM wildcard certificate ARN for the project domain"
   value       = aws_acm_certificate_validation.main.certificate_arn

@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 #Database Module Outputs
 #Exposes RDS endpoints, credentials ARN, and monitoring details
 

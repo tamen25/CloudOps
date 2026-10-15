@@ -1,4 +1,3 @@
-#This file defines thanos settings for CloudOps.
 #Thanos — alternative long-term Prometheus storage (opt-in).
 #Deployed only when var.metrics_long_term_storage = "thanos".
 #
@@ -15,7 +14,6 @@ locals {
   thanos_bucket_name = "${var.name_prefix}-thanos-blocks-${var.aws_account_id}"
 }
 
-#Creates the AWS s3 bucket resource named thanos.
 resource "aws_s3_bucket" "thanos" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 
@@ -25,7 +23,6 @@ resource "aws_s3_bucket" "thanos" {
   tags = merge(local.common_tags, { Name = local.thanos_bucket_name, Domain = "observability-thanos" })
 }
 
-#Creates the AWS s3 bucket server side encryption configuration resource named thanos.
 resource "aws_s3_bucket_server_side_encryption_configuration" "thanos" {
   count  = var.metrics_long_term_storage == "thanos" ? 1 : 0
   bucket = aws_s3_bucket.thanos[0].id
@@ -39,7 +36,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "thanos" {
   }
 }
 
-#Creates the AWS s3 bucket public access block resource named thanos.
 resource "aws_s3_bucket_public_access_block" "thanos" {
   count                   = var.metrics_long_term_storage == "thanos" ? 1 : 0
   bucket                  = aws_s3_bucket.thanos[0].id
@@ -49,7 +45,6 @@ resource "aws_s3_bucket_public_access_block" "thanos" {
   restrict_public_buckets = true
 }
 
-#Creates the AWS s3 bucket versioning resource named thanos.
 resource "aws_s3_bucket_versioning" "thanos" {
   count  = var.metrics_long_term_storage == "thanos" ? 1 : 0
   bucket = aws_s3_bucket.thanos[0].id
@@ -59,7 +54,6 @@ resource "aws_s3_bucket_versioning" "thanos" {
   }
 }
 
-#Creates the AWS IAM role resource named thanos.
 resource "aws_iam_role" "thanos" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 
@@ -83,7 +77,6 @@ resource "aws_iam_role" "thanos" {
   tags = merge(local.common_tags, { Name = "${local.name}-thanos-irsa" })
 }
 
-#Creates the AWS IAM role policy resource named thanos.
 resource "aws_iam_role_policy" "thanos" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 
@@ -109,7 +102,6 @@ resource "aws_iam_role_policy" "thanos" {
   })
 }
 
-#Creates the kubernetes secret resource named thanos objstore.
 resource "kubernetes_secret" "thanos_objstore" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 
@@ -136,7 +128,6 @@ resource "kubernetes_secret" "thanos_objstore" {
   depends_on = [kubernetes_namespace.monitoring]
 }
 
-#Creates the helm release resource named thanos.
 resource "helm_release" "thanos" {
   count = var.metrics_long_term_storage == "thanos" ? 1 : 0
 

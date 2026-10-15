@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "falco_namespace" {
   description = "Kubernetes namespace where Falco is deployed"
   value       = kubernetes_namespace.falco.metadata[0].name

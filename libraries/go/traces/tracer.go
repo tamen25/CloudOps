@@ -1,4 +1,3 @@
-// This file contains tracer logic for go traces.
 // Package traces is the CloudOps OpenTelemetry traces helper for Go services.
 //
 // API mirrors the Node.js / Python / Java / .NET libraries:
@@ -517,7 +516,6 @@ func normalizeEndpoint(endpoint string) string {
 	return endpoint + "/v1/traces"
 }
 
-// Reads ssmparameters.
 func readSSMParameters() SsmParameters {
 	raw := os.Getenv("OTEL_SSM_PARAMETERS")
 	if raw != "" {
@@ -547,7 +545,6 @@ func readSSMParameters() SsmParameters {
 	return SsmParameters{}
 }
 
-// Reads ssmparameters file.
 func readSSMParametersFile(filePath string) SsmParameters {
 	if filePath == "" {
 		filePath = os.Getenv("OTEL_SSM_PARAMETERS_FILE")
@@ -582,7 +579,6 @@ func firstEnv(names ...string) string {
 	return ""
 }
 
-// Handles runtime resource attributes.
 func runtimeResourceAttributes() map[string]string {
 	attrs := parseResourceAttributes(os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -640,7 +636,6 @@ func traceBaggageAttrs() map[string]any {
 	return map[string]any{}
 }
 
-// Gets sampler ratio.
 func samplerRatio() float64 {
 	raw := os.Getenv("TRACEID_RATIO_BASED_SAMPLER")
 	if raw == "" {

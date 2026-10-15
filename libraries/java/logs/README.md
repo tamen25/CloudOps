@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # com.cloudops:otel-logs
 
 Java logging helper for CloudOps services.

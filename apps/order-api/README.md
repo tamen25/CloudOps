@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # Order API
 
 TypeScript/Node.js REST API used as the sample workload for the CloudOps

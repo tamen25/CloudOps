@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #IAM execution role for the error-budget-tracker Lambda
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -12,7 +11,6 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named lambda.
 resource "aws_iam_role" "lambda" {
   name               = "${var.project_name}-error-budget-tracker"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
@@ -27,7 +25,6 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-#Reads the AWS IAM policy document data source named lambda permissions.
 data "aws_iam_policy_document" "lambda_permissions" {
   #CloudWatch — publish SLO metrics to the CloudOps/SLO namespace
   statement {
@@ -73,7 +70,6 @@ data "aws_iam_policy_document" "lambda_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named lambda permissions.
 resource "aws_iam_role_policy" "lambda_permissions" {
   name   = "${var.project_name}-error-budget-tracker-permissions"
   role   = aws_iam_role.lambda.id

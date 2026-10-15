@@ -1,4 +1,3 @@
-// This file contains log batch logic for logs src.
 namespace CloudOps.Otel.Logs;
 
 internal sealed class LogBatch

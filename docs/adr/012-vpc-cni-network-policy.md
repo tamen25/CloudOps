@@ -1,4 +1,3 @@
-<!-- This document explains 012 VPC cni network policy for CloudOps. -->
 # ADR 012 — AWS VPC CNI Network Policy Now, Cilium Service Mesh Later
 
 **Status:** Accepted

@@ -1,4 +1,3 @@
-#This file defines main settings for CloudOps.
 #Platform stack - layer 3 of the split Terraform layout.
 #
 #Owns Kubernetes-facing platform services plus adjacent AWS automation:
@@ -7,7 +6,6 @@
 
 data "aws_caller_identity" "current" {}
 
-#Creates the terraform data resource named toggle guard.
 resource "terraform_data" "toggle_guard" {
   input = {
     destroy_all                          = var.destroy_all

@@ -1,4 +1,3 @@
-// This file contains render Kubernetes logic for order API scripts.
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-logs (Go)
 
 Go logging helper for CloudOps services. Mirrors the Node.js / Python /

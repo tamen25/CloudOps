@@ -1,4 +1,3 @@
-#This file contains logger logic for src cloudops OTel logs.
 from __future__ import annotations
 
 import json
@@ -51,11 +50,9 @@ class BackendConfig:
 class SsmParameters:
     otel: BackendConfig | None = None
 
-    #Checks whether empty.
     def is_empty(self) -> bool:
         return self.otel is None or self.otel.logs is None or not (self.otel.logs.url or self.otel.logs.api_key)
 
-    #Handles backend.
     def backend(self, name: str) -> BackendConfig | None:
         return self.otel if name == "otel" else None
 
@@ -124,7 +121,6 @@ def _normalize_endpoint(endpoint: str | None) -> str | None:
     return normalized if normalized.endswith("/v1/logs") else f"{normalized}/v1/logs"
 
 
-#Handles SSM parameters from JSON.
 def _ssm_parameters_from_json(parsed: Any) -> SsmParameters:
     if not isinstance(parsed, Mapping):
         return SsmParameters()
@@ -138,7 +134,6 @@ def _ssm_parameters_from_json(parsed: Any) -> SsmParameters:
     )))
 
 
-#Reads SSM parameters file.
 def _read_ssm_parameters_file(file_path: str | None = None) -> SsmParameters:
     resolved_path = file_path or os.getenv("OTEL_SSM_PARAMETERS_FILE") or DEFAULT_SSM_PARAMETERS_FILE
     try:
@@ -151,7 +146,6 @@ def _read_ssm_parameters_file(file_path: str | None = None) -> SsmParameters:
         return SsmParameters()
 
 
-#Reads SSM parameters.
 def _read_ssm_parameters() -> SsmParameters:
     configured = os.getenv("OTEL_SSM_PARAMETERS")
     if configured:
@@ -184,7 +178,6 @@ def _first_env(*names: str) -> str | None:
     return None
 
 
-#Handles runtime resource attributes.
 def _runtime_resource_attributes() -> dict[str, str]:
     attributes = _parse_resource_attributes(os.getenv("OTEL_RESOURCE_ATTRIBUTES"))
     attributes["service.name"] = (
@@ -250,7 +243,6 @@ class LogSampler:
         self.flush_one_batch()
         self._batch_map[invocation_id] = LogBatch(logs=[log_entry])
 
-    #Flushes one batch.
     def flush_one_batch(self) -> None:
         for invocation_id, batch in list(self._batch_map.items()):
             has_error = any(log.level == "error" for log in batch.logs)
@@ -293,19 +285,15 @@ class CloudOpsLogger:
     def initialize_logger(cls) -> "CloudOpsLogger":
         return logger
 
-    #Handles info.
     def info(self, message: Any = None, *optional_params: Any) -> None:
         self.log("info", message, *optional_params)
 
-    #Handles error.
     def error(self, message: Any = None, *optional_params: Any) -> None:
         self.log("error", message, *optional_params)
 
-    #Handles debug.
     def debug(self, message: Any = None, *optional_params: Any) -> None:
         self.log("debug", message, *optional_params)
 
-    #Handles warn.
     def warn(self, message: Any = None, *optional_params: Any) -> None:
         self.log("warn", message, *optional_params)
 
@@ -433,7 +421,6 @@ class CloudOpsLogger:
         return str(value)
 
 
-#Gets sampling rate.
 def _sampling_rate() -> float:
     try:
         return float(os.getenv("OTEL_LOGS_SAMPLING_RATE", "100"))
@@ -441,7 +428,6 @@ def _sampling_rate() -> float:
         return 100
 
 
-#Handles span context.
 def _span_context() -> Any:
     if trace is None:
         return None
@@ -453,7 +439,6 @@ def _span_context() -> Any:
     return span.get_span_context()
 
 
-#Gets current trace ID.
 def _current_trace_id() -> str:
     lambda_trace_id = os.getenv("_X_AMZN_TRACE_ID")
     if lambda_trace_id:
@@ -466,7 +451,6 @@ def _current_trace_id() -> str:
     return "unknown"
 
 
-#Handles python log level.
 def _python_log_level(level: LogLevel) -> int:
     if level == "error":
         return logging.ERROR
@@ -477,7 +461,6 @@ def _python_log_level(level: LogLevel) -> int:
     return logging.INFO
 
 
-#Handles OTel available.
 def _otel_available() -> bool:
     return all([
         set_logger_provider,

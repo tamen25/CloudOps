@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # CloudOps
 
 **Production-grade AWS platform engineering on EKS — self-healing operations, multi-window SLO alerting, zero-trust security, and FinOps observability, all provisioned as code and delivered through a gated CI/CD pipeline with no long-lived credentials.**

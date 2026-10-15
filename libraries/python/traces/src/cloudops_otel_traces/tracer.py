@@ -1,4 +1,3 @@
-#This file contains tracer logic for src cloudops OTel traces.
 from __future__ import annotations
 
 import json
@@ -63,11 +62,9 @@ class BackendConfig:
 class SsmParameters:
     otel: BackendConfig | None = None
 
-    #Checks whether empty.
     def is_empty(self) -> bool:
         return self.otel is None or self.otel.trace is None or not (self.otel.trace.url or self.otel.trace.api_key)
 
-    #Handles backend.
     def backend(self, name: str) -> BackendConfig | None:
         return self.otel if name == "otel" else None
 
@@ -112,7 +109,6 @@ def _normalize_endpoint(endpoint: str | None) -> str | None:
     return normalized if normalized.endswith("/v1/traces") else f"{normalized}/v1/traces"
 
 
-#Handles SSM parameters from JSON.
 def _ssm_parameters_from_json(parsed: Any) -> SsmParameters:
     if not isinstance(parsed, Mapping):
         return SsmParameters()
@@ -126,7 +122,6 @@ def _ssm_parameters_from_json(parsed: Any) -> SsmParameters:
     )))
 
 
-#Reads SSM parameters file.
 def _read_ssm_parameters_file(file_path: str | None = None) -> SsmParameters:
     resolved_path = file_path or os.getenv("OTEL_SSM_PARAMETERS_FILE") or DEFAULT_SSM_PARAMETERS_FILE
     try:
@@ -139,7 +134,6 @@ def _read_ssm_parameters_file(file_path: str | None = None) -> SsmParameters:
         return SsmParameters()
 
 
-#Reads SSM parameters.
 def _read_ssm_parameters() -> SsmParameters:
     configured = os.getenv("OTEL_SSM_PARAMETERS")
     if configured:
@@ -172,7 +166,6 @@ def _first_env(*names: str) -> str | None:
     return None
 
 
-#Handles runtime resource attributes.
 def _runtime_resource_attributes() -> dict[str, str]:
     attributes = _parse_resource_attributes(os.getenv("OTEL_RESOURCE_ATTRIBUTES"))
     attributes["service.name"] = (
@@ -213,7 +206,6 @@ def _runtime_resource_attributes() -> dict[str, str]:
     return attributes
 
 
-#Gets sampler ratio.
 def _sampler_ratio() -> float:
     try:
         return float(os.getenv("TRACEID_RATIO_BASED_SAMPLER", "1"))
@@ -221,7 +213,6 @@ def _sampler_ratio() -> float:
         return 1.0
 
 
-#Handles OTel available.
 def _otel_available() -> bool:
     return all([
         trace,
@@ -238,7 +229,6 @@ def _otel_available() -> bool:
     ])
 
 
-#Builds active baggage attributes.
 def _trace_baggage_attrs() -> dict[str, str]:
     if baggage is None:
         return {}
@@ -272,7 +262,6 @@ class TraceInstrumentation:
         return tracer
 
     @property
-    #Handles active span.
     def active_span(self) -> Any:
         return self._current_span
 
@@ -347,7 +336,6 @@ class TraceInstrumentation:
             logging.getLogger(__name__).debug("start_basic_span failed: %s", error)
             return None
 
-    #Sets attributes to the span.
     def set_attributes(self, span: Any, data: Any) -> None:
         if not span or not self._initialized or not data:
             return
@@ -369,7 +357,6 @@ class TraceInstrumentation:
         except Exception as failure:  # pragma: no cover - defensive.
             logging.getLogger(__name__).debug("record_error failed: %s", failure)
 
-    #Sets the active span context.
     def set_active_context(self, span: Any) -> None:
         if span is None:
             return

@@ -1,4 +1,3 @@
-// This file contains environment scope logic for traces tests.
 namespace CloudOps.Otel.Traces.Tests;
 
 internal sealed class EnvironmentScope : IDisposable
@@ -37,7 +36,6 @@ internal sealed class EnvironmentScope : IDisposable
 
     private readonly Dictionary<string, string?> previousValues = new(StringComparer.Ordinal);
 
-    // Handles environment scope.
     public EnvironmentScope(IReadOnlyDictionary<string, string?> values)
     {
         foreach (var key in TelemetryKeys.Concat(values.Keys).Distinct(StringComparer.Ordinal))
@@ -52,7 +50,6 @@ internal sealed class EnvironmentScope : IDisposable
         }
     }
 
-    // Handles dispose.
     public void Dispose()
     {
         foreach (var (key, value) in previousValues)

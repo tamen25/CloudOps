@@ -1,4 +1,3 @@
-<!-- This document explains 004 s3 backend loki tempo for CloudOps. -->
 # ADR 004 — S3 as Loki and Tempo Backend Storage
 
 **Status:** Accepted

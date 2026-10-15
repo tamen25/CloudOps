@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #Create an IAM role that allows RDS to send enhanced monitoring metrics to CloudWatch
 resource "aws_iam_role" "rds_monitoring" {
   name = "${var.name_prefix}-rds-monitoring-role"

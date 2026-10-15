@@ -1,4 +1,3 @@
-#This file defines gatekeeper settings for CloudOps.
 #OPA Gatekeeper — admission webhook policy enforcement
 #Runs as a ValidatingAdmissionWebhook that evaluates Rego policies against
 #every incoming Pod create/update request before it reaches etcd.

@@ -1,4 +1,3 @@
-// This file contains logger logic for logs src.
 #include "cloudops/otel/logs.hpp"
 #include "cloudops/otel/detail/sampler.hpp"
 
@@ -17,7 +16,6 @@ namespace cloudops::otel::logs {
 
 namespace {
 
-// Builds uuid.
 std::string make_uuid() {
   // RFC-4122 v4 layout — keep the dependency footprint at zero.
   static thread_local std::mt19937_64 rng(static_cast<uint64_t>(
@@ -44,14 +42,12 @@ std::string make_uuid() {
   return out;
 }
 
-// Gets current trace ID.
 std::string current_trace_id() {
   const char* xray = std::getenv("_X_AMZN_TRACE_ID");
   if (xray != nullptr && *xray != '\0') return xray;
   return "unknown";
 }
 
-// Handles JSON escape.
 std::string json_escape(const std::string& in) {
   std::string out;
   out.reserve(in.size() + 2);
@@ -77,7 +73,6 @@ std::string json_escape(const std::string& in) {
   return out;
 }
 
-// Writes console entry.
 void write_console_entry(LogLevel level, const std::string& rendered) {
   auto& sink = (level == LogLevel::Error) ? std::cerr : std::cout;
   sink << rendered << '\n';
@@ -90,7 +85,6 @@ std::string LogValue::render() const {
   return std::visit(
       [](const auto& v) -> std::string {
         using T = std::decay_t<decltype(v)>;
-        // Handles constexpr.
         if constexpr (std::is_same_v<T, std::string>) {
           return v;
         } else if constexpr (std::is_same_v<T, double>) {
@@ -215,17 +209,14 @@ void CloudOpsLogger::export_logs() {
   }
 }
 
-// Sets OTLP transport.
 void CloudOpsLogger::set_otlp_transport(OtlpTransport transport) {
   transport_ = std::move(transport);
 }
 
-// Handles resource attributes.
 const std::map<std::string, std::string>& CloudOpsLogger::resource_attributes() const noexcept {
   return resource_attributes_;
 }
 
-// Handles enabled levels.
 const std::unordered_set<LogLevel>& CloudOpsLogger::enabled_levels() const noexcept {
   return enabled_levels_;
 }
@@ -281,7 +272,6 @@ std::string CloudOpsLogger::render_entry(const LogEntry& entry) const {
   return ss.str();
 }
 
-// Builds OTLP payload.
 std::string CloudOpsLogger::build_otlp_payload(const std::vector<LogEntry>& entries) const {
   auto now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::system_clock::now().time_since_epoch()).count();
@@ -317,7 +307,6 @@ std::string CloudOpsLogger::build_otlp_payload(const std::vector<LogEntry>& entr
   return ss.str();
 }
 
-// Handles logger.
 CloudOpsLogger& logger() {
   static CloudOpsLogger instance{};
   return instance;

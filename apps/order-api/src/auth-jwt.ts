@@ -1,4 +1,3 @@
-// This file contains auth JWT logic for order API src.
 // OIDC / JWKS bearer-token verification — closes backlog #7.
 //
 // Wires `jose` for offline JWT verification against a remote JWKS endpoint
@@ -18,7 +17,6 @@ export function parseScopes(claims: { scp?: unknown; scope?: unknown }): Set<str
   return new Set();
 }
 
-// Handles has all scopes.
 export function hasAllScopes(present: Set<string>, required: Set<string>): boolean {
   for (const s of required) if (!present.has(s)) return false;
   return true;

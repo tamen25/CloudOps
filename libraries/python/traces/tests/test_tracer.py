@@ -1,4 +1,3 @@
-#This file contains test tracer logic for traces tests.
 import os
 import tempfile
 import unittest
@@ -19,7 +18,6 @@ from cloudops_otel_traces.tracer import (
 
 
 class TraceInstrumentationTests(unittest.TestCase):
-    #Handles test runtime resource attributes for EKS.
     def test_runtime_resource_attributes_for_eks(self):
         with patch.dict("os.environ", {
             "OTEL_SERVICE_NAME": "order-api",
@@ -37,7 +35,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertEqual(attributes["k8s.pod.name"], "order-api-abc")
         self.assertEqual(attributes["cloudops-trace-ver"], "0.1.0")
 
-    #Handles test runtime resource attributes for lambda.
     def test_runtime_resource_attributes_for_lambda(self):
         with patch.dict("os.environ", {
             "AWS_LAMBDA_FUNCTION_NAME": "orders-handler",
@@ -48,7 +45,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertEqual(attributes["cloud.platform"], "aws_lambda")
         self.assertEqual(attributes["faas.name"], "orders-handler")
 
-    #Handles test runtime resource attributes merge OTel resource attributes.
     def test_runtime_resource_attributes_merge_otel_resource_attributes(self):
         with patch.dict("os.environ", {
             "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=dev,k8s.cluster.name=cloudops-dev",
@@ -60,7 +56,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertEqual(attributes["deployment.environment"], "dev")
         self.assertEqual(attributes["k8s.cluster.name"], "cloudops-dev")
 
-    #Handles test string list and resource attribute parsers.
     def test_string_list_and_resource_attribute_parsers(self):
         fallback = ["console"]
         parsed_fallback = _parse_string_list(None, fallback)
@@ -75,7 +70,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         )
         self.assertEqual(_normalize_endpoint("https://collector.example.com/"), "https://collector.example.com/v1/traces")
 
-    #Handles test sampler ratio parsing.
     def test_sampler_ratio_parsing(self):
         with patch.dict("os.environ", {"TRACEID_RATIO_BASED_SAMPLER": "0.25"}, clear=True):
             self.assertEqual(_sampler_ratio(), 0.25)
@@ -84,7 +78,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         with patch.dict("os.environ", {"TRACEID_RATIO_BASED_SAMPLER": "bad"}, clear=True):
             self.assertEqual(_sampler_ratio(), 1.0)
 
-    #Handles test read SSM parameters prefers JSON and falls back to OTel env.
     def test_read_ssm_parameters_prefers_json_and_falls_back_to_otel_env(self):
         with patch.dict("os.environ", {
             "OTEL_SSM_PARAMETERS": '{"otel":{"trace":{"url":"https://collector.example.com/v1/traces","api_key":"secret"}}}',
@@ -107,7 +100,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertEqual(parsed.otel.trace.url, "https://collector.example.com/v1/traces")
         self.assertEqual(parsed.otel.trace.api_key, "direct-secret")
 
-    #Handles test read SSM parameters uses params file before direct env.
     def test_read_ssm_parameters_uses_params_file_before_direct_env(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             params_file = os.path.join(temp_dir, "otelExporterParams.json")
@@ -124,7 +116,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertEqual(parsed.otel.trace.url, "https://file.example.com/v1/traces")
         self.assertEqual(parsed.otel.trace.api_key, "file-secret")
 
-    #Handles test SSM parameters backend and empty detection.
     def test_ssm_parameters_backend_and_empty_detection(self):
         self.assertTrue(SsmParameters().is_empty())
 
@@ -135,7 +126,6 @@ class TraceInstrumentationTests(unittest.TestCase):
         self.assertIs(parameters.backend("otel"), backend)
         self.assertIsNone(parameters.backend("metrics"))
 
-    #Handles test console tracer starts a span and exports.
     def test_console_tracer_starts_span_and_exports(self):
         with patch.dict("os.environ", {
             "OTEL_BACKEND_EXPORTERS": "console",

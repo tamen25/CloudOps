@@ -1,4 +1,3 @@
-#This file defines provider settings for CloudOps.
 terraform {
   required_version = ">= 1.5.0"
 
@@ -40,7 +39,6 @@ terraform {
   }
 }
 
-#Configures the AWS provider.
 provider "aws" {
   region = var.region
 
@@ -60,13 +58,11 @@ data "aws_eks_cluster" "this" {
   name  = local.eks_cluster_name
 }
 
-#Reads the AWS EKS cluster auth data source named this.
 data "aws_eks_cluster_auth" "this" {
   count = var.enable_eks && (var.enable_ingress || var.enable_observability) ? 1 : 0
   name  = local.eks_cluster_name
 }
 
-#Configures the helm provider.
 provider "helm" {
   kubernetes {
     host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
@@ -75,7 +71,6 @@ provider "helm" {
   }
 }
 
-#Configures the kubernetes provider.
 provider "kubernetes" {
   host                   = var.enable_eks && (var.enable_ingress || var.enable_observability) ? data.aws_eks_cluster.this[0].endpoint : "https://localhost"
   cluster_ca_certificate = var.enable_eks && (var.enable_ingress || var.enable_observability) ? base64decode(data.aws_eks_cluster.this[0].certificate_authority[0].data) : ""

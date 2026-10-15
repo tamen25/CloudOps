@@ -1,4 +1,3 @@
-// This file contains traces configuration test logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;

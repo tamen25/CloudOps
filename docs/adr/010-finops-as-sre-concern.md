@@ -1,4 +1,3 @@
-<!-- This document explains 010 finops as sre concern for CloudOps. -->
 # ADR 010 — FinOps as an SRE Concern
 
 **Status:** Accepted

@@ -1,4 +1,3 @@
-// This file contains logger logic for go logs.
 // Package logs is the CloudOps OpenTelemetry logs helper for Go services.
 //
 // API mirrors the Node.js / Python / Java / .NET libraries:
@@ -256,7 +255,6 @@ func (l *CloudOpsLogger) initOtel(ssm SsmParameters) {
 	l.useOTel = true
 }
 
-// Writes console.
 func (l *CloudOpsLogger) writeConsole(entry LogEntry) {
 	w := os.Stdout
 	if entry.Level == LevelError {
@@ -372,7 +370,6 @@ func normalizeEndpoint(endpoint string) string {
 	return endpoint + "/v1/logs"
 }
 
-// Reads ssmparameters.
 func readSSMParameters() SsmParameters {
 	raw := os.Getenv("OTEL_SSM_PARAMETERS")
 	if raw != "" {
@@ -402,7 +399,6 @@ func readSSMParameters() SsmParameters {
 	return SsmParameters{}
 }
 
-// Reads ssmparameters file.
 func readSSMParametersFile(filePath string) SsmParameters {
 	if filePath == "" {
 		filePath = os.Getenv("OTEL_SSM_PARAMETERS_FILE")
@@ -437,7 +433,6 @@ func firstEnv(names ...string) string {
 	return ""
 }
 
-// Handles runtime resource attributes.
 func runtimeResourceAttributes() map[string]string {
 	attrs := parseResourceAttributes(os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
@@ -489,7 +484,6 @@ func runtimeResourceAttributes() map[string]string {
 	return attrs
 }
 
-// Gets sampling rate.
 func samplingRate() float64 {
 	raw := os.Getenv("OTEL_LOGS_SAMPLING_RATE")
 	if raw == "" {
@@ -502,7 +496,6 @@ func samplingRate() float64 {
 	return v
 }
 
-// Gets current trace ID.
 func currentTraceID() string {
 	if v := os.Getenv("_X_AMZN_TRACE_ID"); v != "" {
 		return v
@@ -619,12 +612,10 @@ type logSampler struct {
 	batch  map[string]*LogBatch
 }
 
-// Handles new log sampler.
 func newLogSampler(l *CloudOpsLogger, rate float64) *logSampler {
 	return &logSampler{logger: l, rate: rate, batch: map[string]*LogBatch{}}
 }
 
-// Adds the requested work.
 func (s *logSampler) add(entry LogEntry) {
 	if s.rate == 0 {
 		s.logger.ProcessLog(entry)
@@ -647,7 +638,6 @@ func (s *logSampler) add(entry LogEntry) {
 	s.mu.Unlock()
 }
 
-// Flushes one batch.
 func (s *logSampler) flushOneBatch() {
 	s.mu.Lock()
 	current := s.batch

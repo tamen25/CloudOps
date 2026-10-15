@@ -1,4 +1,3 @@
-<!-- This document explains 002 single alb ingress for CloudOps. -->
 # ADR 002 — Single ALB with Kubernetes Ingress Rules
 
 **Status:** Accepted

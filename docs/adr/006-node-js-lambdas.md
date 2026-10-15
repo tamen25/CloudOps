@@ -1,4 +1,3 @@
-<!-- This document explains 006 node js lambdas for CloudOps. -->
 # ADR 006 — Node.js for All Lambda Functions
 
 **Status:** Accepted

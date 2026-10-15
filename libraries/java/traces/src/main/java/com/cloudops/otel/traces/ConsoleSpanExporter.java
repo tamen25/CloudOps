@@ -1,4 +1,3 @@
-// This file contains console span exporter logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import io.opentelemetry.sdk.common.CompletableResultCode;

@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 #Foundation outputs — consumed by `cluster` and `platform` stacks via
 #terraform_remote_state. Closes backlog #16.
 

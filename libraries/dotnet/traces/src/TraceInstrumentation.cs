@@ -1,4 +1,3 @@
-// This file contains trace instrumentation logic for traces src.
 using System.Diagnostics;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
@@ -19,7 +18,6 @@ public sealed class TraceInstrumentation : IDisposable
     private ActivityContext propagationContext;
     private Activity? currentSpan;
 
-    // Handles trace instrumentation.
     internal TraceInstrumentation()
     {
         ResourceAttributes = RuntimeResourceAttributes.Create();
@@ -125,7 +123,6 @@ public sealed class TraceInstrumentation : IDisposable
         return span;
     }
 
-    // Sets attributes to the span.
     public void SetAttributes(Activity? span, IReadOnlyDictionary<string, object?> data)
     {
         if (span is null || data is null) return;
@@ -153,7 +150,6 @@ public sealed class TraceInstrumentation : IDisposable
         target.SetStatus(ActivityStatusCode.Error);
     }
 
-    // Sets the active span context.
     public void SetActiveContext(Activity? span)
     {
         if (span is null) return;
@@ -211,7 +207,6 @@ public sealed class TraceInstrumentation : IDisposable
         tracerProvider?.ForceFlush(30000);
     }
 
-    // Builds active baggage attributes.
     private static IReadOnlyDictionary<string, object?> TraceBaggageAttrs()
     {
         var attributes = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -227,7 +222,6 @@ public sealed class TraceInstrumentation : IDisposable
         return attributes;
     }
 
-    // Handles dispose.
     public void Dispose()
     {
         tracerProvider?.Dispose();

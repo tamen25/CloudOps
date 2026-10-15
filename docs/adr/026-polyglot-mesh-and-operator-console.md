@@ -1,4 +1,3 @@
-<!-- This document explains 026 polyglot mesh + operator console for CloudOps. -->
 # ADR 026 — Polyglot Service Mesh + Operator Console + Traffic Generator
 
 **Status:** Accepted

@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-traces (C++)
 
 C++ OpenTelemetry traces helper for CloudOps services. Header + static library,

@@ -1,4 +1,3 @@
-#This file defines grafana native alerts settings for CloudOps.
 #Grafana-native alert rules — provisioned via the sidecar (`grafana_alert=1`).
 #
 #These complement the Prometheus-operator-managed PrometheusRule CRDs in
@@ -267,7 +266,6 @@ locals {
   }
 }
 
-#Creates the kubernetes config map resource named grafana native alert rules.
 resource "kubernetes_config_map" "grafana_native_alert_rules" {
   metadata {
     name      = "grafana-native-alert-rules"

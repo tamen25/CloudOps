@@ -1,4 +1,3 @@
-#This file defines loki settings for CloudOps.
 #Loki — simple scalable mode with S3 backend and IRSA for bucket access
 resource "helm_release" "loki" {
   name       = "loki"

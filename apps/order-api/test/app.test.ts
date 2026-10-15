@@ -1,4 +1,3 @@
-// This file contains app test logic for order API test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp, createMetrics, createMetricsApp } from '../src/app';
@@ -6,16 +5,12 @@ import { createApp, createMetrics, createMetricsApp } from '../src/app';
 // Creates logger.
 function createLogger() {
   return {
-    // Handles info.
     info() {},
-    // Handles warn.
     warn() {},
-    // Handles error.
     error() {},
   };
 }
 
-// Handles start server.
 async function startServer(pool, metricsOrOptions) {
   const options = metricsOrOptions && metricsOrOptions.registry ? { metrics: metricsOrOptions } : (metricsOrOptions || {});
   const { app } = createApp({
@@ -37,7 +32,6 @@ async function startServer(pool, metricsOrOptions) {
   });
 }
 
-// Handles stop server.
 async function stopServer(server) {
   return new Promise((resolve, reject) => {
     server.close((err) => {

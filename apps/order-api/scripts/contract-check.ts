@@ -1,4 +1,3 @@
-// This file contains contract check logic for order API scripts.
 // Contract check: every process.env.X read by the app MUST be provided by
 // deployment.yaml (either as a literal value, a ${TEMPLATE_VAR}, or a
 // secretKeyRef). Prevents silent drift between what server.ts expects and
@@ -21,7 +20,6 @@ const IMPLICIT = new Set<string>([
   'API_KEY',
 ]);
 
-// Reads all.
 function readAll(dir: string): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -33,7 +31,6 @@ function readAll(dir: string): string[] {
   return files;
 }
 
-// Handles extract env reads.
 function extractEnvReads(files: string[]): Set<string> {
   const re = /process\.env\.([A-Z0-9_]+)/g;
   const names = new Set<string>();
@@ -46,7 +43,6 @@ function extractEnvReads(files: string[]): Set<string> {
   return names;
 }
 
-// Handles extract deployment env names.
 function extractDeploymentEnvNames(yaml: string): Set<string> {
   const re = /^\s*-\s*name:\s*([A-Z0-9_]+)\s*$/gm;
   const names = new Set<string>();
@@ -56,7 +52,6 @@ function extractDeploymentEnvNames(yaml: string): Set<string> {
   return names;
 }
 
-// Runs the main workflow for the requested work.
 function main(): void {
   const srcFiles = readAll(SRC_DIR);
   const readsInApp = extractEnvReads(srcFiles);

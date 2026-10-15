@@ -1,4 +1,3 @@
-// This file contains utils logic for traces src.
 import { diag } from "@opentelemetry/api";
 import { readFileSync } from "fs";
 import { AWSXRayIdGenerator } from "@opentelemetry/id-generator-aws-xray";
@@ -77,7 +76,6 @@ export function extractEventSourceName(arn: string | undefined): string | undefi
   return undefined;
 }
 
-// Gets attribute value.
 export function getAttributeValue(value: number | string | undefined): string | undefined {
   if (typeof value === "number") {
     return value.toString();
@@ -90,7 +88,6 @@ export function getAttributeValue(value: number | string | undefined): string | 
   return undefined;
 }
 
-// Sets object attributes.
 export function setObjectAttributes(span: any, data: { [key: string]: number | string | undefined }): void {
   try {
     for (const key in data) {
@@ -103,7 +100,6 @@ export function setObjectAttributes(span: any, data: { [key: string]: number | s
   }
 }
 
-// Sets single attribute.
 export function setSingleAttribute(span: any, data: string | undefined): void {
   try {
     if (data) {
@@ -131,13 +127,11 @@ function normalizeEndpoint(endpoint?: string): string | undefined {
   return endpoint.endsWith("/v1/traces") ? endpoint : `${endpoint.replace(/\/$/, "")}/v1/traces`;
 }
 
-// Checks whether ssmparameters empty.
 export function isSSMParametersEmpty(parameters: SSMParameters | null | undefined): boolean {
   const trace = parameters?.otel?.trace;
   return !trace?.url && !trace?.api_key;
 }
 
-// Reads ssmparameters file.
 export function readSSMParametersFile(
   filePath = process.env.OTEL_SSM_PARAMETERS_FILE || DEFAULT_SSM_PARAMETERS_FILE,
 ): SSMParameters | undefined {
@@ -153,7 +147,6 @@ export function readSSMParametersFile(
   }
 }
 
-// Reads ssmparameters.
 export function readSSMParameters(): SSMParameters {
   const configured = parseJsonEnv<SSMParameters>("OTEL_SSM_PARAMETERS");
   if (!isSSMParametersEmpty(configured)) return configured!;

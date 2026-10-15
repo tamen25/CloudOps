@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-traces (Go)
 
 Go OpenTelemetry traces helper for CloudOps services. Mirrors the Node.js /

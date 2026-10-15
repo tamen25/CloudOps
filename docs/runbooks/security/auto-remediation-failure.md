@@ -1,4 +1,3 @@
-<!-- This document explains auto remediation failure for CloudOps. -->
 # Runbook: Auto-Remediation Failure
 
 **Alert:** `SecurityAutoRemediationHighFailureRate`

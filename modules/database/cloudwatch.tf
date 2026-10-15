@@ -1,4 +1,3 @@
-#This file defines cloudwatch settings for CloudOps.
 #Monitor database CPU utilization and trigger alarm if it exceeds 80% for 10 minutes
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   alarm_name          = "${var.name_prefix}-db-cpu-utilization"

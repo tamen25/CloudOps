@@ -1,4 +1,3 @@
-#This file defines falco rules settings for CloudOps.
 resource "kubernetes_config_map" "falco_cloudops_rules" {
   metadata {
     name      = "falco-cloudops-rules"
