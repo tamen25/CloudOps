@@ -301,7 +301,7 @@ If a `state mv` corrupts state or a plan wants to destroy something live:
       pre-existing legacy-state environment.
 - [ ] `LEGACY_ROOT_APPLY=1` gated steps removed from `.github/workflows/infra.yml`.
 - [ ] `stacks/README.md` "Migration runbook validated" checkbox flipped to `[x]`.
-- [ ] CLAUDE.md "Current State" updated to drop the "Layered stacks (in-progress, #16)" note.
+- [ ] `BACKLOG.md` updated: the layered-stack migration (A01) moved to Done.
 
 ---
 
