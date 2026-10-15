@@ -97,8 +97,8 @@ jobs:
         run: npm ci
         working-directory: apps/order-api
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      - name: Audit dependencies (high+, allowlist in .github/npm-audit-allowlist.json)
+        run: npm run audit
         working-directory: apps/order-api
 
       - name: Lint source

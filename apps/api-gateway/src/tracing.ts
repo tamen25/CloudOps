@@ -25,7 +25,7 @@ if (!endpoint) {
       exportIntervalMillis: 30_000,
     }),
     logRecordProcessors: [
-      new BatchLogRecordProcessor(new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers })),
+      new BatchLogRecordProcessor({ exporter: new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers }) }),
     ],
     instrumentations: [
       getNodeAutoInstrumentations({

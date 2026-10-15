@@ -18,7 +18,7 @@ for this repo.
 | Manifest schema | `kubeconform v0.6.7 -strict -kubernetes-version 1.32.0` | `app.yml` manifest-validation, `scripts/validate-k8s-manifests.sh` | invalid manifest |
 | Node lint | `eslint src test scripts` (flat config) | `app.yml` test, `libraries.yml` nodejs-check | error-level rule |
 | TypeScript build | `tsc` | `app.yml` test (`npm run build`) | type or import error |
-| Node audit | `npm audit --audit-level=high` | `app.yml` test | HIGH/CRITICAL advisory |
+| Node audit | `npm run audit` → `scripts/npm-audit-gate.mjs` | `app.yml` test, `mesh.yml`, `storefront.yml` | HIGH/CRITICAL advisory not in `.github/npm-audit-allowlist.json`, or an allowlist entry past its `until` date |
 | Lambda lockfiles | `npm ci --omit=dev` per Lambda dir | `infra.yml` quality | missing/stale `package-lock.json` |
 | order-api tests | `npm test` (node:test) + `npm run test:coverage` gate | `app.yml` test | test failure or coverage below threshold (`docs/coverage-gates.md`) |
 | Library tests | per-language test runner + coverage gate | `libraries.yml` per language | test failure or coverage below threshold |
@@ -56,6 +56,9 @@ human starts them, and tearing down must work when deploys are off.
 - A scanner flagged a finding? Either fix the code or add an explicit tracked
   suppression (`# trivy:ignore:...`, `.tfsec/config.yml` exclude,
   `.checkov.yml` skip-check). Never disable the gate.
+  For npm advisories with no fixed release, add the GHSA id to
+  `.github/npm-audit-allowlist.json` with the reason it cannot be reached and
+  an `until` date; the gate fails again once that date passes.
 - Coverage dropped below a threshold? Add tests; do not lower the threshold
   without an explanation in the commit message + a matching update to
   `docs/coverage-gates.md`.
