@@ -123,4 +123,22 @@ IDs are stable: reference them in commits and PRs.
 - **C01 — low. `go vet` fails** in `libraries/go/logs` (a test copies a
   struct holding a `sync.Mutex`).
 - **C02 — low. `terraform fmt`** fails on one file.
-- *pending:* per-service review of the ten apps and six libraries.
+- **C03 — medium. Machine-written boilerplate comments across the repo.**
+  340 of 922 tracked files open with a generated header ("This file contains
+  auth config logic for order API src.", "This document explains readme for
+  CloudOps."); 176 Terraform comments restate the resource below them
+  ("Creates the AWS IAM role resource named github actions."); 53 TypeScript
+  comments restate the function name ("Checks auth configured."). They say
+  nothing the code does not, and they bury the comments that do explain
+  something (the tenant-precedence and fail-closed notes in `order-api` are
+  good examples worth keeping).
+  *Change needed:* remove them; keep comments that explain why.
+- **order-api, reviewed.** Sound: fail-closed auth outside `test`/`local`
+  (`auth-config.ts`), tenant resolution that never lets a JWT caller pivot
+  through `X-Tenant-Id` (ADR 021), row-level security set per transaction,
+  timing-safe API-key comparison, body size limit, CSRF origin allow-list.
+  Its per-IP rate limit sits behind `trust proxy`, which is exactly what the
+  S04 `proxy-addr` advisory undermines.
+- *pending:* storefront (10k lines), loadgen, api-gateway, payment, the Go,
+  Java and Python mesh services, the six traces libraries in depth, and the
+  Lambdas.
