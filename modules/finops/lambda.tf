@@ -1,4 +1,3 @@
-#This file defines lambda settings for CloudOps.
 #FinOps Module — Cost Ingestion Lambda
 #
 #Queries AWS Cost Explorer daily at 06:00 UTC, stores per-service costs in
@@ -16,7 +15,6 @@ data "archive_file" "cost_ingestion" {
   output_path = "${path.module}/lambda_function/cost_ingestion.zip"
 }
 
-#Creates the AWS lambda function resource named cost ingestion.
 resource "aws_lambda_function" "cost_ingestion" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -63,7 +61,6 @@ resource "aws_lambda_function" "cost_ingestion" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch log group resource named cost ingestion.
 resource "aws_cloudwatch_log_group" "cost_ingestion" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${aws_lambda_function.cost_ingestion.function_name}"
@@ -80,14 +77,12 @@ resource "aws_cloudwatch_event_rule" "cost_ingestion_schedule" {
   tags                = var.tags
 }
 
-#Creates the AWS cloudwatch event target resource named cost ingestion.
 resource "aws_cloudwatch_event_target" "cost_ingestion" {
   rule      = aws_cloudwatch_event_rule.cost_ingestion_schedule.name
   target_id = "CostIngestionLambda"
   arn       = aws_lambda_function.cost_ingestion.arn
 }
 
-#Creates the AWS lambda permission resource named cost ingestion eventbridge.
 resource "aws_lambda_permission" "cost_ingestion_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"

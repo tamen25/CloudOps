@@ -1,4 +1,3 @@
-#This file defines dashboard settings for CloudOps.
 #Self-Healing Grafana Dashboard
 #
 #Loads self-healing.json into a ConfigMap with label grafana_dashboard=1 so the

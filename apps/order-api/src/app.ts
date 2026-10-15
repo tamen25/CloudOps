@@ -1,4 +1,3 @@
-// This file contains app logic for order API src.
 import express, { type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -24,7 +23,6 @@ type ValidationResult =
   | { ok: false; error: string }
   | { ok: true; value: OrderBody };
 
-// Validates order payload.
 export function validateOrderPayload(body: any): ValidationResult {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, error: 'body must be a JSON object' };

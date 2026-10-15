@@ -1,4 +1,3 @@
-// This file contains logs configuration logic for logs src.
 using System.Text.Json;
 
 namespace CloudOps.Otel.Logs;
@@ -12,7 +11,6 @@ internal static class LogsConfiguration
         PropertyNameCaseInsensitive = true
     };
 
-    // Reads SSM parameters.
     public static SsmParameters ReadSsmParameters()
     {
         var configured = Environment.GetEnvironmentVariable("OTEL_SSM_PARAMETERS");
@@ -55,7 +53,6 @@ internal static class LogsConfiguration
         return parameters;
     }
 
-    // Reads SSM parameters file.
     public static SsmParameters ReadSsmParametersFile(string? filePath = null)
     {
         var resolvedPath = HasValue(filePath)
@@ -101,7 +98,6 @@ internal static class LogsConfiguration
         return values.Length > 0 ? values : fallback.ToArray();
     }
 
-    // Gets sampling rate.
     public static double SamplingRate()
     {
         return double.TryParse(Environment.GetEnvironmentVariable("OTEL_LOGS_SAMPLING_RATE"), out var value)
@@ -109,7 +105,6 @@ internal static class LogsConfiguration
             : 100;
     }
 
-    // Handles has value.
     public static bool HasValue(string? value)
     {
         return !string.IsNullOrWhiteSpace(value);

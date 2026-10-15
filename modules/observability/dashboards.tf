@@ -1,4 +1,3 @@
-#This file defines dashboards settings for CloudOps.
 #ConfigMaps for Grafana dashboard provisioning.
 #Each ConfigMap is labelled grafana_dashboard=1 so the Grafana sidecar picks it up.
 
@@ -33,7 +32,6 @@ resource "kubernetes_config_map" "storefront" {
   depends_on = [helm_release.grafana]
 }
 
-#Creates the kubernetes config map resource named kubernetes overview.
 resource "kubernetes_config_map" "kubernetes_overview" {
   metadata {
     name      = "kubernetes-overview-dashboard"
@@ -48,7 +46,6 @@ resource "kubernetes_config_map" "kubernetes_overview" {
   depends_on = [helm_release.grafana]
 }
 
-#Creates the kubernetes config map resource named logs explorer.
 resource "kubernetes_config_map" "logs_explorer" {
   metadata {
     name      = "logs-explorer-dashboard"
@@ -63,7 +60,6 @@ resource "kubernetes_config_map" "logs_explorer" {
   depends_on = [helm_release.grafana]
 }
 
-#Creates the kubernetes config map resource named tempo traces.
 resource "kubernetes_config_map" "tempo_traces" {
   metadata {
     name      = "tempo-traces-dashboard"
@@ -78,7 +74,6 @@ resource "kubernetes_config_map" "tempo_traces" {
   depends_on = [helm_release.grafana]
 }
 
-#Creates the kubernetes config map resource named SLO dashboard.
 resource "kubernetes_config_map" "slo_dashboard" {
   metadata {
     name      = "slo-dashboard"
@@ -93,7 +88,6 @@ resource "kubernetes_config_map" "slo_dashboard" {
   depends_on = [helm_release.grafana]
 }
 
-#Creates the kubernetes config map resource named operations overview dashboard.
 resource "kubernetes_config_map" "operations_overview_dashboard" {
   metadata {
     name      = "operations-overview-dashboard"

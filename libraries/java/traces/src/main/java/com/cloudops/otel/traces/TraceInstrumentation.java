@@ -1,4 +1,3 @@
-// This file contains trace instrumentation logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
@@ -70,17 +69,14 @@ public final class TraceInstrumentation {
     return localInstance;
   }
 
-  // Handles resource attributes.
   public Map<String, String> resourceAttributes() {
     return resourceAttributes;
   }
 
-  // Handles active span.
   public Span activeSpan() {
     return currentSpan;
   }
 
-  // Handles propagation context.
   public Context propagationContext() {
     return propagationContext;
   }
@@ -156,7 +152,6 @@ public final class TraceInstrumentation {
     }
   }
 
-  // Sets attributes to the span.
   public void setAttributes(Span span, Map<String, ?> data) {
     if (span == null || data == null) return;
 
@@ -176,7 +171,6 @@ public final class TraceInstrumentation {
     target.setStatus(StatusCode.ERROR);
   }
 
-  // Sets the active span context.
   public void setActiveContext(Span span) {
     if (span == null) return;
     activeContext = Context.current().with(span);
@@ -244,14 +238,12 @@ public final class TraceInstrumentation {
     resultCode.join(30, TimeUnit.SECONDS);
   }
 
-  // Handles resource.
   private Resource resource() {
     io.opentelemetry.sdk.resources.ResourceBuilder builder = Resource.builder();
     resourceAttributes.forEach(builder::put);
     return builder.build();
   }
 
-  // Builds active baggage attributes.
   private static Map<String, String> traceBaggageAttrs() {
     Map<String, String> attributes = new HashMap<>();
     Baggage.current().forEach((key, entry) -> attributes.put("baggage." + key, entry.getValue()));

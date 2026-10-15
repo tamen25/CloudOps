@@ -1,4 +1,3 @@
-#This file defines budget settings for CloudOps.
 #FinOps Module — AWS Budgets + SNS cost alerts
 #
 #SNS topic receives budget threshold notifications and Lambda anomaly alerts.
@@ -38,7 +37,6 @@ resource "aws_sns_topic_policy" "cost_alerts" {
   })
 }
 
-#Creates the AWS sns topic subscription resource named cost alerts email.
 resource "aws_sns_topic_subscription" "cost_alerts_email" {
   count     = var.cost_alert_email != "" ? 1 : 0
   topic_arn = aws_sns_topic.cost_alerts.arn
@@ -46,7 +44,6 @@ resource "aws_sns_topic_subscription" "cost_alerts_email" {
   endpoint  = var.cost_alert_email
 }
 
-#Creates the AWS budgets budget resource named monthly.
 resource "aws_budgets_budget" "monthly" {
   name         = "${var.project_name}-monthly-budget"
   budget_type  = "COST"

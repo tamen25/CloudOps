@@ -1,4 +1,3 @@
-// This file contains log entry logic for logs src.
 namespace CloudOps.Otel.Logs;
 
 // Logs entry.

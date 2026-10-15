@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs verify alerting automation for CloudOps.
 #verify-alerting.sh — post-apply check that the Grafana + Alertmanager
 #alerting pipeline is actually functional. Closes backlog item #4.
 #
@@ -30,11 +29,8 @@ APP_NAMESPACE="${APP_NAMESPACE:-cloudops}"
 PASS=0
 FAIL=0
 
-#Handles ok.
 ok()   { printf "  \033[32m\xe2\x9c\x94\033[0m %s\n" "$1"; PASS=$((PASS + 1)); }
-#Handles fail.
 fail() { printf "  \033[31m\xe2\x9c\x97\033[0m %s\n" "$1"; FAIL=$((FAIL + 1)); }
-#Handles info.
 info() { printf "\n\033[1m%s\033[0m\n" "$1"; }
 
 #Requires the requested work.

@@ -1,5 +1,4 @@
 #!/bin/bash
-#This script runs create s3 bucket automation for CloudOps.
 #Creates S3 bucket for Terraform state storage
 #Reads configuration from terraform.tfvars
 

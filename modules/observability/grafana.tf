@@ -1,4 +1,3 @@
-#This file defines grafana settings for CloudOps.
 #Grafana with auto-provisioned datasources and dashboard sidecar
 resource "helm_release" "grafana" {
   name       = "grafana"

@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "cluster_name" {
   description = "EKS cluster name"
   value       = aws_eks_cluster.main.name

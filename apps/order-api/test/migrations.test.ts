@@ -1,4 +1,3 @@
-// This file contains migrations test logic for order API test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { withAdvisoryLock, LOCK_KEY_HIGH, LOCK_KEY_LOW, runMigrations } from '../src/migrations';

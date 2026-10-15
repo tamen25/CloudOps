@@ -1,4 +1,3 @@
-#This file defines main settings for CloudOps.
 #AWS Backup vault + plan + selection.
 #CRITICAL: vault_lock_enabled=true makes the vault undeletable until
 #min_retention_days expires. Use ONLY in real prod.
@@ -24,7 +23,6 @@ resource "aws_backup_vault" "main" {
   tags = merge(var.tags, { Name = "${local.name}-vault" })
 }
 
-#Creates the AWS backup vault lock configuration resource named main.
 resource "aws_backup_vault_lock_configuration" "main" {
   count = var.vault_lock_enabled ? 1 : 0
 
@@ -89,7 +87,6 @@ resource "aws_iam_role" "backup" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named backup.
 resource "aws_iam_role_policy_attachment" "backup" {
   role       = aws_iam_role.backup.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
@@ -106,7 +103,6 @@ resource "aws_backup_selection" "rds" {
   resources    = var.rds_instance_arns
 }
 
-#Creates the AWS backup selection resource named ebs tagged.
 resource "aws_backup_selection" "ebs_tagged" {
   iam_role_arn = aws_iam_role.backup.arn
   name         = "${local.name}-ebs-tagged-selection"

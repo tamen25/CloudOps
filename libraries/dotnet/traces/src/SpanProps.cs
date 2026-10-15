@@ -1,4 +1,3 @@
-// This file contains span props logic for traces src.
 using System.Diagnostics;
 
 namespace CloudOps.Otel.Traces;

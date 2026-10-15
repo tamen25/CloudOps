@@ -1,4 +1,3 @@
-#This file defines dynamodb settings for CloudOps.
 #Security findings table
 #Stores compliance scanner findings with deduplication, TTL, and audit history.
 

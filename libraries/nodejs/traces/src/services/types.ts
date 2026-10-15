@@ -1,4 +1,3 @@
-// This file contains service extension types for traces services.
 import { SpanKind, Span } from "@opentelemetry/api";
 
 import { ServiceAttributes, SpanAttributes } from "../interface";

@@ -1,4 +1,3 @@
-<!-- This document explains saas launch checklist for CloudOps. -->
 # SaaS Launch Checklist
 
 Closes backlog #43. Starter checklist for the legal / privacy / tax / compliance

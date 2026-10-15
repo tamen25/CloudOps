@@ -1,4 +1,3 @@
-#This file defines secrets settings for CloudOps.
 #Create a Secrets Manager secret to securely store database connection credentials
 resource "aws_secretsmanager_secret" "db_credentials" {
   #checkov:skip=CKV_AWS_149:CMK use is gated by var.kms_key_id — caller decides per environment

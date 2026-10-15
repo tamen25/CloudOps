@@ -1,4 +1,3 @@
-// This file contains log sampler logic for logs src.
 namespace CloudOps.Otel.Logs;
 
 internal sealed class LogSampler
@@ -42,7 +41,6 @@ internal sealed class LogSampler
         }
     }
 
-    // Flushes one batch.
     public void FlushOneBatch()
     {
         lock (syncRoot)

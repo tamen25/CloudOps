@@ -1,4 +1,3 @@
-<!-- This document explains 014 RDS proxy defer for CloudOps. -->
 # ADR 014 — Defer RDS Proxy Adoption
 
 **Status:** Deferred

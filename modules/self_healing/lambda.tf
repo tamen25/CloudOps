@@ -1,4 +1,3 @@
-#This file defines lambda settings for CloudOps.
 #Self-Healing Controller — Lambda + EventBridge
 #
 #Two triggers:
@@ -74,7 +73,6 @@ resource "aws_lambda_function" "self_healing_controller" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch log group resource named self healing controller.
 resource "aws_cloudwatch_log_group" "self_healing_controller" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-self-healing-controller"
@@ -90,7 +88,6 @@ resource "aws_sns_topic" "healing_triggers" {
   tags              = var.tags
 }
 
-#Creates the AWS sns topic policy resource named healing triggers.
 resource "aws_sns_topic_policy" "healing_triggers" {
   arn = aws_sns_topic.healing_triggers.arn
 
@@ -113,7 +110,6 @@ resource "aws_sns_topic_policy" "healing_triggers" {
   })
 }
 
-#Creates the AWS lambda permission resource named sns invoke self healing.
 resource "aws_lambda_permission" "sns_invoke_self_healing" {
   statement_id  = "AllowSNSInvoke"
   action        = "lambda:InvokeFunction"
@@ -122,7 +118,6 @@ resource "aws_lambda_permission" "sns_invoke_self_healing" {
   source_arn    = aws_sns_topic.healing_triggers.arn
 }
 
-#Creates the AWS sns topic subscription resource named self healing lambda.
 resource "aws_sns_topic_subscription" "self_healing_lambda" {
   topic_arn = aws_sns_topic.healing_triggers.arn
   protocol  = "lambda"
@@ -148,14 +143,12 @@ resource "aws_cloudwatch_event_rule" "eks_pod_failures" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch event target resource named EKS pod failures to lambda.
 resource "aws_cloudwatch_event_target" "eks_pod_failures_to_lambda" {
   rule      = aws_cloudwatch_event_rule.eks_pod_failures.name
   target_id = "SelfHealingController"
   arn       = aws_lambda_function.self_healing_controller.arn
 }
 
-#Creates the AWS lambda permission resource named eventbridge invoke self healing.
 resource "aws_lambda_permission" "eventbridge_invoke_self_healing" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"

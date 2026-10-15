@@ -1,4 +1,3 @@
-// This file contains migrations logic for order API src.
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { PoolClient, Pool } from 'pg';

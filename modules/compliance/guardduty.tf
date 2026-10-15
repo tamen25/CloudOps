@@ -1,4 +1,3 @@
-#This file defines guardduty settings for CloudOps.
 #GuardDuty — single-account detector with optional protection plans.
 
 resource "aws_guardduty_detector" "main" {

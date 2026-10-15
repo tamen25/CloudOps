@@ -1,4 +1,3 @@
-#This file defines flow logs settings for CloudOps.
 #VPC Flow Logs.
 #Two destination options driven by var.flow_logs_destination:
 #"cloudwatch" — quick, queryable, costs per ingested GB. Good for small VPCs.
@@ -18,7 +17,6 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   )
 }
 
-#Creates the AWS IAM role resource named VPC flow logs.
 resource "aws_iam_role" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
 
@@ -40,7 +38,6 @@ resource "aws_iam_role" "vpc_flow_logs" {
   tags = local.common_tags
 }
 
-#Creates the AWS IAM role policy resource named VPC flow logs.
 resource "aws_iam_role_policy" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
 
@@ -79,7 +76,6 @@ resource "aws_s3_bucket" "flow_logs" {
   )
 }
 
-#Creates the AWS s3 bucket server side encryption configuration resource named flow logs.
 resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
   count  = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket = aws_s3_bucket.flow_logs[0].id
@@ -91,7 +87,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
   }
 }
 
-#Creates the AWS s3 bucket public access block resource named flow logs.
 resource "aws_s3_bucket_public_access_block" "flow_logs" {
   count                   = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket                  = aws_s3_bucket.flow_logs[0].id
@@ -101,7 +96,6 @@ resource "aws_s3_bucket_public_access_block" "flow_logs" {
   restrict_public_buckets = true
 }
 
-#Creates the AWS s3 bucket lifecycle configuration resource named flow logs.
 resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
   count  = var.enable_flow_logs && var.flow_logs_destination == "s3" ? 1 : 0
   bucket = aws_s3_bucket.flow_logs[0].id

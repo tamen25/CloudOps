@@ -1,4 +1,3 @@
-<!-- This document explains master runbook for CloudOps. -->
 # CloudOps Master Operations Runbook
 
 **Last updated:** 2026-03-27

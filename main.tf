@@ -1,4 +1,3 @@
-#This file defines main settings for CloudOps.
 #CloudOps - Root Configuration
 #Main Terraform configuration to deploy all modules with toggle controls
 

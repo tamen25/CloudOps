@@ -1,5 +1,4 @@
 #!/bin/bash
-#This script runs destroy automation for CloudOps.
 #CloudOps teardown — destroys EVERYTHING except Route 53 + OIDC.
 #
 #Preserved by default:
@@ -58,7 +57,6 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$REPO_ROOT"
 
-#Gets tfvar.
 get_tfvar() {
     grep "^$1" terraform.tfvars 2>/dev/null | sed 's/.*=\s*"\(.*\)"/\1/' | tr -d ' "'
 }
@@ -122,7 +120,6 @@ empty_s3_bucket() {
     echo -e "${GREEN}  ✓ $bucket emptied${NC}"
 }
 
-#Handles delete s3 bucket.
 delete_s3_bucket() {
     local bucket=$1
     if aws s3api head-bucket --bucket "$bucket" --region "$REGION" 2>/dev/null; then

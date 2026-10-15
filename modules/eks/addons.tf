@@ -1,4 +1,3 @@
-#This file defines addons settings for CloudOps.
 #vpc-cni — AWS VPC CNI plugin, assigns VPC IPs directly to pods.
 #Network policy enforcement is enabled via configuration_values (closes
 #backlog #26 — chose AWS VPC CNI over Cilium to avoid a CNI swap). With

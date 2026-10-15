@@ -1,4 +1,3 @@
-#This file defines prometheus settings for CloudOps.
 #gp3 StorageClass — requires the EBS CSI driver addon (installed by the eks module)
 resource "kubernetes_storage_class" "gp3" {
   metadata {

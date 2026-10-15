@@ -1,4 +1,3 @@
-#This file defines alerting settings for CloudOps.
 #Grafana unified alerting — provisioned via ConfigMaps picked up by the
 #sidecar container (grafana.tf sidecar.alerts config).
 #
@@ -89,7 +88,6 @@ locals {
   }
 }
 
-#Creates the kubernetes config map resource named grafana alerting provisioning.
 resource "kubernetes_config_map" "grafana_alerting_provisioning" {
   count = var.alert_email != "" || var.alert_webhook_url != "" ? 1 : 0
 

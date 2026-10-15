@@ -1,4 +1,3 @@
-// This file contains traces test logic for traces test.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -36,7 +35,6 @@ function resetEnv(overrides = {}) {
   Object.assign(process.env, overrides);
 }
 
-// Handles fresh require.
 function freshRequire(modulePath) {
   delete require.cache[require.resolve(modulePath)];
   return require(modulePath);

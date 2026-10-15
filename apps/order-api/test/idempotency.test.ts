@@ -1,4 +1,3 @@
-// This file contains idempotency test logic for order API test.
 // Backlog #72 — Idempotency-Key support for POST /order. The actual
 // concurrency fence (PRIMARY KEY + ON CONFLICT DO NOTHING + SELECT FOR
 // UPDATE) is enforced by Postgres in deployed envs. These tests prove the
@@ -8,7 +7,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp, hashOrderPayload } from '../src/app';
 
-// Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
 
 // In-memory pool that simulates the pieces of Postgres semantics we rely on:
@@ -85,7 +83,6 @@ function makePool() {
 
       throw new Error(`unexpected SQL: ${sql}`);
     },
-    // Handles release.
     release() { /* no-op */ },
   };
 
@@ -96,7 +93,6 @@ function makePool() {
   return { pool, orders, idempotency };
 }
 
-// Handles start app.
 async function startApp({ pool }) {
   const { app } = createApp({
     pool,
@@ -113,7 +109,6 @@ async function startApp({ pool }) {
   });
 }
 
-// Handles base headers.
 const baseHeaders = (extra = {}) => ({
   'Content-Type': 'application/json',
   'X-Api-Key': 'shared',

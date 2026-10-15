@@ -1,4 +1,3 @@
-#This file defines lb controller settings for CloudOps.
 data "aws_caller_identity" "current" {}
 
 #ServiceAccount created separately so Helm can reference it with serviceAccount.create=false.

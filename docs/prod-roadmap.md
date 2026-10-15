@@ -1,4 +1,3 @@
-<!-- This document explains prod roadmap for CloudOps. -->
 # Prod Readiness Roadmap
 
 Plan for taking this dev/test platform to production-enterprise grade. Assumes

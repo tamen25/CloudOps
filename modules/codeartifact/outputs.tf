@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "domain_name" {
   description = "CodeArtifact domain name."
   value       = aws_codeartifact_domain.this.domain

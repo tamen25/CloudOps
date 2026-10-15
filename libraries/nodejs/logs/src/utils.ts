@@ -1,4 +1,3 @@
-// This file contains utils logic for logs src.
 import { diag } from "@opentelemetry/api";
 import { readFileSync } from "fs";
 
@@ -34,13 +33,11 @@ function normalizeEndpoint(endpoint?: string): string | undefined {
   return endpoint.endsWith("/v1/logs") ? endpoint : `${endpoint.replace(/\/$/, "")}/v1/logs`;
 }
 
-// Checks whether ssmparameters empty.
 export function isSSMParametersEmpty(parameters: SSMParameters | null | undefined): boolean {
   const logs = parameters?.otel?.logs;
   return !logs?.url && !logs?.api_key;
 }
 
-// Reads ssmparameters file.
 export function readSSMParametersFile(
   filePath = process.env.OTEL_SSM_PARAMETERS_FILE || DEFAULT_SSM_PARAMETERS_FILE,
 ): SSMParameters | undefined {
@@ -56,7 +53,6 @@ export function readSSMParametersFile(
   }
 }
 
-// Reads ssmparameters.
 export function readSSMParameters(): SSMParameters {
   const configured = parseJsonEnv<SSMParameters>("OTEL_SSM_PARAMETERS");
   if (!isSSMParametersEmpty(configured)) return configured!;

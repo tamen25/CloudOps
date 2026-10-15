@@ -1,4 +1,3 @@
-// This file contains auth config test logic for order API test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertAuthConfigured, UNAUTHENTICATED_ENVS } from '../src/auth-config';
@@ -7,11 +6,9 @@ import { assertAuthConfigured, UNAUTHENTICATED_ENVS } from '../src/auth-config';
 function createLogger() {
   const calls = { warn: [] };
   return {
-    // Handles info.
     info() {},
     // Handles warn.
     warn(...args) { calls.warn.push(args); },
-    // Handles error.
     error() {},
     calls,
   };

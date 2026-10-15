@@ -1,4 +1,3 @@
-#This file defines irsa settings for CloudOps.
 #IRSA role for the EBS CSI driver controller (kube-system/ebs-csi-controller-sa)
 resource "aws_iam_role" "ebs_csi_driver" {
   name = "${local.name}-ebs-csi-driver"
@@ -21,7 +20,6 @@ resource "aws_iam_role" "ebs_csi_driver" {
   tags = local.common_tags
 }
 
-#Creates the AWS IAM role policy attachment resource named ebs csi driver.
 resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
   role       = aws_iam_role.ebs_csi_driver.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"

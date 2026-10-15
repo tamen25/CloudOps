@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs write ci tfvars automation for CloudOps.
 set -euo pipefail
 
 target="${TARGET_ENVIRONMENT:-dev}"

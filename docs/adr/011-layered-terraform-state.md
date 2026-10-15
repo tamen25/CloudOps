@@ -1,4 +1,3 @@
-<!-- This document explains 011 layered terraform state for CloudOps. -->
 # ADR 011 — Layered Terraform State
 
 **Status:** Accepted

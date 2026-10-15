@@ -1,4 +1,3 @@
-#This file defines gatekeeper policies settings for CloudOps.
 #OPA Gatekeeper ConstraintTemplates and Constraints
 #
 #Each policy is two resources:
@@ -80,7 +79,6 @@ resource "kubernetes_manifest" "ct_no_root_containers" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c no root containers.
 resource "kubernetes_manifest" "c_no_root_containers" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -159,7 +157,6 @@ resource "kubernetes_manifest" "ct_required_resources" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c required resources.
 resource "kubernetes_manifest" "c_required_resources" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -226,7 +223,6 @@ resource "kubernetes_manifest" "ct_no_privileged" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c no privileged.
 resource "kubernetes_manifest" "c_no_privileged" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -295,7 +291,6 @@ resource "kubernetes_manifest" "ct_required_probes" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c required probes.
 resource "kubernetes_manifest" "c_required_probes" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -375,7 +370,6 @@ resource "kubernetes_manifest" "ct_no_latest_tag" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c no latest tag.
 resource "kubernetes_manifest" "c_no_latest_tag" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -459,7 +453,6 @@ resource "kubernetes_manifest" "ct_allowed_repos" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c allowed repos.
 resource "kubernetes_manifest" "c_allowed_repos" {
   manifest = {
     apiVersion = "constraints.gatekeeper.sh/v1beta1"
@@ -597,7 +590,6 @@ resource "kubernetes_manifest" "ct_require_image_signature" {
   depends_on = [helm_release.gatekeeper]
 }
 
-#Creates the kubernetes manifest resource named c require image signature.
 resource "kubernetes_manifest" "c_require_image_signature" {
   count = var.enable_image_signature_constraint ? 1 : 0
   manifest = {

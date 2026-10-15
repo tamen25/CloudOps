@@ -1,4 +1,3 @@
-// This file contains index logic for lambda function cost ingestion.
 'use strict';
 
 const { CostExplorerClient, GetCostAndUsageCommand, GetCostForecastCommand, GetAnomaliesCommand } = require('@aws-sdk/client-cost-explorer');
@@ -332,7 +331,6 @@ exports.handler = async function handler() {
 
   // 3. WoW and MoM change percentages (total daily cost)
   const wowDate  = dateStr(daysAgo(7, new Date(yesterday)));
-  // Handles mom date.
   const momDate  = (() => { const d = new Date(yesterday); d.setMonth(d.getMonth() - 1); return dateStr(d); })();
 
   const [wowCosts, momCosts] = await Promise.all([

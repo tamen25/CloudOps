@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "acm_certificate_arn" {
   value = var.enable_ingress ? module.ingress[0].certificate_arn : null
 }

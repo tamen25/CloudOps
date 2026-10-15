@@ -1,4 +1,3 @@
-#This file defines variables settings for CloudOps.
 #Database Module Variables
 
 variable "environment" {
@@ -6,19 +5,16 @@ variable "environment" {
   type        = string
 }
 
-#Defines the name prefix input value.
 variable "name_prefix" {
   description = "Prefix for resource names"
   type        = string
 }
 
-#Defines the database subnet group name input value.
 variable "db_subnet_group_name" {
   description = "Name of the DB subnet group (created by networking module)"
   type        = string
 }
 
-#Defines the RDS security group ID input value.
 variable "rds_security_group_id" {
   description = "Security group ID for RDS instance"
   type        = string
@@ -32,48 +28,41 @@ variable "engine" {
   default     = "postgres"
 }
 
-#Defines the engine version input value.
 variable "engine_version" {
   description = "Database engine version"
   type        = string
   default     = "15.5"
 }
 
-#Defines the instance class input value.
 variable "instance_class" {
   description = "RDS instance class (e.g., db.t3.micro for dev, db.r6g.large for prod)"
   type        = string
 }
 
-#Defines the allocated storage input value.
 variable "allocated_storage" {
   description = "Allocated storage in GB"
   type        = number
   default     = 20
 }
 
-#Defines the max allocated storage input value.
 variable "max_allocated_storage" {
   description = "Maximum storage for autoscaling (0 to disable)"
   type        = number
   default     = 100
 }
 
-#Defines the storage type input value.
 variable "storage_type" {
   description = "Storage type (gp2, gp3, io1)"
   type        = string
   default     = "gp3"
 }
 
-#Defines the iops input value.
 variable "iops" {
   description = "Provisioned IOPS (only for io1/gp3)"
   type        = number
   default     = null
 }
 
-#Defines the storage throughput input value.
 variable "storage_throughput" {
   description = "Storage throughput in MB/s (only for gp3)"
   type        = number
@@ -88,7 +77,6 @@ variable "multi_az" {
   default     = true
 }
 
-#Defines the create read replica input value.
 variable "create_read_replica" {
   description = "Create a read replica for DR/scaling"
   type        = bool
@@ -103,21 +91,18 @@ variable "database_name" {
   default     = "cloudops"
 }
 
-#Defines the database port input value.
 variable "database_port" {
   description = "Database port"
   type        = number
   default     = 5432
 }
 
-#Defines the master username input value.
 variable "master_username" {
   description = "Master username for database"
   type        = string
   default     = "dbadmin"
 }
 
-#Defines the parameter family input value.
 variable "parameter_family" {
   description = "Database parameter group family"
   type        = string
@@ -132,35 +117,30 @@ variable "backup_retention_period" {
   default     = 7
 }
 
-#Defines the backup window input value.
 variable "backup_window" {
   description = "Preferred backup window (UTC)"
   type        = string
   default     = "03:00-04:00"
 }
 
-#Defines the maintenance window input value.
 variable "maintenance_window" {
   description = "Preferred maintenance window (UTC)"
   type        = string
   default     = "sun:04:00-sun:05:00"
 }
 
-#Defines the skip final snapshot input value.
 variable "skip_final_snapshot" {
   description = "Skip final snapshot on deletion (set false for production)"
   type        = bool
   default     = false
 }
 
-#Defines the final snapshot identifier input value.
 variable "final_snapshot_identifier" {
   description = "Name of final snapshot (if skip_final_snapshot is false)"
   type        = string
   default     = null
 }
 
-#Defines the copy tags to snapshot input value.
 variable "copy_tags_to_snapshot" {
   description = "Copy tags to snapshots"
   type        = bool
@@ -175,77 +155,66 @@ variable "deletion_protection" {
   default     = true
 }
 
-#Defines the storage encrypted input value.
 variable "storage_encrypted" {
   description = "Enable storage encryption at rest"
   type        = bool
   default     = true
 }
 
-#Defines the KMS key ID input value.
 variable "kms_key_id" {
   description = "KMS key ARN for encryption (uses default aws/rds if not specified)"
   type        = string
   default     = null
 }
 
-#Defines the IAM database authentication enabled input value.
 variable "iam_database_authentication_enabled" {
   description = "Enable IAM database authentication"
   type        = bool
   default     = false
 }
 
-#Defines the rotation enabled input value.
 variable "rotation_enabled" {
   description = "Enable Secrets Manager rotation for the DB credential secret. Requires rotation_lambda_arn pointing at a deployed rotation Lambda (e.g. AWS SAR SecretsManagerRDSPostgreSQLRotationSingleUser)."
   type        = bool
   default     = false
 }
 
-#Defines the rotation lambda arn input value.
 variable "rotation_lambda_arn" {
   description = "ARN of the rotation Lambda. AWS publishes templates in SAR; deploy SecretsManagerRDSPostgreSQLRotationSingleUser and pass the resulting Lambda ARN here. Leave empty when rotation_lambda_auto_deploy = true to let this module deploy the SAR app itself."
   type        = string
   default     = ""
 }
 
-#Defines the rotation lambda auto deploy input value.
 variable "rotation_lambda_auto_deploy" {
   description = "When true and rotation_lambda_arn is empty, this module deploys the SAR app SecretsManagerRDSPostgreSQLRotationSingleUser via CloudFormation and wires the resulting Lambda ARN into the secret rotation. Requires rotation_lambda_subnet_ids and rotation_lambda_security_group_id."
   type        = bool
   default     = false
 }
 
-#Defines the rotation lambda subnet ids input value.
 variable "rotation_lambda_subnet_ids" {
   description = "Private subnet IDs for the SAR rotation Lambda's VPC config. Must reach the RDS instance and Secrets Manager (via VPC endpoint or NAT)."
   type        = list(string)
   default     = []
 }
 
-#Defines the rotation lambda security group ID input value.
 variable "rotation_lambda_security_group_id" {
   description = "Security group ID for the SAR rotation Lambda. Must allow egress to RDS on the database port and 443 to Secrets Manager."
   type        = string
   default     = ""
 }
 
-#Defines the rotation lambda endpoint input value.
 variable "rotation_lambda_endpoint" {
   description = "Secrets Manager VPC endpoint URL the rotation Lambda should call (e.g. https://secretsmanager.<region>.amazonaws.com). Default uses the public AWS endpoint."
   type        = string
   default     = ""
 }
 
-#Defines the rotation days input value.
 variable "rotation_days" {
   description = "Days between automatic rotations."
   type        = number
   default     = 30
 }
 
-#Defines the rotation sar semantic version input value.
 variable "rotation_sar_semantic_version" {
   description = "SemVer pin for the SAR `SecretsManagerRDSPostgreSQLRotationSingleUser` app. Closes backlog #29 — was previously `null` (latest). Bump after testing against the configured RDS engine version."
   type        = string
@@ -264,21 +233,18 @@ variable "log_connections" {
   default     = true
 }
 
-#Defines the log disconnections input value.
 variable "log_disconnections" {
   description = "Postgres `log_disconnections` parameter."
   type        = bool
   default     = true
 }
 
-#Defines the log duration input value.
 variable "log_duration" {
   description = "Postgres `log_duration` parameter (logs the duration of every completed statement). NOISY — prefer `log_min_duration_statement_ms` in prod."
   type        = bool
   default     = true
 }
 
-#Defines the log statement input value.
 variable "log_statement" {
   description = "Postgres `log_statement` parameter. `all` logs every DML/DDL — leaks customer payloads. Production should use `ddl` (or `none`)."
   type        = string
@@ -290,21 +256,18 @@ variable "log_statement" {
   }
 }
 
-#Defines the log min duration statement ms input value.
 variable "log_min_duration_statement_ms" {
   description = "Log statements slower than this many milliseconds. -1 = disabled. 0 = log all (equivalent to log_statement=all). Production: set to 500–1000 to capture slow queries without leaking every payload."
   type        = number
   default     = -1
 }
 
-#Defines the secret recovery window days input value.
 variable "secret_recovery_window_days" {
   description = "Days a deleted secret stays recoverable before permanent deletion. 0 = immediate (use only for test envs)."
   type        = number
   default     = 7
 }
 
-#Defines the publicly accessible input value.
 variable "publicly_accessible" {
   description = "Make database publicly accessible (NEVER true for production)"
   type        = bool
@@ -319,21 +282,18 @@ variable "enabled_cloudwatch_logs_exports" {
   default     = ["postgresql", "upgrade"]
 }
 
-#Defines the performance insights enabled input value.
 variable "performance_insights_enabled" {
   description = "Enable Performance Insights"
   type        = bool
   default     = true
 }
 
-#Defines the performance insights retention period input value.
 variable "performance_insights_retention_period" {
   description = "Performance Insights retention period in days (7, 731)"
   type        = number
   default     = 7
 }
 
-#Defines the monitoring interval input value.
 variable "monitoring_interval" {
   description = "Enhanced monitoring interval in seconds (0, 1, 5, 10, 15, 30, 60)"
   type        = number

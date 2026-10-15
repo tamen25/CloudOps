@@ -1,4 +1,3 @@
-// This file contains test config logic for traces tests.
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -9,7 +8,6 @@
 namespace traces = cloudops::otel::traces;
 
 namespace {
-// Checks the requested work.
 int check(bool condition, const char* msg) {
   if (!condition) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
@@ -18,7 +16,6 @@ int check(bool condition, const char* msg) {
   return 0;
 }
 
-// Sets an environment variable in a cross-platform way.
 void set_env(const char* key, const char* value) {
 #ifdef _WIN32
   _putenv_s(key, value);

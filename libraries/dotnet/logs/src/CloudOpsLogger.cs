@@ -1,4 +1,3 @@
-// This file contains cloud ops logger logic for logs src.
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -22,7 +21,6 @@ public sealed class CloudOpsLogger
     private string? previousTraceId;
     private string? uniqueId;
 
-    // Handles cloud ops logger.
     internal CloudOpsLogger()
     {
         ResourceAttributes = RuntimeResourceAttributes.Create();
@@ -46,25 +44,21 @@ public sealed class CloudOpsLogger
         return Instance.Value;
     }
 
-    // Handles info.
     public void Info(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Info, message, optionalParams);
     }
 
-    // Handles error.
     public void Error(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Error, message, optionalParams);
     }
 
-    // Handles debug.
     public void Debug(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Debug, message, optionalParams);
     }
 
-    // Handles warn.
     public void Warn(object? message, params object?[] optionalParams)
     {
         Log(LogLevel.Warn, message, optionalParams);
@@ -218,7 +212,6 @@ public sealed class CloudOpsLogger
         return attributes;
     }
 
-    // Gets current trace ID.
     private static string CurrentTraceId()
     {
         var lambdaTraceId = Environment.GetEnvironmentVariable("_X_AMZN_TRACE_ID");
@@ -273,7 +266,6 @@ public sealed class CloudOpsLogger
         };
     }
 
-    // Checks whether simple value.
     private static bool IsSimpleValue(object value)
     {
         return value switch

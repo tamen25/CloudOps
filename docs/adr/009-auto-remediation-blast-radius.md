@@ -1,4 +1,3 @@
-<!-- This document explains 009 auto remediation blast radius for CloudOps. -->
 # ADR 009 — Auto-Remediation Blast Radius Limits
 
 **Status:** Accepted

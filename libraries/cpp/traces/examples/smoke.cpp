@@ -1,4 +1,3 @@
-// This file contains smoke logic for traces examples.
 // Smoke test consumer for the cloudops-otel-traces C++ library. Exercises every
 // public surface and exits 0 when the library is wired correctly.
 #include <cstdio>
@@ -8,7 +7,6 @@
 
 namespace traces = cloudops::otel::traces;
 
-// Sets an environment variable in a cross-platform way.
 static void set_env(const char* key, const char* value) {
 #ifdef _WIN32
   _putenv_s(key, value);
@@ -17,7 +15,6 @@ static void set_env(const char* key, const char* value) {
 #endif
 }
 
-// Runs the main workflow for the requested work.
 int main() {
   set_env("OTEL_SERVICE_NAME", "smoke-test");
   set_env("OTEL_BACKEND_EXPORTERS", "console");

@@ -1,4 +1,3 @@
-// This file contains backend config logic for traces src.
 using System.Text.Json.Serialization;
 
 namespace CloudOps.Otel.Traces;

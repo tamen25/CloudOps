@@ -1,4 +1,3 @@
-<!-- This document explains 018 API Gateway WebSocket over AppSync for CloudOps. -->
 # ADR 018 — API Gateway WebSocket over AppSync Subscriptions
 
 **Status:** Accepted

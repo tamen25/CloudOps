@@ -1,4 +1,3 @@
-#This file defines dashboard settings for CloudOps.
 #FinOps Grafana Dashboard
 #
 #Loads finops.json into a ConfigMap with label grafana_dashboard=1 so the

@@ -1,4 +1,3 @@
-// This file contains trace instrumentation tests logic for traces tests.
 using System.Diagnostics;
 using Xunit;
 

@@ -1,5 +1,4 @@
 #!/bin/bash
-#This script runs OIDC automation for CloudOps.
 #Usage: scripts/oidc.sh
 #Run once locally before first CI/CD deployment.
 #Creates AWS OIDC provider + GitHub Actions IAM role using AWS CLI only.
@@ -22,15 +21,10 @@ RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-#Handles info.
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
-#Handles success.
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
-#Handles warn.
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-#Handles die.
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
-#Handles step.
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
 echo -e "${BOLD}"
@@ -64,7 +58,6 @@ step "Reading config from terraform.tfvars"
 TFVARS="terraform.tfvars"
 [[ -f "$TFVARS" ]] || die "$TFVARS not found. Copy terraform.tfvars.example and fill in your values."
 
-#Gets tfvar.
 get_tfvar() {
   #Handles:  key = "value"  and  key = value  (strips quotes, trailing spaces, inline comments)
   grep -E "^${1}\s*=" "$TFVARS" 2>/dev/null \

@@ -1,4 +1,3 @@
-// This file contains traces configuration logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -12,10 +11,8 @@ final class TracesConfiguration {
   private static final ObjectMapper MAPPER = new ObjectMapper()
       .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-  // Handles traces configuration.
   private TracesConfiguration() {}
 
-  // Reads SSM parameters.
   static SsmParameters readSsmParameters() {
     String configured = System.getenv("OTEL_SSM_PARAMETERS");
     if (hasValue(configured)) {
@@ -51,14 +48,12 @@ final class TracesConfiguration {
     return parameters;
   }
 
-  // Reads SSM parameters file.
   static SsmParameters readSsmParametersFile() {
     String configuredPath = System.getenv("OTEL_SSM_PARAMETERS_FILE");
     String filePath = firstValue(configuredPath, DEFAULT_SSM_PARAMETERS_FILE);
     return readSsmParametersFile(Path.of(filePath));
   }
 
-  // Reads SSM parameters file.
   static SsmParameters readSsmParametersFile(Path filePath) {
     try {
       SsmParameters parsed = MAPPER.readValue(filePath.toFile(), SsmParameters.class);
@@ -90,7 +85,6 @@ final class TracesConfiguration {
     return values.length > 0 ? values : Arrays.copyOf(fallback, fallback.length);
   }
 
-  // Gets sampler ratio.
   static double samplerRatio() {
     try {
       return Double.parseDouble(firstValue(System.getenv("TRACEID_RATIO_BASED_SAMPLER"), "1"));
@@ -106,7 +100,6 @@ final class TracesConfiguration {
     return normalized.endsWith("/v1/traces") ? normalized : normalized + "/v1/traces";
   }
 
-  // Handles has value.
   static boolean hasValue(String value) {
     return value != null && !value.isBlank();
   }

@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # Layered stacks (backlog #16)
 
 The legacy single-root layout in this repo's top level (`main.tf`,

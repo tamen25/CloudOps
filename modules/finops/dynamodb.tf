@@ -1,4 +1,3 @@
-#This file defines dynamodb settings for CloudOps.
 #FinOps Module — DynamoDB cost history table
 #
 #Stores daily per-service cost snapshots ingested from Cost Explorer.

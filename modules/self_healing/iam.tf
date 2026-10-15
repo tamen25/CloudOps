@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #Self-Healing Controller — IAM
 #
 #Lambda execution role with least-privilege access to the AWS services
@@ -16,14 +15,12 @@ data "aws_iam_policy_document" "self_healing_assume" {
   }
 }
 
-#Creates the AWS IAM role resource named self healing.
 resource "aws_iam_role" "self_healing" {
   name               = "${var.project_name}-self-healing-controller"
   assume_role_policy = data.aws_iam_policy_document.self_healing_assume.json
   tags               = var.tags
 }
 
-#Reads the AWS IAM policy document data source named self healing.
 data "aws_iam_policy_document" "self_healing" {
   #checkov:skip=CKV_AWS_356:Self-healing controller requires broad EKS/EC2/Lambda access for remediation
   #checkov:skip=CKV_AWS_111:Self-healing controller requires write access for scaling and rollback operations
@@ -146,7 +143,6 @@ data "aws_iam_policy_document" "self_healing" {
   }
 }
 
-#Creates the AWS IAM policy resource named self healing.
 resource "aws_iam_policy" "self_healing" {
   name        = "${var.project_name}-self-healing-controller"
   description = "Self-healing controller Lambda execution policy"
@@ -154,7 +150,6 @@ resource "aws_iam_policy" "self_healing" {
   tags        = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named self healing.
 resource "aws_iam_role_policy_attachment" "self_healing" {
   role       = aws_iam_role.self_healing.name
   policy_arn = aws_iam_policy.self_healing.arn
@@ -173,14 +168,12 @@ data "aws_iam_policy_document" "scale_in_assume" {
   }
 }
 
-#Creates the AWS IAM role resource named scale in scheduler.
 resource "aws_iam_role" "scale_in_scheduler" {
   name               = "${var.project_name}-scale-in-scheduler"
   assume_role_policy = data.aws_iam_policy_document.scale_in_assume.json
   tags               = var.tags
 }
 
-#Reads the AWS IAM policy document data source named scale in scheduler.
 data "aws_iam_policy_document" "scale_in_scheduler" {
   statement {
     sid    = "CloudWatchLogs"
@@ -212,14 +205,12 @@ data "aws_iam_policy_document" "scale_in_scheduler" {
   }
 }
 
-#Creates the AWS IAM policy resource named scale in scheduler.
 resource "aws_iam_policy" "scale_in_scheduler" {
   name   = "${var.project_name}-scale-in-scheduler"
   policy = data.aws_iam_policy_document.scale_in_scheduler.json
   tags   = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named scale in scheduler.
 resource "aws_iam_role_policy_attachment" "scale_in_scheduler" {
   role       = aws_iam_role.scale_in_scheduler.name
   policy_arn = aws_iam_policy.scale_in_scheduler.arn

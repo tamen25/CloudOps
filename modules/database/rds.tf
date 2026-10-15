@@ -1,4 +1,3 @@
-#This file defines RDS settings for CloudOps.
 #Create the primary RDS database instance with encryption, backups, and monitoring enabled
 resource "aws_db_instance" "primary" {
   #checkov:skip=CKV_AWS_157:Multi-AZ disabled intentionally - cost optimization for dev environment

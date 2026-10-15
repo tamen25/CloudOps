@@ -1,4 +1,3 @@
-// This file contains logs exporter config logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
