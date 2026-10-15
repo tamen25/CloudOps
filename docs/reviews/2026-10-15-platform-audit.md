@@ -6,6 +6,7 @@ No AWS API was called: everything here comes from the code, the local quality
 gate, and the GitHub API (read-only).
 
 Status: **in progress.** Sections marked *pending* are not reviewed yet.
+Findings are tracked in `BACKLOG.md`; fixed ones name their PR there.
 
 ## Baseline: the quality gate, run locally
 
@@ -23,7 +24,7 @@ branch. Run locally (no AWS):
 | tfsec, HIGH and above | **fail**: 37 findings (see S02); the `.tfsec/` suppressions the workflow mentions do not exist |
 | `go vet libraries/go/logs` | **fail**: `logger_test.go:107` copies a `sync.Mutex` |
 | `npm audit --audit-level=high --omit=dev` | **fail** in 15 packages, critical in 5 (see S04) |
-| actionlint | *pending* |
+| actionlint | **fail**: two constant `if: false` conditions in `storefront.yml`, two shellcheck warnings |
 | .NET and C++ libraries | not run (no .NET SDK on this machine) |
 
 ## Findings
@@ -106,6 +107,21 @@ IDs are stable: reference them in commits and PRs.
   `docs/backlog-archive.md`, `docs/prod-roadmap.md` and backlog numbers in
   commit messages that do not match GitHub PRs (#143–#147 are not PRs).
   *Change needed:* one `BACKLOG.md` with stable IDs, as in Argus.
+
+### Found while fixing
+
+- **M01 — high. CI could not run parts of itself.** Every tracked shell
+  script was mode 100644, so `./scripts/<name>.sh` failed with "Permission
+  denied" (manifest validation); `aquasecurity/trivy-action@0.28.0` no longer
+  resolves (the action's tags now carry a `v`), so the filesystem scan never
+  ran; `ledger` and `pricing` were under their 70% coverage gate and ran
+  `http.ListenAndServe` with no timeouts.
+- **M02 — high. The OpenTelemetry SDK bump needed for S04 changes an API that
+  the tests do not cover.** `sdk-logs` 0.223 takes `{ exporter }`; the old
+  `new BatchLogRecordProcessor(exporter)` still runs under the tests' `tsx`
+  runner but leaves the exporter undefined, so log export would have stopped
+  silently in four services. `tsc` caught it. The services have no test that
+  loads `tracing.ts`.
 
 ### Architecture
 
