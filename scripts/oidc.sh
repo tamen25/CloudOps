@@ -187,7 +187,7 @@ step "Attaching permissions policy: $POLICY_NAME"
 # Same document as data.aws_iam_policy_document.deployer_infrastructure in
 # modules/bootstrap/iam.tf; change both together. IAM write access is limited
 # to the project's own roles and policies: iam:* on every resource would let
-# the role grant itself anything.
+# the role grant itself anything. S3 is limited to the project's buckets.
 PERMISSIONS_POLICY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -200,11 +200,32 @@ PERMISSIONS_POLICY=$(cat <<EOF
         "cloudformation:*", "cloudtrail:*", "cloudwatch:*", "codeartifact:*",
         "cognito-idp:*", "config:*", "dynamodb:*", "ec2:*", "ecr:*", "eks:*",
         "elasticloadbalancing:*", "events:*", "guardduty:*", "kinesis:*",
-        "kms:*", "lambda:*", "logs:*", "rds:*", "route53:*", "s3:*",
+        "kms:*", "lambda:*", "logs:*", "rds:*", "route53:*",
         "secretsmanager:*", "securityhub:*", "serverlessrepo:*", "sns:*",
         "sqs:*", "ssm:*", "states:*", "wafv2:*", "sts:GetServiceBearerToken"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "S3ProjectBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::${PROJECT_NAME}-*",
+        "arn:aws:s3:::${PROJECT_NAME}-*/*"
+      ]
+    },
+    {
+      "Sid": "S3Account",
+      "Effect": "Allow",
+      "Action": ["s3:ListAllMyBuckets", "s3:GetAccountPublicAccessBlock"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3ServerlessRepoChangeSets",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::awsserverlessrepo-changesets*/*"
     },
     {
       "Sid": "IAMRead",

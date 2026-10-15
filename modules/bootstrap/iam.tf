@@ -117,6 +117,9 @@ resource "aws_iam_role_policy" "deployer_state_access" {
 # policies and instance profiles (every one is named "<project_name>-…"),
 # OIDC providers (EKS and GitHub) and service-linked roles, whose permissions
 # AWS defines. Reading IAM stays account-wide: Terraform reads to plan.
+# S3 is scoped the same way: every bucket the modules create is named
+# "<project_name>-…".
+# trivy:ignore:AVD-AWS-0345 s3:* is limited to the project's own buckets (S3ProjectBuckets).
 data "aws_iam_policy_document" "deployer_infrastructure" {
   #checkov:skip=CKV_AWS_356:Deployer role requires broad infrastructure permissions for Terraform
   #checkov:skip=CKV_AWS_111:Deployer role requires write access for infrastructure deployment
@@ -154,7 +157,6 @@ data "aws_iam_policy_document" "deployer_infrastructure" {
       "logs:*",
       "rds:*",
       "route53:*",
-      "s3:*",
       "secretsmanager:*",
       "securityhub:*",
       "serverlessrepo:*",
@@ -166,6 +168,36 @@ data "aws_iam_policy_document" "deployer_infrastructure" {
       "sts:GetServiceBearerToken",
     ]
     resources = ["*"]
+  }
+
+  #tfsec:ignore:aws-iam-no-policy-wildcards Scoped to the project's own buckets and their objects.
+  statement {
+    sid     = "S3ProjectBuckets"
+    effect  = "Allow"
+    actions = ["s3:*"]
+    resources = [
+      "arn:aws:s3:::${var.project_name}-*",
+      "arn:aws:s3:::${var.project_name}-*/*",
+    ]
+  }
+
+  statement {
+    sid    = "S3Account"
+    effect = "Allow"
+    actions = [
+      "s3:ListAllMyBuckets",
+      "s3:GetAccountPublicAccessBlock",
+    ]
+    resources = ["*"]
+  }
+
+  # The RDS rotation Lambda is a Serverless Application Repository app; its
+  # code is read from the repository's change-set bucket on deploy.
+  statement {
+    sid       = "S3ServerlessRepoChangeSets"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::awsserverlessrepo-changesets*/*"]
   }
 
   #tfsec:ignore:aws-iam-no-policy-wildcards Read-only: Terraform reads IAM to plan.
