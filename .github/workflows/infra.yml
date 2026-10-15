@@ -146,6 +146,9 @@ jobs:
           soft_fail: false
           format: sarif
           additional_args: --minimum-severity HIGH
+          # Without a token the action looks up the tfsec release anonymously
+          # and fails when the runner's IP is rate-limited.
+          github_token: ${{ github.token }}
 
       - name: Upload tfsec results (artifact)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -314,6 +317,9 @@ jobs:
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-results.sarif
+          # With SARIF output the action drops the severity filter unless
+          # this is set, so a LOW finding would fail the gate.
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy results (artifact)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
