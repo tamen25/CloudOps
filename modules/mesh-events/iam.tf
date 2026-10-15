@@ -11,9 +11,10 @@ data "aws_iam_policy_document" "lambda_assume" {
 
 #─── enrichment role: read Kinesis, put to EventBridge, write DLQ + logs ───────
 resource "aws_iam_role" "enrichment" {
-  name               = "${local.name_prefix}-enrichment"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-enrichment"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 data "aws_iam_policy_document" "enrichment" {
@@ -62,9 +63,10 @@ resource "aws_iam_role_policy" "enrichment" {
 
 #─── analytics role: logs only (EMF writes to its own log group) ──────────────
 resource "aws_iam_role" "analytics" {
-  name               = "${local.name_prefix}-analytics"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-analytics"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.lambda_assume.json
+  tags                 = var.tags
 }
 
 data "aws_iam_policy_document" "analytics" {

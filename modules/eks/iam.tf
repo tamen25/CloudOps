@@ -1,7 +1,8 @@
 #This file defines IAM settings for CloudOps.
 #Cluster role — allows EKS service to manage AWS resources on behalf of the cluster
 resource "aws_iam_role" "eks_cluster" {
-  name = "${local.name}-eks-cluster-role"
+  name                 = "${local.name}-eks-cluster-role"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -23,7 +24,8 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
 
 #Node role — attached to EC2 instances in the node group via instance profile
 resource "aws_iam_role" "eks_node" {
-  name = "${local.name}-eks-node-role"
+  name                 = "${local.name}-eks-node-role"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

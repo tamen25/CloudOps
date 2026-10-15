@@ -123,9 +123,10 @@ data "aws_iam_policy_document" "auto_remediation_assume_role" {
 
 #Creates the AWS IAM role resource named auto remediation.
 resource "aws_iam_role" "auto_remediation" {
-  name               = "${var.project_name}-auto-remediation"
-  assume_role_policy = data.aws_iam_policy_document.auto_remediation_assume_role.json
-  description        = "Execution role for the ${var.project_name} auto-remediation Lambda"
+  name                 = "${var.project_name}-auto-remediation"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.auto_remediation_assume_role.json
+  description          = "Execution role for the ${var.project_name} auto-remediation Lambda"
 
   tags = var.tags
 }

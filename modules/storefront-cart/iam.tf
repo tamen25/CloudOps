@@ -23,9 +23,10 @@ data "aws_iam_policy_document" "trust" {
 }
 
 resource "aws_iam_role" "cart" {
-  name               = "${local.name_prefix}-storefront-cart"
-  assume_role_policy = data.aws_iam_policy_document.trust.json
-  tags               = var.tags
+  name                 = "${local.name_prefix}-storefront-cart"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.trust.json
+  tags                 = var.tags
 }
 
 data "aws_iam_policy_document" "cart" {

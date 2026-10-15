@@ -18,9 +18,10 @@ data "aws_iam_policy_document" "self_healing_assume" {
 
 #Creates the AWS IAM role resource named self healing.
 resource "aws_iam_role" "self_healing" {
-  name               = "${var.project_name}-self-healing-controller"
-  assume_role_policy = data.aws_iam_policy_document.self_healing_assume.json
-  tags               = var.tags
+  name                 = "${var.project_name}-self-healing-controller"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.self_healing_assume.json
+  tags                 = var.tags
 }
 
 #Reads the AWS IAM policy document data source named self healing.
@@ -175,9 +176,10 @@ data "aws_iam_policy_document" "scale_in_assume" {
 
 #Creates the AWS IAM role resource named scale in scheduler.
 resource "aws_iam_role" "scale_in_scheduler" {
-  name               = "${var.project_name}-scale-in-scheduler"
-  assume_role_policy = data.aws_iam_policy_document.scale_in_assume.json
-  tags               = var.tags
+  name                 = "${var.project_name}-scale-in-scheduler"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.scale_in_assume.json
+  tags                 = var.tags
 }
 
 #Reads the AWS IAM policy document data source named scale in scheduler.

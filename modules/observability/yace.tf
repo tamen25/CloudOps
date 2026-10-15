@@ -15,7 +15,8 @@
 resource "aws_iam_role" "yace" {
   count = var.enable_yace ? 1 : 0
 
-  name = "${local.name}-yace-irsa"
+  name                 = "${local.name}-yace-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

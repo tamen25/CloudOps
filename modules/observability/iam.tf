@@ -6,7 +6,8 @@
 #── Loki IRSA ────────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "loki" {
-  name = "${local.name}-loki-irsa"
+  name                 = "${local.name}-loki-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -60,7 +61,8 @@ resource "aws_iam_role_policy" "loki" {
 #── Tempo IRSA ───────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "tempo" {
-  name = "${local.name}-tempo-irsa"
+  name                 = "${local.name}-tempo-irsa"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

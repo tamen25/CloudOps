@@ -23,6 +23,12 @@ data "terraform_remote_state" "foundation" {
 locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
 
+  permissions_boundary_arn = (
+    var.use_remote_state_foundation
+    ? try(local.foundation.permissions_boundary_arn, null)
+    : var.permissions_boundary_arn
+  )
+
   vpc_id = (
     var.use_remote_state_foundation
     ? local.foundation.vpc_id

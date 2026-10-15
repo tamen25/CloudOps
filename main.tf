@@ -138,6 +138,8 @@ locals {
   #Derived at root so both networking (subnet tags) and EKS module agree on the name
   eks_cluster_name = "${var.project_name}-${var.environment}-cluster"
 
+  permissions_boundary_arn = try(module.bootstrap[0].permissions_boundary_arn, null)
+
   #Use explicit var if provided, otherwise fall back to the current caller identity
   account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.current.account_id
 
@@ -180,11 +182,12 @@ module "bootstrap" {
   create_kms          = var.bootstrap_create_kms
   kms_deletion_window = var.bootstrap_kms_deletion_window
 
-  additional_trusted_arns = var.bootstrap_additional_trusted_arns
-  require_mfa             = var.bootstrap_require_mfa
-  external_id             = var.bootstrap_external_id
-  max_session_duration    = var.bootstrap_max_session_duration
-  additional_policy_arns  = var.bootstrap_additional_policy_arns
+  additional_trusted_arns     = var.bootstrap_additional_trusted_arns
+  require_mfa                 = var.bootstrap_require_mfa
+  enable_permissions_boundary = var.bootstrap_enable_permissions_boundary
+  external_id                 = var.bootstrap_external_id
+  max_session_duration        = var.bootstrap_max_session_duration
+  additional_policy_arns      = var.bootstrap_additional_policy_arns
 
   #Raw GitHub PAT — bootstrap stores it in Secrets Manager so the ARN can be
   #passed to the security module without duplicating secret management.
@@ -223,6 +226,8 @@ module "networking" {
   count  = var.enable_networking ? 1 : 0
   source = "./modules/networking"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   environment = var.environment
   name_prefix = local.name_prefix
   az_count    = var.az_count
@@ -256,6 +261,8 @@ module "networking" {
 module "eks" {
   count  = var.enable_eks ? 1 : 0
   source = "./modules/eks"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   name_prefix  = local.name_prefix
   environment  = var.environment
@@ -291,6 +298,8 @@ module "eks" {
 module "ingress" {
   count  = var.enable_ingress ? 1 : 0
   source = "./modules/ingress"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   name_prefix  = local.name_prefix
   environment  = var.environment
@@ -330,6 +339,8 @@ module "ingress" {
 module "observability" {
   count  = var.enable_observability ? 1 : 0
   source = "./modules/observability"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   name_prefix    = local.name_prefix
   environment    = var.environment
@@ -396,6 +407,8 @@ module "slo" {
   count  = var.enable_slo ? 1 : 0
   source = "./modules/slo"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name = var.project_name
   environment  = var.environment
 
@@ -421,6 +434,8 @@ module "slo" {
 module "security" {
   count  = var.enable_security ? 1 : 0
   source = "./modules/security"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   eks_cluster_name = local.eks_cluster_name
   otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
@@ -480,6 +495,8 @@ module "finops" {
   count  = var.enable_finops ? 1 : 0
   source = "./modules/finops"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   project_name   = var.project_name
   environment    = var.environment
   aws_account_id = local.account_id
@@ -507,6 +524,8 @@ module "finops" {
 module "self_healing" {
   count  = var.enable_self_healing ? 1 : 0
   source = "./modules/self_healing"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   project_name   = var.project_name
   environment    = var.environment
@@ -542,6 +561,8 @@ module "self_healing" {
 module "database" {
   count  = var.enable_database ? 1 : 0
   source = "./modules/database"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   environment = var.environment
   name_prefix = local.name_prefix
@@ -596,6 +617,8 @@ module "compliance" {
   count  = var.enable_compliance ? 1 : 0
   source = "./modules/compliance"
 
+  permissions_boundary_arn = local.permissions_boundary_arn
+
   name_prefix    = local.name_prefix
   aws_account_id = local.account_id
 
@@ -629,6 +652,8 @@ module "compliance" {
 module "backup" {
   count  = var.enable_backup ? 1 : 0
   source = "./modules/backup"
+
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   name_prefix = local.name_prefix
 
