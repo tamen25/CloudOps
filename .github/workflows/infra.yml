@@ -92,6 +92,18 @@ jobs:
         #Closes backlog #20 — Terraform no longer runs npm install during apply.
         run: bash scripts/build-lambdas.sh
 
+      # Every Lambda that defines a test script; the dependencies come from
+      # the build step above. The self-healing and remediation Lambdas change
+      # live resources, and their tests pin down what they change and when.
+      - name: Lambda unit tests
+        run: |
+          for pkg in $(git ls-files 'modules/**/package.json'); do
+            if node -e "process.exit(require('./$pkg').scripts?.test ? 0 : 1)"; then
+              echo "npm test in $(dirname "$pkg")"
+              (cd "$(dirname "$pkg")" && npm test)
+            fi
+          done
+
       - name: Check formatting
         run: terraform fmt -check -recursive
 
