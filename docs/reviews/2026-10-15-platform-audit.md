@@ -99,10 +99,10 @@ IDs are stable: reference them in commits and PRs.
 - **P04 — medium. Version drift.** The Node traces library pins OpenTelemetry
   exporter `^0.52`; the five apps were bumped together to `^0.218`.
 - **P05 — low. AI tooling is named in tracked files.** `.gitignore` lists
-  `CLAUDE.md`, `.dual-graph`, `.gstack`; a design export carries a saved chat
-  (`apps/storefront/design/cloudops-frontend/chats/chat1.md`); docs mention
-  Claude. The standard is to keep tooling out of tracked files
-  (`.git/info/exclude`).
+  the local assistant's files; a design export carries saved chat
+  transcripts (`apps/storefront/design/cloudops-frontend/chats/`); docs name
+  the assistant. The standard is to keep tooling out of tracked files
+  (`.git/info/exclude`). Fixed in #22.
 - **P06 — low. No live backlog.** Open work is spread over
   `docs/backlog-archive.md`, `docs/prod-roadmap.md` and backlog numbers in
   commit messages that do not match GitHub PRs (#143–#147 are not PRs).
