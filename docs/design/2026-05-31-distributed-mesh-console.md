@@ -27,7 +27,7 @@ synthetic traffic, viewable in the app.
   only. Real chaos filed to backlog.
 - Not per-customer/per-account tokens, not a new auth system.
 - Does not change Route 53 / ALB ownership, the S3 backend, the ECR
-  pull-through cache, or any do-not-break tripwire in CLAUDE.md.
+  pull-through cache, or any do-not-break tripwire in the project guide.
 
 ## Cost posture
 
@@ -84,7 +84,7 @@ ASYNC / SERVERLESS FAN-OUT:
 - `/healthz` + `/readyz`, graceful shutdown on SIGTERM, structured logging with
   the same redaction policy as `apps/order-api/src/logger.ts`.
 - Images via the **ECR pull-through cache** (`ecr-public` prefix) — nodes have
-  no NAT (CLAUDE.md guardrail #3).
+  no NAT (the project guide guardrail #3).
 - Internal-only service-to-service calls are **HMAC-gated** (same pattern as
   order-api `/_internal/*`) or mTLS-deferred (#9). No service is publicly
   exposed except via the api-gateway / ingress.
@@ -226,7 +226,7 @@ app.yml                       extend deploy ordering: gateway+mesh after order-a
 drift-detection.yml           add new stacks/platform resources to drift scan
 ```
 
-### Pipeline order (extends CLAUDE.md staged applies)
+### Pipeline order (extends the project guide staged applies)
 
 ```
 bootstrap+networking+dns → EKS → ingress → observability → security → database
@@ -260,7 +260,7 @@ flagged, not speculatively deleted. Do-not-break tripwires untouched.
 
 ### Docs to update
 
-- `CLAUDE.md` — current state, contract (new services), pipeline order,
+- the project guide — current state, contract (new services), pipeline order,
   do-not-break additions, backlog rows.
 - `README`, `docs/runbooks/*`, new ADRs (mesh module, loadgen, console BFF,
   polyglot tracing).
@@ -287,7 +287,7 @@ the full branch diff before merge:
    redaction, healthz/readyz everywhere, graceful shutdown, resource limits,
    PodSecurity, image pinning via ECR cache.
 
-Findings → backlog rows in CLAUDE.md with the existing ID/severity discipline.
+Findings → backlog rows in the project guide with the existing ID/severity discipline.
 P1/P2 fixed before merge; P3/P4 triaged. Final verification (tests + builds
 green) before any PR.
 
@@ -307,7 +307,7 @@ green) before any PR.
 5. **console** — BFF `/api/observe/*` + `/api/load/*`, `/console` `/traces`
    `/services` `/load` pages (frontend-design), navbar restructure.
 6. **cleanup** — remove shop UI + admin upload + storefront-assets; rg-verify;
-   update all docs/ADRs/CLAUDE.md.
+   update all docs/ADRs/the project guide.
 7. **review** — Section 6 comprehensive pass; fix P1/P2; verify; ready to merge.
 
 Each phase ends green (tests + builds) before the next begins.

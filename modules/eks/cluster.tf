@@ -7,6 +7,15 @@
 #tightly scoped `public_access_cidrs` list (emergency access from a known
 #admin range). Defaults stay open for the dev workflow that uses GitHub
 #Actions hosted runners with dynamic IPs.
+# Tracked suppressions for the Trivy config scan (security-scan in infra.yml):
+# AVD-AWS-0040/0041: the public endpoint and its open CIDR default serve
+#   GitHub-hosted runners, whose IPs change (ADR 013). Production sets
+#   endpoint_public_access = false or a tight endpoint_public_access_cidrs.
+# AVD-AWS-0039: secrets encryption is on for staging and prod and off in dev
+#   by decision, to keep the nightly teardown cheap (enable_secrets_encryption).
+#trivy:ignore:AVD-AWS-0039
+#trivy:ignore:AVD-AWS-0040
+#trivy:ignore:AVD-AWS-0041
 resource "aws_eks_cluster" "main" {
   #checkov:skip=CKV_AWS_39:Public endpoint intentionally enabled for GitHub Actions OIDC access from CI/CD
   #checkov:skip=CKV_AWS_38:Public endpoint CIDR restriction not applied - GitHub Actions IPs are dynamic

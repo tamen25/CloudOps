@@ -6,7 +6,6 @@
 !.env.*.example
 
 # Personal interview-prep explainer — local only, never committed.
-# Agents (including Claude) must NOT read this file for context.
 # It is human-maintained narrative documentation, not part of the codebase.
 PROJECT_EXPLAINER.md
 

@@ -92,4 +92,4 @@ Removes the RBAC and the env flag; `/chaos/kill` reverts to `404`.
 - App-level chaos (malformed payloads / forced downstream 500): the `chaos`
   load scenario in `apps/loadgen/src/scenarios.ts` — no pod deletion.
 - Abuse / containment: [`abuse-response.md`](./abuse-response.md).
-- SSRF / target guards: guardrail #11 in `CLAUDE.md`.
+- SSRF / target guards: the allowlist and dry-run default in `apps/loadgen/src/chaos.ts` and `app.ts`.

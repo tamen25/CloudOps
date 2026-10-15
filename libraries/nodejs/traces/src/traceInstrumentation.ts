@@ -9,7 +9,7 @@ import {
   TraceIdRatioBasedSampler,
 } from "@opentelemetry/sdk-trace-base";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
-import { Resource } from "@opentelemetry/resources";
+import { defaultResource, resourceFromAttributes } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import api, {
   Context,
@@ -212,43 +212,15 @@ class TraceInstrumentation {
 
     this.tracerProvider = new NodeTracerProvider(
       configureTracer({
-        resource: Resource.default().merge(new Resource(resourceAttributes)),
+        resource: defaultResource().merge(resourceFromAttributes(resourceAttributes)),
         sampler: new ParentBasedSampler({
           root: new TraceIdRatioBasedSampler(traceRatio),
         }),
+        spanProcessors: this.spanProcessors(),
       }),
     );
 
     try {
-      const exportersList = parseStringArray(process.env.OTEL_BACKEND_EXPORTERS, ["console"]);
-      const ssmParams = readSSMParameters();
-      diag.debug(`SSM Parameters Retrieved: ${JSON.stringify(ssmParams)}`);
-
-      const backend = exportersList.map((item) => item.toLowerCase())[0];
-
-      switch (backend) {
-        case "otel":
-          if (isSSMParametersEmpty(ssmParams)) {
-            diag.debug("TraceInstrumentation SSM parameters are empty. Switching tracer to console.");
-            this.tracerProvider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
-            break;
-          }
-
-          this.batchProcessorConfig = new BatchSpanProcessor(
-            new OTLPTraceExporter({
-              url: ssmParams.otel?.trace?.url,
-              headers: authHeaders(ssmParams.otel?.trace?.api_key),
-            }),
-          );
-          this.tracerProvider.addSpanProcessor(this.batchProcessorConfig);
-          break;
-
-        case "console":
-        default:
-          this.tracerProvider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
-          break;
-      }
-
       let sdkRegistrationConfig: SDKRegistrationConfig = {};
       sdkRegistrationConfig = configureSdkRegistration(sdkRegistrationConfig);
       this.tracerProvider.register(sdkRegistrationConfig);
@@ -264,6 +236,33 @@ class TraceInstrumentation {
     } catch (e) {
       diag.debug("OTEL register failed", e);
     }
+  }
+
+  // The span processor for the configured backend: OTLP when the exporter
+  // parameters are present, the console otherwise (also when they cannot be
+  // read). The parameters hold an API key, so only the URL is ever logged.
+  private spanProcessors(): SpanProcessor[] {
+    const backend = parseStringArray(process.env.OTEL_BACKEND_EXPORTERS, ["console"])
+      .map((item) => item.toLowerCase())[0];
+    if (backend === "otel") {
+      try {
+        const ssmParams = readSSMParameters();
+        if (!isSSMParametersEmpty(ssmParams)) {
+          diag.debug(`TraceInstrumentation exporting to ${ssmParams.otel?.trace?.url ?? "(no url)"}`);
+          this.batchProcessorConfig = new BatchSpanProcessor(
+            new OTLPTraceExporter({
+              url: ssmParams.otel?.trace?.url,
+              headers: authHeaders(ssmParams.otel?.trace?.api_key),
+            }),
+          );
+          return [this.batchProcessorConfig];
+        }
+        diag.debug("TraceInstrumentation SSM parameters are empty. Switching tracer to console.");
+      } catch (e) {
+        diag.debug("TraceInstrumentation could not read the exporter parameters. Switching tracer to console.", e);
+      }
+    }
+    return [new SimpleSpanProcessor(new ConsoleSpanExporter())];
   }
 
   /**
