@@ -348,16 +348,23 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install kubeconform
-        run: |
-          wget -q https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
-          tar xf kubeconform-linux-amd64.tar.gz
-          sudo mv kubeconform /usr/local/bin/
-          kubeconform -v
+      # The manifests are templates (replicas: ${ORDER_API_REPLICAS}, …):
+      # they are only valid once rendered, so validate through the shared
+      # script, which renders order-api, storefront and the mesh services
+      # with placeholder values and runs kubeconform on the result.
+      - name: Setup Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22'
 
-      - name: kubeconform — schema validation
+      - name: Install the renderers' dependencies
         run: |
-          kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
+          for app in order-api storefront api-gateway; do
+            npm ci --prefix "apps/$app"
+          done
+
+      - name: Render and validate the manifests
+        run: bash scripts/validate-k8s-manifests.sh
 
   #─────────────────────────────────────────────────────────────────────────────
   #Job 7: Manual approval gate — push to main only
