@@ -99,7 +99,7 @@ jobs:
             | sed 's/.*= *"\(.*\)".*/\1/' \
             | head -1)
           if [ -z "$TFVARS_ENV" ]; then
-            echo "::error::terraform.tfvars is missing the `environment = ` field"
+            echo "::error::terraform.tfvars is missing the 'environment = ' field"
             exit 1
           fi
           if [ "$TFVARS_ENV" != "${{ inputs.environment }}" ]; then

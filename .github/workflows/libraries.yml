@@ -632,6 +632,7 @@ jobs:
             if [ -z "$val" ]; then
               val=$(grep -oE '[0-9]+(\.[0-9]+)?%' "$file" | tail -1 || echo "—")
             fi
+            # shellcheck disable=SC2016 # the backticks are literal Markdown in the summary table
             printf '| %s | %s | %s | `%s` |\n' "$lang" "${val:-—}" "$gate" "$file" >> "$GITHUB_STEP_SUMMARY"
           }
 

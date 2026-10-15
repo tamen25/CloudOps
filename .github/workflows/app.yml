@@ -197,7 +197,8 @@ jobs:
 
       - name: kubectl apply --dry-run=client
         run: |
-          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
+          KUBECONFIG=$(mktemp --suffix=.kubeconfig)
+          export KUBECONFIG
           cat > "$KUBECONFIG" <<'KUBECFG'
           apiVersion: v1
           kind: Config

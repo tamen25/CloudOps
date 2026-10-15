@@ -856,7 +856,7 @@ jobs:
             --log-type None \
             /tmp/compliance-scan.json \
             > /tmp/invoke-meta.json 2>&1 || {
-            HTTP_CODE=$(cat /tmp/invoke-meta.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Error','not found'))" 2>/dev/null || echo "not found")
+            HTTP_CODE=$(python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Error','not found'))" < /tmp/invoke-meta.json 2>/dev/null || echo "not found")
             echo "::warning::Compliance scanner Lambda '${LAMBDA_NAME}' not found or invocation failed (${HTTP_CODE})."
             echo "::warning::The security module may not be deployed. Scan skipped."
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
