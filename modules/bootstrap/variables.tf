@@ -48,9 +48,9 @@ variable "additional_trusted_arns" {
 
 #Defines the require mfa input value.
 variable "require_mfa" {
-  description = "Require MFA for deployer role"
+  description = "Require MFA to assume the human deployer role (CI uses the OIDC role and is unaffected)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 #Defines the external ID input value.

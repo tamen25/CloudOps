@@ -82,7 +82,9 @@ REGION=$(get_tfvar "region")
 [[ -n "$REGION" ]]       || REGION="$AWS_REGION"
 
 ROLE_NAME="${PROJECT_NAME}-github-actions"
-POLICY_NAME="cloudops-github-actions-policy"
+# The name Terraform gives this inline policy (modules/bootstrap/github_oidc.tf),
+# so the first apply replaces it rather than adding a second one.
+POLICY_NAME="${PROJECT_NAME}-github-actions-infrastructure"
 GITHUB_REPO="${GITHUB_REPO:-$(git config --get remote.origin.url 2>/dev/null | sed -E 's#.*[/:]([^/]+/[^/]+)\.git#\1#' | sed -E 's#\.git$##')}"
 if [ -z "$GITHUB_REPO" ] || [ "$GITHUB_REPO" = "$(git config --get remote.origin.url 2>/dev/null)" ]; then
     echo "Error: set GITHUB_REPO=owner/repo (auto-detect from git remote failed)" >&2
@@ -134,8 +136,13 @@ TRUST_POLICY=$(cat <<EOF
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:${GITHUB_REPO}:*"
+        "StringEquals": {
+          "token.actions.githubusercontent.com:sub": [
+            "repo:${GITHUB_REPO}:ref:refs/heads/main",
+            "repo:${GITHUB_REPO}:environment:dev",
+            "repo:${GITHUB_REPO}:environment:staging",
+            "repo:${GITHUB_REPO}:environment:production"
+          ]
         }
       }
     }
@@ -144,7 +151,7 @@ TRUST_POLICY=$(cat <<EOF
 EOF
 )
 
-success "Trust policy built (scoped to repo:${GITHUB_REPO}:*)"
+success "Trust policy built (main and the dev/staging/production environments of ${GITHUB_REPO})"
 
 #── Steps 5 & 6: Create or update IAM role (idempotent) ──────────────────────
 step "Creating / updating IAM role: $ROLE_NAME"
@@ -177,43 +184,54 @@ fi
 #── Step 7: Attach inline permissions policy (idempotent) ────────────────────
 step "Attaching permissions policy: $POLICY_NAME"
 
+# Same document as data.aws_iam_policy_document.deployer_infrastructure in
+# modules/bootstrap/iam.tf; change both together. IAM write access is limited
+# to the project's own roles and policies: iam:* on every resource would let
+# the role grant itself anything.
 PERMISSIONS_POLICY=$(cat <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "FullInfrastructureDeployment",
+      "Sid": "InfrastructureDeployment",
       "Effect": "Allow",
       "Action": [
-        "ec2:*",
-        "ecr:*",
-        "ecs:*",
-        "eks:*",
-        "elasticloadbalancing:*",
-        "autoscaling:*",
-        "cloudwatch:*",
-        "logs:*",
-        "iam:*",
-        "kms:*",
-        "rds:*",
-        "route53:*",
-        "acm:*",
-        "s3:*",
-        "secretsmanager:*",
-        "ssm:*",
-        "lambda:*",
-        "dynamodb:*",
-        "sns:*",
-        "sqs:*",
-        "events:*",
-        "scheduler:*",
-        "budgets:*",
-        "ce:*",
-        "pricing:*",
-        "sts:AssumeRole",
-        "sts:GetCallerIdentity"
+        "acm:*", "apigateway:*", "backup:*", "backup-storage:*", "budgets:*",
+        "cloudformation:*", "cloudtrail:*", "cloudwatch:*", "codeartifact:*",
+        "cognito-idp:*", "config:*", "dynamodb:*", "ec2:*", "ecr:*", "eks:*",
+        "elasticloadbalancing:*", "events:*", "guardduty:*", "kinesis:*",
+        "kms:*", "lambda:*", "logs:*", "rds:*", "route53:*", "s3:*",
+        "secretsmanager:*", "securityhub:*", "serverlessrepo:*", "sns:*",
+        "sqs:*", "ssm:*", "states:*", "wafv2:*", "sts:GetServiceBearerToken"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "IAMRead",
+      "Effect": "Allow",
+      "Action": ["iam:Get*", "iam:List*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMProjectResources",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": [
+        "arn:aws:iam::${ACCOUNT_ID}:role/${PROJECT_NAME}-*",
+        "arn:aws:iam::${ACCOUNT_ID}:policy/${PROJECT_NAME}-*",
+        "arn:aws:iam::${ACCOUNT_ID}:instance-profile/${PROJECT_NAME}-*",
+        "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/*"
+      ]
+    },
+    {
+      "Sid": "IAMServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateServiceLinkedRole",
+        "iam:DeleteServiceLinkedRole",
+        "iam:GetServiceLinkedRoleDeletionStatus"
+      ],
+      "Resource": "arn:aws:iam::${ACCOUNT_ID}:role/aws-service-role/*"
     }
   ]
 }
@@ -236,6 +254,14 @@ aws iam put-role-policy \
   --policy-document "$PERMISSIONS_POLICY"
 
 success "Policy '$POLICY_NAME' applied to role $ROLE_NAME"
+
+# Earlier versions of this script attached a broader policy under another
+# name, which Terraform never manages; remove it if present.
+LEGACY_POLICY_NAME="cloudops-github-actions-policy"
+if aws iam get-role-policy --role-name "$ROLE_NAME" --policy-name "$LEGACY_POLICY_NAME" >/dev/null 2>&1; then
+  aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name "$LEGACY_POLICY_NAME"
+  success "Removed the legacy policy '$LEGACY_POLICY_NAME'"
+fi
 
 #── Step 8: Print final summary ───────────────────────────────────────────────
 BUCKET_NAME="${PROJECT_NAME}-tfstate-tamen25"

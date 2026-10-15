@@ -50,71 +50,12 @@ resource "aws_iam_role" "github_actions" {
   tags = merge(local.common_tags, { Name = "${var.project_name}-github-actions" })
 }
 
-#Inline policy: ECR push, EKS read, S3 state access, KMS state key
+# The CI role's own inline policy: Terraform state access. Everything it
+# deploys comes from the deployer policy attached below
+# (github_actions_infrastructure), shared with the human deployer role.
 data "aws_iam_policy_document" "github_actions_permissions" {
-  #checkov:skip=CKV_AWS_356:GitHub Actions deployment role requires broad ECR/EKS access
-  #checkov:skip=CKV_AWS_111:GitHub Actions deployment role requires write access for infrastructure deployment
-  #GetAuthorizationToken is account-level and always requires resource *
-  statement {
-    sid       = "ECRAuth"
-    effect    = "Allow"
-    actions   = ["ecr:GetAuthorizationToken"]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "ECRPush"
-    effect = "Allow"
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:PutImage",
-      "ecr:InitiateLayerUpload",
-      "ecr:UploadLayerPart",
-      "ecr:CompleteLayerUpload",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "CodeArtifactPublish"
-    effect = "Allow"
-    actions = [
-      "codeartifact:DescribeDomain",
-      "codeartifact:DescribeRepository",
-      "codeartifact:GetAuthorizationToken",
-      "codeartifact:GetRepositoryEndpoint",
-      "codeartifact:ListPackageVersions",
-      "codeartifact:PublishPackageVersion",
-      "codeartifact:PutPackageMetadata",
-      "codeartifact:ReadFromRepository",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid       = "CodeArtifactServiceBearerToken"
-    effect    = "Allow"
-    actions   = ["sts:GetServiceBearerToken"]
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "sts:AWSServiceName"
-      values   = ["codeartifact.amazonaws.com"]
-    }
-  }
-
-  statement {
-    sid    = "EKSRead"
-    effect = "Allow"
-    actions = [
-      "eks:DescribeCluster",
-      "eks:ListClusters",
-    ]
-    resources = ["*"]
-  }
-
   #Full access scoped to the Terraform state bucket only
+  #tfsec:ignore:aws-iam-no-policy-wildcards The state files are objects in this one bucket.
   statement {
     sid    = "StateS3"
     effect = "Allow"
