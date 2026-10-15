@@ -100,10 +100,9 @@ Any one of:
 - ALB access logs to S3 (already enabled), 90d retention (closes #102),
   for post-incident analysis.
 
-## Documenting the gap in CLAUDE.md
+## Documenting the gap
 
-CLAUDE.md "Current State" now references this ADR so future agents
-understand WAF rate-limiting + Standard tier is the primary DDoS defense
+This ADR is the record, so future readers understand WAF rate-limiting + Standard tier is the primary DDoS defense
 and is intentional, not a missing control.
 
 ## Alternatives considered

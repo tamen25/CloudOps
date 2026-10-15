@@ -29,7 +29,7 @@ function Footer() {
           </div>
           {[
             ['Platform',  ['Overview', 'Architecture', 'Pipeline', 'Security']],
-            ['Resources', ['ADRs', 'Runbooks', 'CLAUDE.md', 'Changelog']],
+            ['Resources', ['ADRs', 'Runbooks', 'Backlog', 'Changelog']],
             ['Project',   ['GitHub', 'Issues', 'Contributing', 'License']],
           ].map(([h, items]) => (
             <div key={h} className="col" style={{ gap: 8 }}>
