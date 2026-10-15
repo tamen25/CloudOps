@@ -1,0 +1,16 @@
+# Pricing ClusterIP service. Reachable in-mesh as
+# pricing.${MESH_NAMESPACE}.svc.cluster.local on port 80.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pricing
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: pricing
+spec:
+  selector:
+    app: pricing
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

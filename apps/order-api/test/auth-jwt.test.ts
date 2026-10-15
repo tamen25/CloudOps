@@ -1,13 +1,10 @@
 // This file contains auth JWT test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const http = require('http');
-const { generateKeyPair, exportJWK, SignJWT } = require('jose');
-
-const { createApp } = require('../src/app');
-const { createJwtVerifier, hasAllScopes, parseScopes } = require('../src/auth-jwt');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'http';
+import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { createApp } from '../src/app';
+import { createJwtVerifier, hasAllScopes, parseScopes, classifyJwtError } from '../src/auth-jwt';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +54,15 @@ async function newSigner({ issuer, audience, kid = 'test-key' }) {
 
 // Handles start app.
 async function startApp({ issuer, audience, jwksUrl, requiredScopes = [], apiKey = '' }) {
-  const pool = { query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }) };
+  const pool = {
+    query: async (sql, params) => {
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 100 })), rowCount: skus.length };
+      }
+      return { rows: [{ order_id: 'ok' }], rowCount: 1 };
+    },
+  };
   const jwtVerifier = createJwtVerifier({
     issuer,
     audience,
@@ -292,6 +297,82 @@ test('no Bearer header falls through to API-key path', async () => {
     assert.equal(withKey.status, 201);
   } finally {
     await stopServer(server);
+    await jwks.close();
+  }
+});
+
+test('JWT-only deployment rejects missing bearer token instead of trusting X-Tenant-Id', async () => {
+  const issuer = 'https://issuer.test/realms/cloudops';
+  const audience = 'order-api';
+  const signer = await newSigner({ issuer, audience });
+  const jwks = await startJwks(signer.jwk);
+  const { server, baseUrl } = await startApp({ issuer, audience, jwksUrl: jwks.jwksUrl });
+
+  try {
+    const r = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(r.status, 401);
+  } finally {
+    await stopServer(server);
+    await jwks.close();
+  }
+});
+
+// #104 — classifyJwtError → outcome label
+test('classifyJwtError maps expired token', () => {
+  assert.equal(classifyJwtError({ code: 'ERR_JWT_EXPIRED' }), 'expired');
+});
+
+test('classifyJwtError maps wrong issuer', () => {
+  assert.equal(classifyJwtError({
+    code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
+    message: 'unexpected "iss" claim value',
+  }), 'wrong_issuer');
+});
+
+test('classifyJwtError maps wrong audience', () => {
+  assert.equal(classifyJwtError({
+    code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
+    message: 'unexpected "aud" claim value',
+  }), 'wrong_audience');
+});
+
+test('classifyJwtError maps invalid signature', () => {
+  assert.equal(classifyJwtError({ code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' }), 'invalid_signature');
+});
+
+test('classifyJwtError maps JWKS fetch failure', () => {
+  assert.equal(classifyJwtError({ message: 'fetch failed: ECONNREFUSED' }), 'jwks_unreachable');
+  assert.equal(classifyJwtError({ message: 'JWKS request timeout' }), 'jwks_unreachable');
+  assert.equal(classifyJwtError({ message: 'no JWKS returned from issuer' }), 'jwks_unreachable');
+});
+
+test('classifyJwtError defaults to other for unknown errors', () => {
+  assert.equal(classifyJwtError({ message: 'something weird' }), 'other');
+  assert.equal(classifyJwtError(undefined), 'other');
+});
+
+test('createJwtVerifier reports outcome="ok" on a valid token', async () => {
+  const outcomes = [];
+  const signer = await newSigner({ issuer: 'https://issuer.example.com', audience: 'cloudops-test' });
+  const jwks = await startJwks(signer.jwk);
+  try {
+    const verifier = createJwtVerifier({
+      issuer: 'https://issuer.example.com',
+      audience: 'cloudops-test',
+      jwksUrl: jwks.jwksUrl,
+      logger: silentLogger(),
+      onOutcome: (o) => outcomes.push(o),
+    });
+    const token = await signer.sign({ sub: 'user1', tenant_id: 't1' });
+    const req = { get: (h) => (h.toLowerCase() === 'authorization' ? `Bearer ${token}` : '') };
+    const res = { status() { return this; }, json() { return this; } };
+    await new Promise((resolve) => verifier(req, res, resolve));
+    assert.deepEqual(outcomes, ['ok']);
+  } finally {
     await jwks.close();
   }
 });

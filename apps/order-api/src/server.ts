@@ -3,13 +3,14 @@
 import './tracing';
 
 import * as fs from 'fs';
-import pino from 'pino';
+import { createLogger } from './logger';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { Pool, type PoolConfig } from 'pg';
 import type { Server } from 'http';
 import { createApp, createMetricsApp, createMetrics } from './app';
 import { assertAuthConfigured } from './auth-config';
 import { createJwtVerifier } from './auth-jwt';
+import { createPublisher } from './kinesis';
 
 const PORT = Number(process.env.PORT) || 3000;
 const METRICS_PORT = Number(process.env.METRICS_PORT) || 9090;
@@ -29,7 +30,7 @@ const OIDC_REQUIRED_SCOPES = (process.env.OIDC_REQUIRED_SCOPES || '')
   .split(/\s+/)
   .filter(Boolean);
 
-const logger = pino({ level: 'info' });
+const logger = createLogger();
 
 let pool: Pool;
 
@@ -103,7 +104,15 @@ async function resolveApiKey(): Promise<string> {
   try {
     const parsed = JSON.parse(response.SecretString || '');
     return parsed.api_key || parsed.apiKey || parsed.value || '';
-  } catch {
+  } catch (err) {
+    //SM SecretString was not valid JSON — fall back to treating the whole
+    //value as the plaintext key (closes backlog #106). Logged at warn so an
+    //operator notices if a JSON-encoded secret is rotated to plaintext or
+    //vice versa.
+    logger.warn(
+      { secret_arn: API_KEY_SECRET_ARN, error: err instanceof Error ? err.message : String(err) },
+      'secrets-manager SecretString is not JSON; using raw value as api key',
+    );
     return response.SecretString || '';
   }
 }
@@ -111,6 +120,10 @@ async function resolveApiKey(): Promise<string> {
 initDatabase()
   .then(async () => {
     const apiKey = await resolveApiKey();
+
+    // Metrics created up-front so the JWT verifier can record outcomes
+    // into the same registry (closes backlog #104).
+    const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
 
     let jwtVerifier = null;
     if (OIDC_ISSUER && OIDC_AUDIENCE && OIDC_JWKS_URL) {
@@ -120,13 +133,14 @@ initDatabase()
         jwksUrl: OIDC_JWKS_URL,
         requiredScopes: OIDC_REQUIRED_SCOPES,
         logger,
+        onOutcome: (outcome) => metrics.jwtVerifyTotal.inc({ outcome }),
       });
       logger.info({ issuer: OIDC_ISSUER, audience: OIDC_AUDIENCE }, 'oidc verifier configured');
     }
 
     assertAuthConfigured({ apiKey, jwtVerifier, nodeEnv: NODE_ENV, logger });
 
-    const metrics = createMetrics({ serviceName: 'order-api', environment: NODE_ENV });
+    const publisher = createPublisher({ awsRegion: AWS_REGION, logger });
     const { app } = createApp({
       pool,
       logger,
@@ -135,6 +149,7 @@ initDatabase()
       apiKey,
       jwtVerifier,
       metrics,
+      publishOrderEvent: publisher.publishOrderEvent,
     });
 
     server = app.listen(PORT, '0.0.0.0', () => {

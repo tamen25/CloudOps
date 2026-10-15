@@ -34,3 +34,46 @@ resource "helm_release" "gatekeeper" {
     logLevel = "WARNING"
   })]
 }
+
+#Cosign Gatekeeper provider (#98). Default off because the
+#K8sRequireImageSignature ConstraintTemplate hits system_error on every
+#admission without this sidecar, which blocks every Pod create.
+#Rollout + audit + enforce steps: docs/runbooks/cosign-gatekeeper.md.
+resource "helm_release" "cosign_provider" {
+  count = var.enable_cosign_provider ? 1 : 0
+
+  name       = "cosign-gatekeeper-provider"
+  repository = "https://sigstore.github.io/helm-charts"
+  chart      = "cosign-gatekeeper-provider"
+  version    = "0.2.0"
+  namespace  = "gatekeeper-system"
+
+  timeout = 300
+
+  values = [yamlencode({
+    providerName = "cosign-provider"
+    image = {
+      repository = "ghcr.io/sigstore/cosign-gatekeeper-provider"
+      pullPolicy = "IfNotPresent"
+    }
+    resources = {
+      requests = { cpu = "50m", memory = "64Mi" }
+      limits   = { cpu = "200m", memory = "256Mi" }
+    }
+  })]
+
+  depends_on = [helm_release.gatekeeper]
+}
+
+#Plan-time guard: prevent enabling the constraint without the provider.
+#Without this, an operator who flips `enable_image_signature_constraint=true`
+#but forgets `enable_cosign_provider=true` will hit `system_error` violations
+#on every Pod admission — i.e. the cluster stops accepting workloads.
+resource "terraform_data" "cosign_constraint_guard" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_image_signature_constraint || var.enable_cosign_provider
+      error_message = "enable_image_signature_constraint=true requires enable_cosign_provider=true (or an out-of-band cosign-gatekeeper-provider deployment). Without it, every Pod admission will fail with `system_error`."
+    }
+  }
+}

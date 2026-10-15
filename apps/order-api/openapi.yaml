@@ -25,6 +25,10 @@ tags:
     description: Liveness and readiness probes
   - name: orders
     description: Order create / list endpoints
+  - name: privacy
+    description: Authenticated user-data export and erasure endpoints
+  - name: products
+    description: Public-read catalog endpoints (tenant-scoped via JWT / X-Tenant-Id)
 security:
   - bearerAuth: []
   - apiKeyAuth: []
@@ -152,8 +156,8 @@ paths:
                 $ref: '#/components/schemas/ServerError'
   /orders:
     get:
-      summary: List recent orders for the caller's tenant
-      description: Returns the most recent 100 orders. Tenant scoping is enforced both at the application layer and via Postgres RLS.
+      summary: List recent orders visible to the caller
+      description: JWT callers receive only their own recent orders. API-key callers retain tenant-wide service access. Tenant and ownership scoping are enforced both at the application layer and via Postgres RLS.
       operationId: listOrders
       tags:
         - orders
@@ -178,6 +182,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RateLimitError'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  /orders/{orderId}:
+    get:
+      summary: Get an order visible to the caller
+      description: JWT callers can fetch only orders they own. API-key callers can fetch any order in their tenant.
+      operationId: getOrder
+      tags:
+        - orders
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9._-]{1,64}$'
+      responses:
+        '200':
+          description: Order visible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetOrderResponse'
+        '400':
+          description: Invalid order ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Order absent or not visible to caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+  /privacy/export:
+    get:
+      summary: Export the caller's personal data
+      description: Returns personal data currently linked to the authenticated JWT subject inside the tenant.
+      operationId: exportPrivacyData
+      tags:
+        - privacy
+      responses:
+        '200':
+          description: Export payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyExportResponse'
+        '401':
+          description: JWT subject required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+  /privacy/erase:
+    post:
+      summary: Erase the caller's direct personal links
+      description: Preserves commercial order rows while anonymizing owner/actor links and deleting subject-scoped idempotency keys.
+      operationId: erasePrivacyData
+      tags:
+        - privacy
+      responses:
+        '200':
+          description: Erasure completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivacyEraseResponse'
+        '401':
+          description: JWT subject required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+  /products:
+    get:
+      summary: List active products for the caller's tenant
+      description: Paginated catalog list. Tenant resolved from JWT or `X-Tenant-Id`; Postgres RLS enforces the boundary.
+      operationId: listProducts
+      tags:
+        - products
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProductsResponse'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  /products/{id}:
+    get:
+      summary: Get a product by ID for the caller's tenant
+      description: Fetches a single active product by primary key. Tenant scoping enforced via RLS, so a request for another tenant's product returns 404.
+      operationId: getProduct
+      tags:
+        - products
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProductResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
         '500':
           description: Internal error
           content:
@@ -219,10 +357,10 @@ components:
       in: header
       required: false
       description: |
-        Optional retry-safety token (closes backlog #72). Tenant-scoped on
-        the server: a 24h replay window. Same key + same payload replays
-        the original status + body; same key + different payload returns
-        409 `idempotency_conflict`.
+        Optional retry-safety token (closes backlog #72). JWT callers are
+        scoped by tenant + subject; API-key callers are scoped by tenant.
+        Same key + same payload replays the original status + body; same key
+        + different payload returns 409 `idempotency_conflict`.
       schema:
         type: string
         pattern: '^[\x21-\x7e]{1,255}$'
@@ -260,6 +398,9 @@ components:
             getOrders:
               type: string
               example: GET /orders
+            getOrder:
+              type: string
+              example: GET /orders/:orderId
     HealthStatus:
       type: object
       required:
@@ -403,6 +544,17 @@ components:
         count:
           type: integer
           example: 1
+    GetOrderResponse:
+      type: object
+      required:
+        - success
+        - order
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        order:
+          $ref: '#/components/schemas/OrderRow'
     ValidationError:
       type: object
       required:
@@ -414,7 +566,7 @@ components:
           enum: [false]
         error:
           type: string
-          enum: [invalid_request, invalid_json, invalid_tenant]
+          enum: [invalid_request, invalid_json, invalid_tenant, invalid_order_id]
         detail:
           type: string
           example: items length must be between 1 and 50
@@ -473,3 +625,89 @@ components:
         error:
           type: string
           example: Failed to process order
+    NotFoundError:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          example: not_found
+    Product:
+      type: object
+      required:
+        - id
+        - sku
+        - name
+        - price_cents
+        - qty
+      properties:
+        id: { type: integer }
+        sku: { type: string, maxLength: 64 }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        price_cents: { type: integer, minimum: 0 }
+        qty: { type: integer, minimum: 0 }
+        image_key: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    ListProductsResponse:
+      type: object
+      required:
+        - success
+        - products
+      properties:
+        success: { type: boolean, enum: [true] }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        limit: { type: integer }
+        offset: { type: integer }
+    GetProductResponse:
+      type: object
+      required:
+        - success
+        - product
+      properties:
+        success: { type: boolean, enum: [true] }
+        product: { $ref: '#/components/schemas/Product' }
+    PrivacyExportResponse:
+      type: object
+      required:
+        - success
+        - orders
+        - audit_events
+        - idempotency_keys
+      properties:
+        success: { type: boolean, enum: [true] }
+        orders:
+          type: array
+          items: { $ref: '#/components/schemas/OrderRow' }
+        audit_events:
+          type: array
+          items:
+            type: object
+        idempotency_keys:
+          type: array
+          items:
+            type: object
+    PrivacyEraseResponse:
+      type: object
+      required:
+        - success
+        - erased
+      properties:
+        success: { type: boolean, enum: [true] }
+        erased:
+          type: object
+          required:
+            - order_links
+            - audit_actor_links
+            - idempotency_keys
+          properties:
+            order_links: { type: integer }
+            audit_actor_links: { type: integer }
+            idempotency_keys: { type: integer }

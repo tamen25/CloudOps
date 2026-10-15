@@ -288,6 +288,12 @@ variable "waf_logging_enabled" {
   default = true
 }
 
+#Closes backlog #102. WAF CloudWatch log retention; per-env override.
+variable "waf_log_retention_days" {
+  type    = number
+  default = 30
+}
+
 #Observability.
 variable "order_api_namespace" {
   type    = string
@@ -525,4 +531,371 @@ variable "cost_alert_email" {
 variable "cost_anomaly_threshold_percent" {
   type    = number
   default = 20
+}
+
+#FinOps hard-cap stop-loss (#139).
+variable "enable_budget_hardcap_action" {
+  type    = bool
+  default = false
+}
+
+#Defines the budget hard-cap threshold percent input value.
+variable "budget_hardcap_threshold_percent" {
+  type    = number
+  default = 120
+}
+
+#Defines the budget hard-cap target role names input value.
+variable "budget_hardcap_target_role_names" {
+  type    = list(string)
+  default = []
+}
+
+#─── Auth (#80) — Cognito User Pool + Hosted UI ────────────────────────────
+variable "enable_auth" {
+  description = "Provision Cognito User Pool + storefront app client (closes backlog #80)."
+  type        = bool
+  default     = false
+}
+
+variable "auth_route53_zone_id" {
+  description = "Route 53 hosted zone ID for the apex domain. Required when auth_create_hosted_ui_domain=true."
+  type        = string
+  default     = ""
+}
+
+variable "auth_create_hosted_ui_domain" {
+  description = "Provision the custom Hosted UI domain auth.<domain>. Requires an ACM cert in us-east-1."
+  type        = bool
+  default     = false
+}
+
+variable "auth_hosted_ui_acm_certificate_arn" {
+  description = "ACM certificate ARN (us-east-1) for auth.<domain>."
+  type        = string
+  default     = ""
+}
+
+variable "auth_callback_urls" {
+  description = "OAuth callback URLs. Defaults to https://<domain>/auth/callback when empty."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_logout_urls" {
+  description = "OAuth sign-out URLs. Defaults to https://<domain>/ when empty."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_password_minimum_length" {
+  description = "Cognito password policy minimum length."
+  type        = number
+  default     = 12
+}
+
+variable "auth_mfa_configuration" {
+  description = "Cognito MFA mode: OFF / ON / OPTIONAL."
+  type        = string
+  default     = "OPTIONAL"
+}
+
+variable "auth_id_token_validity_minutes" {
+  description = "ID token validity in minutes."
+  type        = number
+  default     = 60
+}
+
+variable "auth_access_token_validity_minutes" {
+  description = "Access token validity in minutes."
+  type        = number
+  default     = 60
+}
+
+variable "auth_refresh_token_validity_days" {
+  description = "Refresh token validity in days."
+  type        = number
+  default     = 30
+}
+
+variable "auth_admin_group_name" {
+  description = "Cognito group name that gates storefront /admin/* routes."
+  type        = string
+  default     = "admin"
+}
+
+#─── Storefront Search (#82) ───────────────────────────────────────────────
+variable "enable_storefront_search" {
+  description = "Provision API GW HTTP + Lambda search-gateway → Express _internal/search."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_search_create_custom_domain" {
+  description = "Create the search.<domain_name> custom domain + Route 53 alias."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_search_subdomain" {
+  description = "Subdomain for the search API."
+  type        = string
+  default     = "search"
+}
+
+variable "storefront_search_acm_certificate_arn" {
+  description = "ACM certificate ARN for search.<domain_name> (same region as the API GW)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_private_subnet_ids" {
+  description = "Private subnet IDs for the Lambda VPC config. Default empty — set when enable_storefront_search=true."
+  type        = list(string)
+  default     = []
+}
+
+variable "storefront_search_lambda_extra_sgs" {
+  description = "Extra security group IDs to attach to the Lambda ENIs (e.g. an in-cluster SG that order-api allows on 3000)."
+  type        = list(string)
+  default     = []
+}
+
+variable "storefront_search_order_api_internal_url" {
+  description = "Internal URL Lambda calls to reach Express _internal/search (e.g. http://order-api.cloudops.svc.cluster.local:3000)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_hmac_parameter_name" {
+  description = "SSM Parameter Store name (SecureString) holding the order-api INTERNAL_HMAC_SECRET. Empty disables SSM read; Lambda falls back to its own env var."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_search_lambda_memory_mb" {
+  description = "Lambda memory size."
+  type        = number
+  default     = 256
+}
+
+variable "storefront_search_lambda_timeout_seconds" {
+  description = "Lambda timeout."
+  type        = number
+  default     = 5
+}
+
+variable "storefront_search_otel_endpoint" {
+  description = "OTEL_EXPORTER_OTLP_ENDPOINT for the Lambda."
+  type        = string
+  default     = ""
+}
+
+#─── Storefront shared namespace / SA names (used by cart, checkout, etc.) ─
+variable "storefront_namespace" {
+  description = "Kubernetes namespace where the storefront Deployment lives."
+  type        = string
+  default     = "storefront"
+}
+
+variable "storefront_service_account" {
+  description = "Kubernetes ServiceAccount name for the storefront pod."
+  type        = string
+  default     = "storefront"
+}
+
+#─── Storefront Cart (#84) ─────────────────────────────────────────────────
+variable "enable_storefront_cart" {
+  description = "Provision the cloudops-cart-<env> Dynamo table + IRSA role."
+  type        = bool
+  default     = false
+}
+
+#─── Storefront Events (#85) ───────────────────────────────────────────────
+variable "enable_storefront_events" {
+  description = "Provision the orders-events Kinesis Data Stream + publisher policy."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_events_retention_hours" {
+  description = "Kinesis stream retention in hours (AWS minimum 24, maximum 8760)."
+  type        = number
+  default     = 24
+}
+
+variable "storefront_events_kms_key_arn" {
+  description = "KMS CMK ARN. Empty falls back to alias/aws/kinesis."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_events_order_api_role_name" {
+  description = "Name (not ARN) of the order-api IRSA role to attach the publisher policy to. Sourced from the cluster stack output."
+  type        = string
+  default     = ""
+}
+
+#─── Storefront Realtime (#86) ─────────────────────────────────────────────
+variable "enable_storefront_realtime" {
+  description = "Provision API GW WebSocket + 3 Lambdas + connection-registry Dynamo."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_realtime_create_custom_domain" {
+  description = "Create ws.<domain_name> custom domain + Route 53 alias."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_realtime_ws_subdomain" {
+  description = "Subdomain for the WebSocket API."
+  type        = string
+  default     = "ws"
+}
+
+variable "storefront_realtime_acm_certificate_arn" {
+  description = "ACM certificate ARN for ws.<domain_name> (same region as the WS API)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_realtime_fanout_dlq_arn" {
+  description = "Optional SQS DLQ ARN for the fanout Lambda. Empty disables DLQ."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_realtime_ws_token_secret_arn" {
+  description = "Secrets Manager ARN for the shared WS ticket signing secret used by storefront and ws-connect."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_realtime_storefront_irsa_role_name" {
+  description = "Storefront IRSA role name to grant realtime connection cleanup during privacy erasure."
+  type        = string
+  default     = ""
+}
+
+#─── Storefront Checkout (#87) ─────────────────────────────────────────────
+variable "enable_storefront_checkout" {
+  description = "Provision Step Functions checkout saga + SQS email queue + email Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "storefront_checkout_order_api_url" {
+  description = "Internal URL Step Functions calls for POST /order (e.g. http://order-api.cloudops.svc.cluster.local:3000)."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_checkout_ses_source_email" {
+  description = "Verified SES identity for order-confirmation emails. Empty disables SES + email policy."
+  type        = string
+  default     = ""
+}
+
+variable "storefront_checkout_storefront_irsa_role_name" {
+  description = "Storefront IRSA role name to grant states:StartExecution. Empty skips the inline policy attachment."
+  type        = string
+  default     = ""
+}
+
+#─── Polyglot mesh ────────────────────────────────────────────────────────────
+variable "enable_mesh" {
+  description = "Deploy the polyglot service mesh (api-gateway + pricing + ...). Requires enable_eks + enable_observability."
+  type        = bool
+  default     = false
+}
+
+variable "mesh_namespace" {
+  description = "Kubernetes namespace for mesh services."
+  type        = string
+  default     = "cloudops"
+}
+
+variable "mesh_replicas" {
+  description = "Replica count for each mesh service (dev default 1)."
+  type        = number
+  default     = 1
+}
+
+variable "mesh_gateway_image" {
+  description = "Container image for the api-gateway service (set at deploy time from the pushed tag)."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_pricing_image" {
+  description = "Container image for the pricing service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_inventory_image" {
+  description = "Container image for the inventory service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_fraud_image" {
+  description = "Container image for the fraud service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_payment_image" {
+  description = "Container image for the payment service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_ledger_image" {
+  description = "Container image for the ledger service."
+  type        = string
+  default     = ""
+}
+
+variable "mesh_projection_image" {
+  description = "Container image for the projection-worker service."
+  type        = string
+  default     = ""
+}
+
+#─── Load generator ───────────────────────────────────────────────────────────
+variable "enable_loadgen" {
+  description = "Deploy the load generator (control API + trickle CronJob). Requires enable_mesh."
+  type        = bool
+  default     = false
+}
+
+variable "mesh_loadgen_image" {
+  description = "Container image for the loadgen service."
+  type        = string
+  default     = ""
+}
+
+variable "loadgen_enable_trickle" {
+  description = "Run the steady-trickle CronJob so the service map is never empty."
+  type        = bool
+  default     = true
+}
+
+variable "loadgen_trickle_rps" {
+  type    = number
+  default = 3
+}
+
+variable "loadgen_trickle_duration_seconds" {
+  type    = number
+  default = 60
+}
+
+variable "loadgen_enable_chaos" {
+  description = "Grant loadgen namespace-scoped pod-delete RBAC + expose /chaos/kill for real pod-kill fault injection (#143). OFF by default; app guards (mesh allowlist + dry-run default) still apply when on."
+  type        = bool
+  default     = false
 }

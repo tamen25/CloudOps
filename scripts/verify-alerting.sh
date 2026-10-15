@@ -78,6 +78,26 @@ for rule in order-api-slo-availability order-api-slo-latency order-api-slo-throu
   fi
 done
 
+#── 2b. Alertmanager self-monitor PrometheusRule (closes backlog #99) ────────
+info "2b. Alertmanager self-monitor PrometheusRule"
+if kubectl get prometheusrule alertmanager-self-monitor -n "$NAMESPACE_MONITORING" >/dev/null 2>&1; then
+  ok "alertmanager-self-monitor"
+  #Confirm the three alert names the rule should expose.
+  am_alerts=$(kubectl get prometheusrule alertmanager-self-monitor \
+    -n "$NAMESPACE_MONITORING" \
+    -o jsonpath='{.spec.groups[0].rules[*].alert}' 2>/dev/null || echo "")
+  for expected in AlertmanagerDown AlertmanagerConfigSyncFailing AlertmanagerNotificationsFailing; do
+    if echo "$am_alerts" | grep -qw "$expected"; then
+      ok "  rule: $expected"
+    else
+      fail "  rule: $expected missing — alertmanager_self_monitor.tf is out of date"
+    fi
+  done
+else
+  #Skip rather than fail when AM is intentionally off (var.enable_alertmanager=false).
+  info "alertmanager-self-monitor not found — AM may be disabled in this env"
+fi
+
 #── 3. Grafana alert ConfigMaps picked up by sidecar ──────────────────────────
 info "3. Grafana alert ConfigMaps (grafana_alert=1)"
 alert_cms=$(kubectl get configmap -A -l "grafana_alert=1" \

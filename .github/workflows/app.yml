@@ -76,6 +76,13 @@ jobs:
   #─────────────────────────────────────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
+    #Gate: push-to-main runs only fire when the repository variable
+    #AUTO_RUN_ON_MERGE is set to "true". PR + workflow_dispatch always run.
+    #Toggle: `gh variable set AUTO_RUN_ON_MERGE --body true` to enable;
+    #`gh variable delete AUTO_RUN_ON_MERGE` to disable. Default: disabled.
+    #manifest-validation, build-and-push, deploy, integration-test all chain
+    #through `needs: test`, so disabling here cascade-skips the whole pipeline.
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@v5
 
@@ -134,19 +141,24 @@ jobs:
         run: npm ci
         working-directory: apps/order-api
 
+      #All ARN values below are AWS-documentation example account (123456789012)
+      #placeholders used ONLY to satisfy kubeconform schema validation
+      #(closes backlog #119). They never reach a cluster — real ARNs come from
+      #terraform outputs in the deploy job below.
       - name: Render Kubernetes manifests
         env:
           ORDER_API_NAMESPACE: cloudops
           ORDER_API_SERVICE_ACCOUNT: order-api
-          ORDER_API_IRSA_ROLE_ARN: arn:aws:iam::123456789012:role/cloudops-order-api-irsa
+          ORDER_API_IRSA_ROLE_ARN: arn:aws:iam::123456789012:role/PLACEHOLDER-not-real
           ORDER_API_IMAGE: example.com/order-api:latest
           ORDER_API_ENVIRONMENT: dev
+          ORDER_API_REPLICAS: "2"
           AWS_REGION: us-east-1
           DB_NAME: cloudops
-          DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:123456789012:secret:cloudops-db
+          DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:123456789012:secret:PLACEHOLDER-not-real
           OTEL_ENDPOINT: https://otel.example.com
           OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,k8s.cluster.name=cloudops-dev-cluster
-          ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/example
+          ACM_CERT_ARN: arn:aws:acm:us-east-1:123456789012:certificate/PLACEHOLDER-not-real
           ORDER_API_HOST: api.example.com
           API_KEY_SECRET_ARN: ""
           IMAGE_TAG: validate
@@ -159,6 +171,12 @@ jobs:
           OIDC_AUDIENCE: ""
           OIDC_JWKS_URL: ""
           OIDC_REQUIRED_SCOPES: ""
+          #Kinesis stream — empty during manifest validation; real value wired
+          #into the deploy step below.
+          KINESIS_STREAM_NAME: ""
+          #CSRF Origin allow-list (closes backlog #97) — empty during manifest
+          #validation; deploy step reads from secrets/terraform output.
+          ALLOWED_ORIGINS: ""
         run: apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s /tmp/order-api-k8s
 
       #kubeval is unmaintained; switched to the actively maintained
@@ -249,7 +267,7 @@ jobs:
     #Closes backlog #54 — also gated off when promoting an existing digest
     #so a prod approval cannot trigger a rebuild that diverges from the
     #signed image already validated in lower envs.
-    if: github.event_name != 'pull_request' && inputs.promote_digest == ''
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && inputs.promote_digest == '')
     runs-on: ubuntu-latest
     needs: test
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
@@ -455,7 +473,7 @@ jobs:
   image-scan:
     #Skipped on promotion (#54) — the digest was already scanned in the env
     #where it was first built and pushed.
-    if: github.event_name != 'pull_request' && inputs.promote_digest == ''
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && inputs.promote_digest == '')
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
@@ -539,7 +557,7 @@ jobs:
     #Skip when the override input is explicitly set to true.
     #For push triggers (no inputs), github.event.inputs.override_budget_check
     #is null, which evaluates to != 'true', so the job runs normally.
-    if: ${{ github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true' }}
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -683,7 +701,7 @@ jobs:
     #`!cancelled() && !failure()` lets deploy run when those upstream
     #jobs were skipped but lets a real failure still block.
     needs: [budget-check, manifest-validation, build-and-push, image-scan]
-    if: ${{ github.event_name != 'pull_request' && !cancelled() && !failure() && needs.manifest-validation.result == 'success' && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped') }}
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && !cancelled() && !failure() && needs.manifest-validation.result == 'success' && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped'))
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -794,6 +812,12 @@ jobs:
           OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
           OIDC_REQUIRED_SCOPES="${{ secrets.OIDC_REQUIRED_SCOPES }}"
 
+          #Kinesis stream (closes backlog #85). Empty disables publishing.
+          KINESIS_STREAM_NAME=$(echo "$TF_VARS" | grep "^kinesis_stream_name" | cut -d'"' -f2 || echo "")
+          #CSRF Origin allow-list (closes backlog #97). Comma-separated; empty=permissive.
+          #In staging/prod set to the storefront + admin origins.
+          ALLOWED_ORIGINS="${{ secrets.ALLOWED_ORIGINS }}"
+
           TF_KEY_ARN=$(terraform -chdir=stacks/cluster output -raw order_api_api_key_secret_arn 2>/dev/null || echo "")
           if [ "$ORDER_API_ENVIRONMENT" != "dev" ] && [ "$ORDER_API_ENVIRONMENT" != "test" ] && [ "$ORDER_API_ENVIRONMENT" != "local" ]; then
             if [ -z "$TF_KEY_ARN" ]; then
@@ -826,6 +850,9 @@ jobs:
             echo "OIDC_AUDIENCE=${OIDC_AUDIENCE:-}"
             echo "OIDC_JWKS_URL=${OIDC_JWKS_URL:-}"
             echo "OIDC_REQUIRED_SCOPES=${OIDC_REQUIRED_SCOPES:-}"
+            echo "KINESIS_STREAM_NAME=${KINESIS_STREAM_NAME:-}"
+            echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}"
+            echo "ORDER_API_REPLICAS=${ORDER_API_REPLICAS:-2}"
           } >> "$GITHUB_ENV"
 
       #── Signature gate ────────────────────────────────────────────────────────
@@ -926,7 +953,7 @@ jobs:
   #Job 7: Integration tests against live endpoints
   #─────────────────────────────────────────────────────────────────────────────
   integration-test:
-    if: github.event_name != 'pull_request'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request')
     runs-on: ubuntu-latest
     needs: deploy
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}

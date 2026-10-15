@@ -11,7 +11,9 @@
 resource "aws_eks_cluster" "main" {
   #checkov:skip=CKV_AWS_39:Public endpoint intentionally enabled for GitHub Actions OIDC access from CI/CD
   #checkov:skip=CKV_AWS_38:Public endpoint CIDR restriction not applied - GitHub Actions IPs are dynamic
-  #checkov:skip=CKV_AWS_58:EKS secrets encryption requires dedicated KMS key - accepted risk for dev environment
+  #CKV_AWS_58 (EKS secrets encryption) is now gated on env via
+  #local.secrets_encryption_enabled — staging/prod get a CMK, dev opts out
+  #to keep overnight teardown cheap (closes backlog #111).
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster.arn
   version  = var.kubernetes_version
@@ -21,6 +23,16 @@ resource "aws_eks_cluster" "main" {
     endpoint_private_access = var.endpoint_private_access
     endpoint_public_access  = var.endpoint_public_access
     public_access_cidrs     = var.endpoint_public_access ? var.endpoint_public_access_cidrs : null
+  }
+
+  dynamic "encryption_config" {
+    for_each = local.secrets_encryption_enabled ? [1] : []
+    content {
+      resources = ["secrets"]
+      provider {
+        key_arn = aws_kms_key.eks_secrets[0].arn
+      }
+    }
   }
 
   #API_AND_CONFIG_MAP lets us manage cluster access via aws-auth ConfigMap *and*

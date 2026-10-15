@@ -1,0 +1,10 @@
+{
+  "name": "order-email",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.mjs",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.511.0"
+  }
+}

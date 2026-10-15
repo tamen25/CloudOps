@@ -24,6 +24,8 @@ resource "terraform_data" "toggle_guard" {
     enable_alertmanager                  = var.enable_alertmanager
     enable_external_secrets              = var.enable_external_secrets
     enable_waf                           = var.enable_waf
+    enable_mesh                          = var.enable_mesh
+    enable_loadgen                       = var.enable_loadgen
     self_healing_alb_arn_suffix          = var.self_healing_alb_arn_suffix
     self_healing_target_group_arn_suffix = var.self_healing_target_group_arn_suffix
   }
@@ -82,6 +84,16 @@ resource "terraform_data" "toggle_guard" {
     precondition {
       condition     = !(var.buckets_replication_destination_arn != "" && !var.buckets_versioning)
       error_message = "buckets_replication_destination_arn requires buckets_versioning=true."
+    }
+
+    precondition {
+      condition     = !var.enable_mesh || (var.enable_eks && var.enable_observability)
+      error_message = "enable_mesh=true requires enable_eks=true and enable_observability=true (the kubernetes provider must be real, not the localhost fallback)."
+    }
+
+    precondition {
+      condition     = !var.enable_loadgen || var.enable_mesh
+      error_message = "enable_loadgen=true requires enable_mesh=true (the loadgen targets the in-cluster api-gateway)."
     }
   }
 }
@@ -169,6 +181,10 @@ locals {
     ManagedBy   = "Terraform"
     Stack       = "platform"
   }
+
+  #OTLP endpoint the mesh services export to. Same ALB-fronted collector the
+  #apps use; empty when observability is off so the SDKs no-op (no retry storm).
+  mesh_otel_endpoint = var.enable_observability ? "https://otel.${var.domain_name}" : ""
 }
 
 #Wires the ingress module into this stack.
@@ -198,6 +214,7 @@ module "ingress" {
   waf_rate_limit_per_5min = var.waf_rate_limit_per_5min
   waf_geo_block_countries = var.waf_geo_block_countries
   waf_logging_enabled     = var.waf_logging_enabled
+  waf_log_retention_days  = var.waf_log_retention_days
 
   tags = local.common_tags
 }
@@ -329,6 +346,10 @@ module "finops" {
   cost_alert_email               = var.cost_alert_email
   cost_anomaly_threshold_percent = var.cost_anomaly_threshold_percent
 
+  enable_budget_hardcap_action     = var.enable_budget_hardcap_action
+  budget_hardcap_threshold_percent = var.budget_hardcap_threshold_percent
+  budget_hardcap_target_role_names = var.budget_hardcap_target_role_names
+
   eks_cluster_name = var.enable_observability ? local.eks_cluster_name : ""
   rds_instance_id  = local.rds_instance_id
 
@@ -368,4 +389,349 @@ module "self_healing" {
   tags = local.common_tags
 
   depends_on = [module.observability]
+}
+
+#Wires the auth module (Cognito User Pool + Hosted UI) — closes backlog #80.
+module "auth" {
+  count  = var.enable_auth ? 1 : 0
+  source = "../../modules/auth"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  domain_name                   = var.domain_name
+  route53_zone_id               = var.auth_route53_zone_id
+  create_hosted_ui_domain       = var.auth_create_hosted_ui_domain
+  hosted_ui_acm_certificate_arn = var.auth_hosted_ui_acm_certificate_arn
+
+  callback_urls = length(var.auth_callback_urls) > 0 ? var.auth_callback_urls : [
+    "https://${var.domain_name}/auth/callback",
+  ]
+  logout_urls = length(var.auth_logout_urls) > 0 ? var.auth_logout_urls : [
+    "https://${var.domain_name}/",
+  ]
+
+  password_minimum_length       = var.auth_password_minimum_length
+  mfa_configuration             = var.auth_mfa_configuration
+  id_token_validity_minutes     = var.auth_id_token_validity_minutes
+  access_token_validity_minutes = var.auth_access_token_validity_minutes
+  refresh_token_validity_days   = var.auth_refresh_token_validity_days
+  admin_group_name              = var.auth_admin_group_name
+
+  tags = local.common_tags
+}
+
+#Wires the storefront-search module (closes backlog #82).
+#Requires enable_auth=true so the JWT authorizer has a User Pool to point at.
+module "storefront_search" {
+  count  = var.enable_storefront_search ? 1 : 0
+  source = "../../modules/storefront-search"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = var.region
+  domain_name  = var.domain_name
+
+  create_custom_domain = var.storefront_search_create_custom_domain
+  search_subdomain     = var.storefront_search_subdomain
+  acm_certificate_arn  = var.storefront_search_acm_certificate_arn
+  route53_zone_id      = local.route53_zone_id
+
+  cognito_user_pool_id = var.enable_auth ? module.auth[0].user_pool_id : ""
+  cognito_client_id    = var.enable_auth ? module.auth[0].storefront_client_id : ""
+
+  private_subnet_ids          = var.storefront_search_private_subnet_ids
+  vpc_link_security_group_ids = var.storefront_search_lambda_extra_sgs
+  order_api_internal_url      = var.storefront_search_order_api_internal_url
+  hmac_secret_parameter_name  = var.storefront_search_hmac_parameter_name
+
+  lambda_memory_mb       = var.storefront_search_lambda_memory_mb
+  lambda_timeout_seconds = var.storefront_search_lambda_timeout_seconds
+  otel_endpoint          = var.storefront_search_otel_endpoint
+
+  tags = local.common_tags
+
+  depends_on = [module.auth]
+}
+
+#Wires the storefront-checkout module (closes backlog #87).
+module "storefront_checkout" {
+  count  = var.enable_storefront_checkout ? 1 : 0
+  source = "../../modules/storefront-checkout"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  region                    = var.region
+  order_api_url             = var.storefront_checkout_order_api_url
+  ses_source_email          = var.storefront_checkout_ses_source_email
+  storefront_irsa_role_name = var.storefront_checkout_storefront_irsa_role_name
+
+  tags = local.common_tags
+}
+
+#Wires the storefront-realtime module (closes backlog #86).
+module "storefront_realtime" {
+  count  = var.enable_storefront_realtime ? 1 : 0
+  source = "../../modules/storefront-realtime"
+
+  project_name = var.project_name
+  environment  = var.environment
+  region       = var.region
+  domain_name  = var.domain_name
+
+  create_custom_domain = var.storefront_realtime_create_custom_domain
+  ws_subdomain         = var.storefront_realtime_ws_subdomain
+  acm_certificate_arn  = var.storefront_realtime_acm_certificate_arn
+  route53_zone_id      = local.route53_zone_id
+
+  cognito_issuer_url        = var.enable_auth ? module.auth[0].issuer_url : ""
+  cognito_client_id         = var.enable_auth ? module.auth[0].storefront_client_id : ""
+  ws_token_secret_arn       = var.storefront_realtime_ws_token_secret_arn
+  storefront_irsa_role_name = var.storefront_realtime_storefront_irsa_role_name
+
+  kinesis_stream_arn = var.enable_storefront_events ? module.storefront_events[0].stream_arn : ""
+  fanout_dlq_arn     = var.storefront_realtime_fanout_dlq_arn
+
+  tags = local.common_tags
+
+  depends_on = [module.auth, module.storefront_events]
+}
+
+#Wires the storefront-events module (closes backlog #85).
+module "storefront_events" {
+  count  = var.enable_storefront_events ? 1 : 0
+  source = "../../modules/storefront-events"
+
+  project_name             = var.project_name
+  environment              = var.environment
+  retention_hours          = var.storefront_events_retention_hours
+  kms_key_arn              = var.storefront_events_kms_key_arn
+  order_api_irsa_role_name = var.storefront_events_order_api_role_name
+
+  tags = local.common_tags
+}
+
+#Wires the storefront-cart module (closes backlog #84).
+module "storefront_cart" {
+  count  = var.enable_storefront_cart ? 1 : 0
+  source = "../../modules/storefront-cart"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  oidc_provider_arn         = local.oidc_provider_arn
+  oidc_provider_url         = local.oidc_provider_url
+  service_account_namespace = var.storefront_namespace
+  service_account_name      = var.storefront_service_account
+
+  tags = local.common_tags
+}
+
+#─── Polyglot mesh (distributed-tracing showcase) ─────────────────────────────
+#Each service is one instance of the generic modules/mesh. The trace root
+#(api-gateway, Node) fans out across pricing (Go) → inventory (Python) → fraud
+#(Java) → payment (Node) → ledger (Go); projection-worker (Python) consumes the
+#order-event stream. All gated on var.enable_mesh (requires EKS + observability).
+
+#pricing (Go) — quotes line items. Reachable only from the gateway.
+module "mesh_pricing" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "pricing"
+  namespace                = var.mesh_namespace
+  lang                     = "go"
+  image                    = var.mesh_pricing_image
+  container_port           = 8080
+  run_as_user              = 65532
+  needs_tmp_volume         = false
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#inventory (Python) — reserve stock. Reachable only from the gateway.
+module "mesh_inventory" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "inventory"
+  namespace                = var.mesh_namespace
+  lang                     = "python"
+  image                    = var.mesh_inventory_image
+  container_port           = 8080
+  run_as_user              = 1001
+  needs_tmp_volume         = true
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#fraud (Java) — risk score. Reachable only from the gateway.
+module "mesh_fraud" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "fraud"
+  namespace                = var.mesh_namespace
+  lang                     = "java"
+  image                    = var.mesh_fraud_image
+  container_port           = 8080
+  run_as_user              = 1001
+  needs_tmp_volume         = true
+  replicas                 = var.mesh_replicas
+  cpu_request              = "100m"
+  memory_request           = "256Mi"
+  cpu_limit                = "500m"
+  memory_limit             = "512Mi"
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#ledger (Go) — double-entry append. Reachable only from payment.
+module "mesh_ledger" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name                     = "ledger"
+  namespace                = var.mesh_namespace
+  lang                     = "go"
+  image                    = var.mesh_ledger_image
+  container_port           = 8080
+  run_as_user              = 65532
+  needs_tmp_volume         = false
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "payment" }
+
+  tags = local.common_tags
+}
+
+#payment (Node) — authorize + post to ledger. Reachable only from the gateway.
+module "mesh_payment" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "payment"
+  namespace        = var.mesh_namespace
+  lang             = "node"
+  image            = var.mesh_payment_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+
+  env = {
+    NODE_ENV   = var.environment
+    LEDGER_URL = var.enable_mesh ? module.mesh_ledger[0].service_url : ""
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+  ingress_from_labels      = { app = "api-gateway" }
+
+  tags = local.common_tags
+}
+
+#mesh-events — serverless async fan-out: Kinesis → enrichment-lambda →
+#EventBridge → analytics-lambda. Reuses the storefront-events order stream.
+module "mesh_events" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh-events"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  kinesis_stream_arn = var.enable_storefront_events ? module.storefront_events[0].stream_arn : ""
+
+  tags = local.common_tags
+}
+
+#projection-worker (Python) — Kinesis consumer building a read model. No
+#ingress (pulls from Kinesis); exposes /metrics for scraping.
+module "mesh_projection" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "projection-worker"
+  namespace        = var.mesh_namespace
+  lang             = "python"
+  image            = var.mesh_projection_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+
+  env = {
+    KINESIS_STREAM_NAME = var.enable_storefront_events ? module.storefront_events[0].stream_name : ""
+    AWS_REGION          = var.region
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  tags = local.common_tags
+}
+
+#api-gateway (Node) — mesh edge / trace root. Fans out to the whole chain.
+module "mesh_gateway" {
+  count  = var.enable_mesh ? 1 : 0
+  source = "../../modules/mesh"
+
+  name             = "api-gateway"
+  namespace        = var.mesh_namespace
+  lang             = "node"
+  image            = var.mesh_gateway_image
+  container_port   = 8080
+  run_as_user      = 1001
+  needs_tmp_volume = true
+  replicas         = var.mesh_replicas
+  cpu_request      = "25m"
+  memory_request   = "64Mi"
+  cpu_limit        = "150m"
+  memory_limit     = "128Mi"
+
+  env = {
+    NODE_ENV      = var.environment
+    PRICING_URL   = var.enable_mesh ? module.mesh_pricing[0].service_url : ""
+    INVENTORY_URL = var.enable_mesh ? module.mesh_inventory[0].service_url : ""
+    FRAUD_URL     = var.enable_mesh ? module.mesh_fraud[0].service_url : ""
+    PAYMENT_URL   = var.enable_mesh ? module.mesh_payment[0].service_url : ""
+  }
+
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  tags = local.common_tags
+}
+
+#loadgen — control API + steady-trickle CronJob. Targets only the gateway.
+module "loadgen" {
+  count  = var.enable_loadgen ? 1 : 0
+  source = "../../modules/loadgen"
+
+  namespace                = var.mesh_namespace
+  image                    = var.mesh_loadgen_image
+  gateway_url              = var.enable_mesh ? module.mesh_gateway[0].service_url : ""
+  environment              = var.environment
+  replicas                 = var.mesh_replicas
+  otel_endpoint            = local.mesh_otel_endpoint
+  otel_resource_attributes = "deployment.environment=${var.environment}"
+
+  enable_trickle           = var.loadgen_enable_trickle
+  trickle_rps              = var.loadgen_trickle_rps
+  trickle_duration_seconds = var.loadgen_trickle_duration_seconds
+
+  enable_chaos = var.loadgen_enable_chaos
+
+  tags = local.common_tags
 }

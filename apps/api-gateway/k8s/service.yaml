@@ -1,0 +1,16 @@
+# api-gateway ClusterIP service. The ingress / loadgen targets this; it is the
+# only mesh service reachable from outside the mesh NetworkPolicy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

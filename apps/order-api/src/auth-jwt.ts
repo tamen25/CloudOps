@@ -24,6 +24,42 @@ export function hasAllScopes(present: Set<string>, required: Set<string>): boole
   return true;
 }
 
+// Closes backlog #104. Outcome labels for the jwt_verify_total Prometheus
+// counter. `jwks_unreachable` is the one OIDCJWKSUnreachable alerts on —
+// keep the literal in sync with modules/observability/jwks_alerts.tf.
+export type JwtOutcome =
+  | 'ok'
+  | 'expired'
+  | 'wrong_issuer'
+  | 'wrong_audience'
+  | 'invalid_claim'
+  | 'invalid_signature'
+  | 'missing_scope'
+  | 'jwks_unreachable'
+  | 'other';
+
+const JWT_ERROR_CODE_OUTCOMES: Record<string, JwtOutcome> = {
+  ERR_JWT_EXPIRED: 'expired',
+  ERR_JWS_SIGNATURE_VERIFICATION_FAILED: 'invalid_signature',
+};
+
+export function classifyJwtError(err: { code?: string; message?: string } | undefined): JwtOutcome {
+  if (!err) return 'other';
+  const code = (err.code || '').toUpperCase();
+  const mapped = JWT_ERROR_CODE_OUTCOMES[code];
+  if (mapped) return mapped;
+  const msg = (err.message || '').toLowerCase();
+  if (code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
+    if (msg.includes('iss')) return 'wrong_issuer';
+    if (msg.includes('aud')) return 'wrong_audience';
+    return 'invalid_claim';
+  }
+  if (msg.includes('fetch') || msg.includes('econn') || msg.includes('jwks') || msg.includes('timeout')) {
+    return 'jwks_unreachable';
+  }
+  return 'other';
+}
+
 export interface CreateJwtVerifierArgs {
   issuer: string;
   audience: string;
@@ -31,6 +67,7 @@ export interface CreateJwtVerifierArgs {
   requiredScopes?: Iterable<string>;
   logger?: Logger;
   jwksOptions?: Record<string, unknown>;
+  onOutcome?: (outcome: JwtOutcome) => void;
 }
 
 // Creates JWT verifier.
@@ -42,6 +79,7 @@ export function createJwtVerifier(args: CreateJwtVerifierArgs = {} as CreateJwtV
     requiredScopes = [],
     logger = { warn() {}, info() {}, error() {} },
     jwksOptions = {},
+    onOutcome = () => {},
   } = args;
 
   if (!issuer || !audience || !jwksUrl) {
@@ -70,15 +108,21 @@ export function createJwtVerifier(args: CreateJwtVerifierArgs = {} as CreateJwtV
       if (required.size > 0) {
         const present = parseScopes(payload as { scp?: unknown; scope?: unknown });
         if (!hasAllScopes(present, required)) {
-          logger.warn({ sub: payload.sub, present: [...present], required: [...required] }, 'jwt missing required scope');
+          // `sub` is a stable personal identifier. Keep enough signal for
+          // troubleshooting without writing the raw user handle to logs.
+          logger.warn({ hasSub: Boolean(payload.sub), present: [...present], required: [...required] }, 'jwt missing required scope');
+          onOutcome('missing_scope');
           return res.status(403).json({ error: 'forbidden', detail: 'missing scope' }); /* node:coverage ignore next */
         }
       }
 
       req.user = payload;
+      onOutcome('ok');
       return next();
     } catch (err: any) {
-      logger.warn({ err: err.code || err.message }, 'jwt verification failed');
+      const outcome = classifyJwtError(err);
+      logger.warn({ err: err.code || err.message, outcome }, 'jwt verification failed');
+      onOutcome(outcome);
       return res.status(401).json({ error: 'unauthorized', detail: 'invalid token' });
     }
   };

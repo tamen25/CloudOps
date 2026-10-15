@@ -1,10 +1,7 @@
 // This file contains auth config test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { assertAuthConfigured, UNAUTHENTICATED_ENVS } = require('../src/auth-config');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { assertAuthConfigured, UNAUTHENTICATED_ENVS } from '../src/auth-config';
 
 // Creates logger.
 function createLogger() {

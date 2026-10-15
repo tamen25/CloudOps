@@ -64,6 +64,13 @@ jobs:
   #─────────────────────────────────────────────────────────────────────────────
   quality:
     runs-on: ubuntu-latest
+    #Gate: push-to-main runs only fire when the repository variable
+    #AUTO_RUN_ON_MERGE is set to "true". PR + workflow_dispatch always run.
+    #Toggle: `gh variable set AUTO_RUN_ON_MERGE --body true` to enable;
+    #`gh variable delete AUTO_RUN_ON_MERGE` to disable. Default: disabled.
+    #All downstream jobs `needs: quality` (or chain through it), so disabling
+    #here cascade-skips the entire pipeline on merge.
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     permissions:
       contents: read
       security-events: write
@@ -210,7 +217,7 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     needs: quality
-    if: github.event_name != 'pull_request'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request')
     permissions:
       id-token: write
       contents: read
@@ -254,11 +261,23 @@ jobs:
       - name: terraform plan (layered stacks)
         id: plan
         shell: bash
+        env:
+          #Closes backlog #120 — exit 2 from -detailed-exitcode = drift, not failure.
+          TF_PLAN_DETAILED_EXITCODE: '1'
         run: |
           set -o pipefail
           #Plan foundation -> cluster -> platform against separate state keys.
+          set +e
           bash scripts/terraform-stacks.sh plan -lock=false -out=tfplan -no-color \
             2>&1 | tee plan-output.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" = "2" ]; then
+            echo "::warning::Terraform plan reports drift / pending changes — review plan-output.txt"
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$rc"
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
@@ -539,7 +558,7 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     needs: approve
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     steps:
       - uses: actions/checkout@v5
@@ -796,7 +815,7 @@ jobs:
   compliance-scan:
     runs-on: ubuntu-latest
     needs: apply
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write

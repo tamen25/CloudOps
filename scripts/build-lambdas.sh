@@ -23,6 +23,13 @@ LAMBDA_DIRS=(
   "modules/security/lambda_function/auto_remediation"
   "modules/security/lambda_function/compliance_scanner"
   "modules/security/lambda_function/kube_bench_processor"
+  "modules/storefront-search/lambda_function"
+  "modules/storefront-realtime/lambdas/connect"
+  "modules/storefront-realtime/lambdas/disconnect"
+  "modules/storefront-realtime/lambdas/fanout"
+  "modules/storefront-checkout/lambdas/email"
+  "modules/mesh-events/lambdas/enrichment"
+  "modules/mesh-events/lambdas/analytics"
 )
 
 #Handles needs install.

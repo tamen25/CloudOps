@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CloudOps Storefront — A storefront that survives 3 AM.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  /* ─── CloudOps Dim tokens (mirrors @theme in tokens.css) ──────────── */
+  :root {
+    --bg-base:     #0d1117;
+    --bg-raised:   #161b22;
+    --bg-elev:     #21262d;
+    --border-default: #30363d;
+    --border-muted:   #21262d;
+    --fg-base:    #cdd9e5;
+    --fg-muted:   #909dab;
+    --fg-subtle:  #687480;
+    --brand-300:  #99f6e4;
+    --brand-400:  #5eead4;
+    --brand-500:  #2dd4bf;
+    --brand-600:  #14b8a6;
+    --brand-700:  #0f766e;
+    --success:    #57ab5a;
+    --warning:    #c69026;
+    --danger:     #e5534b;
+    --info:       #539bf5;
+    /* AWS category colours — used only inside ArchPanel */
+    --aws-compute:    #ed7100;
+    --aws-database:   #3b48cc;
+    --aws-networking: #8c4fff;
+    --aws-security:   #dd344c;
+    --aws-integration:#e7157b;
+    --aws-analytics:  #5a4fcf;
+    --aws-ml:         #01a88d;
+
+    --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+    --font-display: 'Instrument Serif', Georgia, serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { overflow-x: clip; scroll-behavior: smooth; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg-base);
+    color: var(--fg-base);
+    font-family: var(--font-sans);
+    font-size: 16px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  ::selection { background: var(--brand-500); color: var(--bg-base); }
+  a { color: var(--brand-400); text-decoration: none; }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--brand-500);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ─── Background motifs (page-level, ultra-faint) ─────────────────── */
+  .line-grid {
+    background-image:
+      linear-gradient(rgba(48,54,61,0.30) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(48,54,61,0.30) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+  }
+  .dot-grid {
+    background-image: radial-gradient(rgba(94,234,212,0.18) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .noise {
+    position: absolute; inset: 0; pointer-events: none;
+    opacity: 0.04; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  .hero-orb {
+    position: absolute; pointer-events: none;
+    width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(45,212,191,0.22), rgba(45,212,191,0) 70%);
+    filter: blur(50px); opacity: 0.85;
+    animation: orb-drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes orb-drift {
+    from { transform: translate(0, 0); }
+    to   { transform: translate(80px, -40px); }
+  }
+
+  /* ─── Display type helpers ────────────────────────────────────────── */
+  .display { font-family: var(--font-display); font-weight: 400; line-height: 1.02; letter-spacing: -0.005em; }
+  .display-italic { font-family: var(--font-display); font-style: italic; font-weight: 400; line-height: 1.0; letter-spacing: -0.012em; }
+  .display-grad {
+    background: linear-gradient(180deg, #ffffff 0%, #cdd9e5 55%, var(--brand-400) 110%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .mono { font-family: var(--font-mono); }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--fg-subtle); display: inline-flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .e-tag { color: var(--brand-400); }
+  .eyebrow::before {
+    content: ''; display: inline-block; width: 8px; height: 8px;
+    border: 1px solid var(--brand-500); border-radius: 50%;
+    box-shadow: 0 0 6px rgba(45,212,191,0.5);
+  }
+
+  /* ─── Components ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 8px;
+    font-family: var(--font-sans); font-size: 14px; font-weight: 500;
+    border: 1px solid var(--border-default);
+    background: var(--bg-raised); color: var(--fg-base);
+    transition: all 0.18s ease; cursor: pointer; text-decoration: none;
+  }
+  .btn:hover { border-color: var(--brand-500); background: var(--bg-elev); }
+  .btn-primary {
+    background: linear-gradient(180deg, var(--brand-500), var(--brand-600));
+    color: #06181c; border-color: var(--brand-500);
+    box-shadow: 0 0 0 0 rgba(45,212,191,0.5), 0 1px 0 rgba(255,255,255,0.18) inset;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 28px rgba(45,212,191,0.45), 0 1px 0 rgba(255,255,255,0.18) inset;
+    color: #06181c;
+  }
+  .btn-ghost { background: transparent; border-color: var(--border-default); }
+  .btn .arr { transition: transform 0.18s; }
+  .btn:hover .arr { transform: translateX(3px); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 10.5px;
+    background: var(--bg-raised); color: var(--fg-muted);
+    border: 1px solid var(--border-default);
+  }
+  .badge-brand { color: var(--brand-400); border-color: rgba(94,234,212,0.25); background: rgba(45,212,191,0.06); }
+
+  .pill-live {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px; border-radius: 999px;
+    font-family: var(--font-mono); font-size: 11px;
+    background: rgba(45,212,191,0.08); color: var(--brand-400);
+    border: 1px solid rgba(94,234,212,0.22);
+  }
+  .pill-live .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--brand-400); box-shadow: 0 0 0 0 rgba(94,234,212,0.6);
+    animation: pulse-dot 2s ease-out infinite;
+  }
+  @keyframes pulse-dot {
+    0% { box-shadow: 0 0 0 0 rgba(94,234,212,0.55); }
+    70% { box-shadow: 0 0 0 9px rgba(94,234,212,0); }
+    100% { box-shadow: 0 0 0 0 rgba(94,234,212,0); }
+  }
+
+  .surface {
+    background: rgba(22,27,34,0.55);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    position: relative;
+  }
+  .surface-strong {
+    background: rgba(22,27,34,0.85);
+    border-color: rgba(94,234,212,0.18);
+  }
+
+  /* Section scaffolding */
+  section { position: relative; scroll-margin-top: 96px; padding: 96px 0; }
+  .container { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+  .container-wide { max-width: 1320px; margin: 0 auto; padding: 0 32px; }
+  .section-eyebrow { margin-bottom: 28px; }
+
+  /* Connecting vertical hairline between sections */
+  .connector {
+    height: 64px; width: 1px; margin: 0 auto;
+    background: linear-gradient(180deg,
+      rgba(48,54,61,0) 0%, rgba(48,54,61,0.45) 50%, rgba(48,54,61,0) 100%);
+  }
+
+  /* Scroll progress bar */
+  #scroll-progress {
+    position: fixed; top: 0; left: 0; height: 2px; width: 0%;
+    z-index: 80;
+    background: linear-gradient(90deg, transparent, var(--brand-400) 30%, var(--brand-500) 80%);
+    box-shadow: 0 0 14px rgba(45,212,191,0.55);
+    transition: width 80ms linear;
+  }
+  /* Navbar */
+  #navbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 70;
+    height: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px;
+    background: rgba(13,17,23,0.7);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border-bottom: 1px solid var(--border-muted);
+  }
+  #navbar .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-sans); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  #navbar .mark {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+    color: #06181c; display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+    box-shadow: 0 0 16px rgba(45,212,191,0.35);
+  }
+  #navbar .links { display: flex; gap: 22px; font-size: 13px; color: var(--fg-muted); }
+  #navbar .links a { color: inherit; padding: 4px 0; border-bottom: 1px solid transparent; transition: all 0.15s; }
+  #navbar .links a:hover { color: var(--fg-base); border-bottom-color: var(--brand-500); }
+  #navbar .right { display: flex; align-items: center; gap: 12px; }
+  @media (max-width: 720px) {
+    #navbar .links { display: none; }
+  }
+
+  /* Reveal */
+  .reveal { animation: revealUp 0.85s cubic-bezier(.2,.7,.3,1) both; }
+  .reveal-1 { animation-delay: 0.08s; }
+  .reveal-2 { animation-delay: 0.16s; }
+  .reveal-3 { animation-delay: 0.24s; }
+  .reveal-4 { animation-delay: 0.32s; }
+  .reveal-5 { animation-delay: 0.40s; }
+  @keyframes revealUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+    .hero-orb { animation: none !important; }
+  }
+
+  /* Code block tokens */
+  .tok-key { color: #79c0ff; }
+  .tok-kw  { color: #ff7b72; }
+  .tok-str { color: var(--brand-400); }
+  .tok-num { color: #f0883e; }
+  .tok-com { color: var(--fg-subtle); font-style: italic; }
+  .tok-fn  { color: #d2a8ff; }
+  .tok-tag { color: #7ee787; }
+  .tok-ident { color: var(--fg-base); }
+
+  /* Layout helpers */
+  .row { display: flex; }
+  .col { display: flex; flex-direction: column; }
+  .between { justify-content: space-between; }
+  .items-center { align-items: center; }
+  .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; } .gap-6 { gap: 24px; } .gap-8 { gap: 32px; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="scroll-progress"></div>
+  <nav id="navbar" aria-label="Primary">
+    <a href="#hero" class="brand">
+      <span class="mark">▲</span>
+      <span>CloudOps Storefront</span>
+    </a>
+    <div class="links">
+      <a href="#how-it-works">Platform</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#security">Security</a>
+    </div>
+    <div class="right">
+      <a class="btn btn-ghost" href="#" style="font-size:13px;padding:8px 14px">Docs</a>
+      <a class="btn btn-primary" href="#cta" style="font-size:13px;padding:8px 14px">GitHub <span class="arr">↗</span></a>
+    </div>
+  </nav>
+
+  <div id="root"></div>
+
+  <script type="text/babel" src="storefront/effects.jsx"></script>
+  <script type="text/babel" src="storefront/hero.jsx"></script>
+  <script type="text/babel" src="storefront/sections.jsx"></script>
+  <script type="text/babel" src="storefront/architecture.jsx"></script>
+  <script type="text/babel" src="storefront/security.jsx"></script>
+  <script type="text/babel" src="storefront/cta.jsx"></script>
+  <script type="text/babel" src="storefront/app.jsx"></script>
+</body>
+</html>

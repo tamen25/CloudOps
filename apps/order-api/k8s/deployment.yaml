@@ -5,7 +5,7 @@ metadata:
   name: order-api
   namespace: "${ORDER_API_NAMESPACE}"
 spec:
-  replicas: 2
+  replicas: ${ORDER_API_REPLICAS}
   selector:
     matchLabels:
       app: order-api
@@ -144,6 +144,37 @@ spec:
               value: "${OIDC_JWKS_URL}"
             - name: OIDC_REQUIRED_SCOPES
               value: "${OIDC_REQUIRED_SCOPES}"
+            #INTERNAL_HMAC_SECRET (closes backlog #81) — shared secret between
+            #order-api and the search-gateway Lambda + admin UI server. Empty
+            #disables `/_internal/*` routes (returns 503). Wired from
+            #Secrets Manager via External Secrets in non-dev envs.
+            - name: INTERNAL_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: order-api-internal
+                  key: hmac-secret
+                  optional: true
+            #INTERNAL_HMAC_SECRET_PREVIOUS (closes backlog #96) — optional
+            #grace-window key accepted alongside the active secret during
+            #rotation. ExternalSecret writes the prior value to
+            #`hmac-secret-previous`; clear it after every caller has rolled.
+            - name: INTERNAL_HMAC_SECRET_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: order-api-internal
+                  key: hmac-secret-previous
+                  optional: true
+            #ALLOWED_ORIGINS (closes backlog #97) — comma-separated allow-list
+            #for browser-originated POST/PUT/PATCH/DELETE. Empty/unset =
+            #permissive (dev only). Set to the storefront + admin origins in
+            #staging/prod. RSC server-to-server fetches do not send Origin
+            #and are always allowed.
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
+            #Kinesis order-event stream (closes backlog #85). Empty disables
+            #publishing — app continues to commit orders normally.
+            - name: KINESIS_STREAM_NAME
+              value: "${KINESIS_STREAM_NAME}"
           livenessProbe:
             httpGet:
               path: /health

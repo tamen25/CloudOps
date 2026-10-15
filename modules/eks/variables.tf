@@ -142,6 +142,15 @@ variable "endpoint_public_access_cidrs" {
   }
 }
 
+#── EKS secrets encryption (closes backlog #111) ─────────────────────────────
+
+#Defines the enable secrets encryption input value.
+variable "enable_secrets_encryption" {
+  description = "Encrypt Kubernetes secrets at rest with a dedicated CMK. Recommended for staging/prod. `null` (default) auto-enables for non-dev environments; set explicitly to `true`/`false` to override."
+  type        = bool
+  default     = null
+}
+
 #Tagging
 
 variable "tags" {

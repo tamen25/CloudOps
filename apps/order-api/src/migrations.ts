@@ -84,6 +84,9 @@ export async function runMigrations({ pool, logger }: RunMigrationsArgs): Promis
       }
 
       logger.info({ count: pending.length, migrations: pending }, 'applying migrations');
+      //Sequential by design: each applyMigration opens its own transaction and
+      //must commit before the next runs, so the advisory lock holder sees a
+      //consistent schema_migrations row at every step. Do not Promise.all().
       for (const name of pending) {
         await applyMigration(client, name, logger);
       }

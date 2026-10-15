@@ -1,0 +1,73 @@
+/*
+ * CloudOps Dim — design tokens
+ *
+ * Dark-only theme inspired by GitHub Dark Dimmed + Linear app palette.
+ * Single source of truth for colour, radius, focus ring. Tailwind v4
+ * @theme block exposes every token as a Tailwind utility key
+ * (bg-bg-base, text-fg-base, border-border-default, etc.). Same tokens
+ * are repeated as plain CSS custom properties in :root for non-Tailwind
+ * call sites (rendered email, third-party embeds).
+ *
+ * WCAG AA verified — see test/contrast.test.ts.
+ */
+
+@theme {
+  /* Surfaces — deep dark, GitHub Dark base. Deeper than Dimmed on purpose
+   * so the teal brand accent stays punchy and cards read as raised. */
+  --color-bg-base: #0d1117;
+  --color-bg-raised: #161b22;
+  --color-bg-elev: #21262d;
+
+  /* Borders */
+  --color-border-default: #30363d;
+  --color-border-muted: #21262d;
+
+  /* Text */
+  --color-fg-base: #cdd9e5;
+  --color-fg-muted: #909dab;
+  --color-fg-subtle: #687480;
+  --color-fg-invert: #1c2128;
+
+  /* Brand — teal */
+  --color-brand-400: #5eead4;
+  --color-brand-500: #2dd4bf;
+  --color-brand-600: #14b8a6;
+
+  /* State */
+  --color-success: #57ab5a;
+  --color-warning: #c69026;
+  --color-danger: #e5534b;
+  --color-info: #539bf5;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  /* Fonts */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "JetBrains Mono",
+    "SFMono-Regular", monospace;
+  --font-display: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+}
+
+:root {
+  --bg-base: #0d1117;
+  --bg-raised: #161b22;
+  --bg-elev: #21262d;
+  --border-default: #30363d;
+  --border-muted: #21262d;
+  --fg-base: #cdd9e5;
+  --fg-muted: #909dab;
+  --fg-subtle: #687480;
+  --fg-invert: #1c2128;
+  --brand-400: #5eead4;
+  --brand-500: #2dd4bf;
+  --brand-600: #14b8a6;
+  --success: #57ab5a;
+  --warning: #c69026;
+  --danger: #e5534b;
+  --info: #539bf5;
+  --focus-ring: rgb(45 212 191 / 0.6);
+}

@@ -272,7 +272,7 @@ export class LogsInstrumentation {
           || process.env.AWS_LAMBDA_FUNCTION_NAME
           || process.env.npm_package_name
           || "unknown_service",
-        "pe-lib-log-ver": "1.16.2",
+        "cloudops-log-ver": "0.1.0",
       };
 
       addRuntimeResourceAttributes(resourceAttributes);

@@ -1,0 +1,16 @@
+# inventory ClusterIP service. Reachable in-mesh as
+# inventory.${MESH_NAMESPACE}.svc.cluster.local on port 80.
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: inventory
+spec:
+  selector:
+    app: inventory
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

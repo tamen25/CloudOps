@@ -1,14 +1,10 @@
 // This file contains audit test logic for order API test.
-'use strict';
-
 // Backlog #73 — verify the audit log write is wired into the order create
 // path and uses the same tenant transaction. The actual RLS policy is
 // enforced by Postgres in deployed envs (see migrations/005_audit_events.sql).
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
-const { createApp } = require('../src/app');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp } from '../src/app';
 
 // Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
@@ -22,9 +18,13 @@ function makeRecordingPool({ failOrderInsert = false } = {}) {
       calls.push({ sql, params });
       if (/^BEGIN$|^COMMIT$|^ROLLBACK$/i.test(sql)) return { rows: [], rowCount: 0 };
       if (/set_config/i.test(sql)) return { rows: [], rowCount: 0 };
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 100 })), rowCount: skus.length };
+      }
       if (/^INSERT INTO orders/i.test(sql)) {
         if (failOrderInsert) throw new Error('insert blew up');
-        return { rows: [{ id: 1, order_id: params[0], items: params[1], total: params[2], environment: params[3], tenant_id: params[4] }], rowCount: 1 };
+        return { rows: [{ id: 1, order_id: params[0], items: params[1], total: params[2], environment: params[3], tenant_id: params[4], owner_sub: params[5] }], rowCount: 1 };
       }
       if (/^INSERT INTO audit_events/i.test(sql)) return { rows: [], rowCount: 1 };
       return { rows: [], rowCount: 0 };
@@ -100,6 +100,67 @@ test('failed POST /order writes a failure audit event after rollback', async () 
     assert.equal(statusCode, 500);
     assert.equal(result, 'failure');
     assert.equal(errorCode, 'internal_error');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /order writes kinesis_publish_failed audit row when publisher returns ok=false', async () => {
+  const { pool, calls } = makeRecordingPool();
+  const publishOrderEvent = async () => ({ ok: false, error: 'transport down' });
+  const { app } = createApp({
+    pool,
+    logger: silentLogger(),
+    nodeEnv: 'test',
+    apiKey: 'shared',
+    rateLimitMax: 1000,
+    publishOrderEvent,
+  });
+  const server = await new Promise((r) => {
+    const s = app.listen(0, '127.0.0.1', () => r(s));
+  });
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'shared', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(res.status, 201);
+    // First audit row is order.create success; second is the kinesis fallback.
+    const audits = calls.filter((c) => /^INSERT INTO audit_events/i.test(c.sql));
+    assert.equal(audits.length, 2, 'expected success + kinesis_publish_failed audit rows');
+    const [, , action, , , , result, errorCode] = audits[1].params;
+    assert.equal(action, 'order.created');
+    assert.equal(result, 'kinesis_publish_failed');
+    assert.equal(errorCode, 'transport down');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /order swallows publisher throw and still returns 201', async () => {
+  const { pool } = makeRecordingPool();
+  const publishOrderEvent = async () => { throw new Error('boom'); };
+  const { app } = createApp({
+    pool,
+    logger: silentLogger(),
+    nodeEnv: 'test',
+    apiKey: 'shared',
+    rateLimitMax: 1000,
+    publishOrderEvent,
+  });
+  const server = await new Promise((r) => {
+    const s = app.listen(0, '127.0.0.1', () => r(s));
+  });
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const res = await fetch(`${baseUrl}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'shared', 'X-Tenant-Id': 'acme' },
+      body: validBody,
+    });
+    assert.equal(res.status, 201);
   } finally {
     server.close();
   }

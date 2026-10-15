@@ -208,11 +208,20 @@ resource "aws_wafv2_web_acl_association" "alb" {
 }
 
 #CloudWatch log group for WAF logs (sampled blocked requests).
+#Retention configurable via var.waf_log_retention_days (closes backlog #102).
+#Dev default 30d; staging 90d; prod 365d. Set in environments/*.tfvars.
+#
+#Backlog #113 — long-term Glacier archive was considered and deferred:
+#CloudWatch Logs cannot lifecycle-tier directly to Glacier. Reaching that
+#shape requires a subscription filter → Kinesis Firehose → S3 + an S3
+#lifecycle rule transitioning to Glacier after 90d. That's a module-sized
+#change; revisit when prod compliance demands > 365d retention or when
+#audit asks for cheap cold storage of WAF logs.
 resource "aws_cloudwatch_log_group" "waf" {
   count = var.enable_waf && var.waf_logging_enabled ? 1 : 0
 
   name              = "aws-waf-logs-${var.name_prefix}"
-  retention_in_days = 30
+  retention_in_days = var.waf_log_retention_days
 
   tags = local.common_tags
 }

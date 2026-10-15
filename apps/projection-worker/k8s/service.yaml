@@ -1,0 +1,16 @@
+# projection-worker Service — exists for /metrics scraping + health, not for
+# request routing (the worker pulls from Kinesis).
+apiVersion: v1
+kind: Service
+metadata:
+  name: projection-worker
+  namespace: "${MESH_NAMESPACE}"
+  labels:
+    app: projection-worker
+spec:
+  selector:
+    app: projection-worker
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

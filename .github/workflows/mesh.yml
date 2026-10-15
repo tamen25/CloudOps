@@ -1,0 +1,250 @@
+# Mesh pipeline — per-service build/test/lint/scan for the polyglot mesh.
+# Each new mesh service is one row in the matrix. Test/lint/build run on PRs
+# and (when AUTO_RUN_ON_MERGE=true) on push; image build + push to ECR is a
+# commented activation block until per-service ECR repos + IRSA land
+# (mirrors the storefront.yml skeleton pattern, backlog #84/#121).
+#
+# Toolchains pinned to match local dev: Node 22, Go 1.22+, Python 3.12,
+# Java 17.
+
+name: Mesh Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api-gateway/**'
+      - 'apps/payment/**'
+      - 'apps/pricing/**'
+      - 'apps/ledger/**'
+      - 'apps/inventory/**'
+      - 'apps/projection-worker/**'
+      - 'apps/fraud/**'
+      - 'modules/mesh/**'
+      - 'modules/mesh-events/**'
+      - '.github/workflows/mesh.yml'
+  pull_request:
+    paths:
+      - 'apps/api-gateway/**'
+      - 'apps/payment/**'
+      - 'apps/pricing/**'
+      - 'apps/ledger/**'
+      - 'apps/inventory/**'
+      - 'apps/projection-worker/**'
+      - 'apps/fraud/**'
+      - 'modules/mesh/**'
+      - 'modules/mesh-events/**'
+      - '.github/workflows/mesh.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mesh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Node services ──────────────────────────────────────────────────────────
+  node:
+    runs-on: ubuntu-latest
+    # Same merge gate as app.yml: push to main only auto-runs when the repo
+    # variable is set. PRs + workflow_dispatch always run.
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, payment]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test (coverage-gated)
+        # Gates live in each service's package.json test:coverage script
+        # (api-gateway 90/80/90, payment 85/75/85 lines/branches/functions).
+        # Matches the Go (>=70%) and Java (JaCoCo 60%) gates — backlog #147.
+        run: npm run test:coverage
+      - name: Contract check (env-var drift)
+        run: npm run contract-check
+      - name: Build
+        run: npm run build
+      - name: Audit (high+)
+        run: npm run audit
+        continue-on-error: true
+
+  # ── Go services ──────────────────────────────────────────────────────────--
+  go:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [pricing, ledger]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Vet
+        run: go vet ./...
+      - name: Test (race + coverage)
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Coverage gate (>=70%)
+        run: |
+          pct=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          echo "pricing coverage: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 >= 70) ? 0 : 1 }' || {
+            echo "::error::coverage ${pct}% is below the 70% gate"; exit 1; }
+      - name: Build (static linux)
+        run: CGO_ENABLED=0 GOOS=linux go build -o /dev/null .
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+        continue-on-error: true
+
+  # ── Python services ─────────────────────────────────────────────────────---
+  python:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [inventory, projection-worker]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install (with test extras)
+        run: pip install -e ".[test]"
+      - name: Test (coverage-gated >=90%)
+        # Both services exclude their live-AWS boundary from coverage
+        # (inventory: tracing.py; projection-worker: poller.py) via
+        # [tool.coverage.run] omit. Testable code sits at 94%/99% — gate at
+        # 90% for headroom, matching the Go/Java gates — backlog #147.
+        run: pytest -q --cov --cov-report=term-missing --cov-fail-under=90
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit || true
+        continue-on-error: true
+
+  # ── Java services ───────────────────────────────────────────────────────---
+  java:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [fraud]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify (test + jacoco coverage gate)
+        run: mvn -B verify
+
+  # ── Serverless lambdas (node:test) ──────────────────────────────────────---
+  lambdas:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        lambda: [enrichment, analytics]
+    defaults:
+      run:
+        working-directory: modules/mesh-events/lambdas/${{ matrix.lambda }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install (deps for the enrichment SDK; analytics has none)
+        run: npm install --no-package-lock --no-audit --no-fund
+      - name: Test
+        run: node --test
+
+  # ── Manifest validation (render + kubeconform) ──────────────────────────────
+  manifest-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install render deps (api-gateway provides render-k8s.ts deps)
+        run: npm ci --prefix apps/api-gateway
+      - name: Validate mesh manifests
+        run: ./scripts/validate-k8s-manifests.sh
+        env:
+          MESH_ONLY: '1'
+
+  # ── Filesystem vuln scan (Trivy) ─────────────────────────────────────────---
+  trivy-fs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Trivy filesystem scan (mesh apps)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: apps
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+
+  # ── Image build + push (ACTIVATION PENDING) ──────────────────────────────---
+  # Activate when each mesh service has an ECR repository + the deploy job sets
+  # mesh_*_image from the pushed digest. Until then, image build/push lives in
+  # this commented block (same pattern as storefront.yml build-and-push, #121).
+  #
+  # build-and-push:
+  #   needs: [node, go]
+  #   if: github.event_name != 'pull_request'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     id-token: write   # OIDC to assume AWS_GITHUB_ACTIONS_ROLE_ARN
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - { service: api-gateway, context: apps/api-gateway }
+  #         - { service: pricing,     context: apps/pricing }
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+  #         aws-region: ${{ secrets.AWS_REGION }}
+  #     - uses: aws-actions/amazon-ecr-login@v2
+  #     - run: |
+  #         docker build -t "$ECR/${{ matrix.service }}:$GITHUB_SHA" ${{ matrix.context }}
+  #         docker push "$ECR/${{ matrix.service }}:$GITHUB_SHA"

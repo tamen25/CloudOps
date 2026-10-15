@@ -1,0 +1,163 @@
+#Storefront pipeline — Next.js 15 App Router on EKS (closes backlog #79).
+#Structure mirrors app.yml: test → manifest-validation → build-and-push →
+#image-scan → deploy → integration-test → notify. AWS-touching jobs gated
+#on github.event_name != 'pull_request' so PRs validate without pushing.
+#
+#Push-to-main runs gated on the AUTO_RUN_ON_MERGE repo variable (closes
+#backlog #91). PR + workflow_dispatch always fire.
+
+name: Storefront Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/storefront/**'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
+      - 'scripts/validate-k8s-manifests.sh'
+      - '.github/workflows/storefront.yml'
+  pull_request:
+    paths:
+      - 'apps/storefront/**'
+      - 'scripts/terraform-stacks.sh'
+      - 'scripts/write-ci-tfvars.sh'
+      - 'scripts/validate-k8s-manifests.sh'
+      - '.github/workflows/storefront.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+      promote_digest:
+        description: 'Image digest to promote (sha256:...). When set, skip build/scan and deploy this digest.'
+        required: false
+        type: string
+        default: ''
+
+env:
+  TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    #Gate matches app.yml / infra.yml / libraries.yml — push-to-main only
+    #runs when AUTO_RUN_ON_MERGE is true. PR + dispatch always fire.
+    if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/storefront/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/storefront
+        run: npm ci
+
+      - name: Lint
+        working-directory: apps/storefront
+        run: npm run lint
+
+      - name: Contract check (process.env reads vs deployment.yaml)
+        working-directory: apps/storefront
+        run: npm run contract-check
+
+      - name: Unit tests with coverage gate
+        working-directory: apps/storefront
+        run: npm run test:coverage
+
+      - name: npm audit (high+)
+        working-directory: apps/storefront
+        run: npm run audit
+
+      - name: Build (production)
+        working-directory: apps/storefront
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+  manifest-validation:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/storefront/package-lock.json
+
+      - name: Install storefront deps (for tsx)
+        working-directory: apps/storefront
+        run: npm ci
+
+      - name: Install order-api deps (for shared validate script)
+        working-directory: apps/order-api
+        run: npm ci
+
+      - name: Render + validate k8s manifests
+        run: bash scripts/validate-k8s-manifests.sh
+
+  #Build/sign/scan/deploy/integration-test land alongside the Cognito + IRSA
+  #+ ECR repo provisioning that follows in #80, #84, #87. Skeleton job
+  #placeholders below are intentionally `if: false` so the workflow does not
+  #attempt AWS access until the prerequisites exist. Flip the if-guard on
+  #per-story when each prerequisite lands.
+
+  #Closes backlog #121 — skeleton job intentionally `if: false`. Activation
+  #depends on storefront ECR repo + IRSA from backlog #84. When activated,
+  #mirror the app.yml build-and-push pattern (buildx, sign via cosign, push
+  #immutable digest, expose digest as output).
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [test, manifest-validation]
+    if: false  #Activated in #84 once storefront ECR repo + IRSA exist.
+    steps:
+      - run: echo "build-and-push placeholder — see #121 for activation criteria"
+
+  #Closes backlog #121 — skeleton job intentionally `if: false`. Activation
+  #criteria: storefront IRSA role exists, ACM cert is provisioned, and the
+  #cluster has a storefront namespace. When activated, mirror app.yml's
+  #deploy job (cosign verify → manifest render → kubectl apply → rollout).
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, manifest-validation, build-and-push]
+    if: false  #Activated in #84 once storefront cluster prerequisites exist.
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    steps:
+      #Closes backlog #118 — when this skeleton is activated in #84, real
+      #cert ARN must come from terraform output, NOT a hardcoded value.
+      #Pattern mirrors app.yml's deploy job (`terraform -chdir=stacks/platform
+      #output -raw acm_certificate_arn`). The placeholder used in
+      #manifest-validation (validate-k8s-manifests.sh) is schema-only and
+      #never reaches a cluster.
+      - run: echo "deploy placeholder — see #118 for ACM_CERT_ARN sourcing"
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test, manifest-validation]
+    if: always()
+    steps:
+      - name: PR summary
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ needs.test.result }}" = "success" ] && \
+             [ "${{ needs.manifest-validation.result }}" = "success" ]; then
+            echo "✅ Storefront PR validation passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Storefront PR validation failed" >> $GITHUB_STEP_SUMMARY
+          fi

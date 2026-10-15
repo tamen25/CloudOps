@@ -1,0 +1,10 @@
+{
+  "name": "mesh-analytics-lambda",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "EventBridge-triggered: per-tenant order rollups via CloudWatch EMF",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "node --test"
+  }
+}

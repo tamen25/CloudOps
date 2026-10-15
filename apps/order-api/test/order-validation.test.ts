@@ -1,11 +1,8 @@
 // This file contains order validation test logic for order API test.
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-
 // Validator is internal to app.ts — exercise it through POST /order.
-const { createApp } = require('../src/app');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createApp, validateOrderPayload } from '../src/app';
 
 // Handles silent logger.
 function silentLogger() {
@@ -15,7 +12,14 @@ function silentLogger() {
 // Handles start server.
 async function startServer() {
   const pool = {
-    query: async () => ({ rows: [{ order_id: 'ok' }], rowCount: 1 }),
+    query: async (sql, params) => {
+      if (/FROM products WHERE sku = ANY/i.test(sql)) {
+        //book-1 priced at $19.99 to make total=39.98 with qty 2.
+        const skus = (params && params[0]) || [];
+        return { rows: skus.map((sku) => ({ sku, price_cents: 1999 })), rowCount: skus.length };
+      }
+      return { rows: [{ order_id: 'ok' }], rowCount: 1 };
+    },
   };
   const { app } = createApp({
     pool,
@@ -143,4 +147,16 @@ test('POST /order rejects oversize body (>64kb)', async () => {
   } finally {
     server.close();
   }
+});
+
+test('total must be a finite number — rejects NaN', () => {
+  const res = validateOrderPayload({ items: [{ sku: 'a', quantity: 1 }], total: Number.NaN });
+  assert.equal(res.ok, false);
+  if (res.ok === false) assert.match(res.error, /finite/);
+});
+
+test('total must be a finite number — rejects Infinity', () => {
+  const res = validateOrderPayload({ items: [{ sku: 'a', quantity: 1 }], total: Number.POSITIVE_INFINITY });
+  assert.equal(res.ok, false);
+  if (res.ok === false) assert.match(res.error, /finite/);
 });

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CloudOps · Wireframe Exploration</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #20201d;
+    --ink-soft: #5b5a55;
+    --ink-faint: #9a9893;
+    --paper: #faf8f3;
+    --line: #2a2a26;
+    --dash: rgba(40,40,36,0.55);
+    --teal: #1c8e7e;
+    --teal-soft: rgba(45,212,191,0.18);
+    --teal-line: rgba(28,142,126,0.7);
+    --hand: 'Patrick Hand', 'Caveat', cursive;
+    --label: 'Caveat', cursive;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --ui: 'Inter', system-ui, sans-serif;
+  }
+  body { font-family: var(--hand); color: var(--ink); }
+  /* ---- generic wireframe primitives ---- */
+  .wf { background: var(--paper); color: var(--ink); width: 100%; height: 100%; overflow: hidden; position: relative; font-family: var(--hand); }
+  .wf, .wf * { box-sizing: border-box; }
+  .wf h1, .wf h2, .wf h3, .wf h4 { font-family: var(--hand); font-weight: normal; margin: 0; letter-spacing: 0.2px; }
+  .wf p { margin: 0; }
+  .wf .mono { font-family: var(--mono); }
+  .wf .label { font-family: var(--label); color: var(--ink-soft); }
+  .wf .scribble { font-family: var(--label); color: var(--teal); }
+  .wf .ink { color: var(--ink); }
+  .wf .soft { color: var(--ink-soft); }
+  .wf .faint { color: var(--ink-faint); }
+  .wf .teal { color: var(--teal); }
+  .wf .row { display: flex; }
+  .wf .col { display: flex; flex-direction: column; }
+  .wf .gap-4 { gap: 4px; } .wf .gap-6 { gap: 6px; } .wf .gap-8 { gap: 8px; } .wf .gap-12 { gap: 12px; } .wf .gap-16 { gap: 16px; } .wf .gap-20 { gap: 20px; } .wf .gap-24 { gap: 24px; }
+  .wf .grow { flex: 1 1 auto; }
+  .wf .center { align-items: center; justify-content: center; }
+  .wf .between { justify-content: space-between; }
+  .wf .pad { padding: 24px; }
+  .wf .pad-l { padding: 40px; }
+
+  /* box / sketchy lines */
+  .wf .box { border: 1.5px solid var(--line); border-radius: 6px; background: rgba(255,255,255,0.55); }
+  .wf .box-dashed { border: 1.5px dashed var(--dash); border-radius: 6px; background: rgba(255,255,255,0.3); }
+  .wf .box-soft { border: 1.5px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.7); }
+  .wf .pill { border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.6); }
+  .wf .pill.teal { border-color: var(--teal-line); background: var(--teal-soft); color: var(--teal); }
+  .wf .btn { border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.7); }
+  .wf .btn.primary { background: var(--teal-soft); border-color: var(--teal-line); color: var(--teal); }
+  .wf .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); display: inline-block; }
+  .wf .dot.pulse { box-shadow: 0 0 0 0 rgba(28,142,126,0.6); animation: dot 2s infinite; }
+  @keyframes dot { 0% { box-shadow: 0 0 0 0 rgba(28,142,126,0.6); } 70% { box-shadow: 0 0 0 8px rgba(28,142,126,0); } 100% { box-shadow: 0 0 0 0 rgba(28,142,126,0); } }
+  .wf .ph { background: repeating-linear-gradient(135deg, rgba(40,40,36,0.06) 0 6px, transparent 6px 12px); border: 1.5px dashed var(--dash); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--ink-soft); font-family: var(--label); }
+  .wf .scribble-line { height: 8px; background: repeating-linear-gradient(90deg, var(--ink-soft) 0 18px, transparent 18px 22px); border-radius: 2px; opacity: 0.55; }
+  .wf .scribble-line.short { width: 60%; }
+  .wf .scribble-line.shorter { width: 40%; }
+  .wf .underline { text-decoration: underline wavy var(--teal); text-underline-offset: 4px; }
+  .wf .note { font-family: var(--label); color: var(--teal); transform: rotate(-2deg); display: inline-block; }
+  .wf .stamp { font-family: var(--label); color: var(--teal); border: 1.5px solid var(--teal-line); padding: 2px 8px; border-radius: 4px; transform: rotate(-3deg); display: inline-block; background: rgba(255,255,255,0.9); }
+  .wf .arrow { stroke: var(--ink); fill: none; stroke-width: 1.5; }
+  .wf .arrow.teal { stroke: var(--teal); }
+  .wf .grid-bg {
+    background-image:
+      linear-gradient(rgba(40,40,36,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(40,40,36,0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .wf .noise { position: absolute; inset: 0; opacity: 0.04; pointer-events: none;
+    background-image: radial-gradient(rgba(0,0,0,0.6) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+  /* navbar that every artboard reuses */
+  .wf .nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; border-bottom: 1.5px solid var(--line); background: rgba(250,248,243,0.95); position: relative; z-index: 1; }
+  .wf .nav .links { display: flex; gap: 22px; font-family: var(--label); color: var(--ink-soft); font-size: 18px; }
+  .wf .nav .brand { display: flex; align-items: center; gap: 8px; font-size: 20px; }
+  .wf .nav .brand .mark { width: 22px; height: 22px; border-radius: 6px; background: var(--teal-soft); border: 1.5px solid var(--teal-line); display: flex; align-items: center; justify-content: center; color: var(--teal); font-size: 14px; }
+
+  /* tag style for artboard captions inside DCArtboard label */
+  .meta { font-family: var(--ui); }
+
+  /* table */
+  .wf table { width: 100%; border-collapse: collapse; font-family: var(--label); }
+  .wf td, .wf th { padding: 8px 10px; border-bottom: 1.5px dashed var(--dash); text-align: left; font-weight: normal; }
+  .wf th { color: var(--ink-soft); font-size: 14px; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="wireframes.jsx"></script>
+<script type="text/babel">
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+</script>
+</body>
+</html>
