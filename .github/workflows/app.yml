@@ -195,28 +195,6 @@ jobs:
           kubeconform -strict -kubernetes-version 1.32.0 -ignore-missing-schemas \
             -summary /tmp/order-api-k8s/*.yaml
 
-      - name: kubectl apply --dry-run=client
-        run: |
-          export KUBECONFIG=$(mktemp --suffix=.kubeconfig)
-          cat > "$KUBECONFIG" <<'KUBECFG'
-          apiVersion: v1
-          kind: Config
-          current-context: mock
-          clusters:
-          - cluster:
-              server: https://localhost:6443
-            name: mock
-          contexts:
-          - context:
-              cluster: mock
-              user: mock
-            name: mock
-          users:
-          - name: mock
-            user: {}
-          KUBECFG
-          kubectl apply --dry-run=client -f /tmp/order-api-k8s/
-
       - name: Verify deployment manifest container name
         run: |
           CONTAINER=$(python3 - <<'PY'

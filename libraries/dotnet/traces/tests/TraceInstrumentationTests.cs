@@ -95,4 +95,33 @@ public sealed class TraceInstrumentationTests
         Assert.Equal("0.1.0", tracer.ResourceAttributes["cloudops-trace-ver"]);
         Assert.Equal("ver-api", tracer.ResourceAttributes["service.name"]);
     }
+
+    // A carrier is W3C first: other OpenTelemetry SDKs read and write
+    // `traceparent` by default; B3 stays as the fallback.
+    [Fact]
+    public void TraceAttrsUseW3CAndFallBackToB3()
+    {
+        using var tracer = new TraceInstrumentation();
+        var span = tracer.StartBasicSpan("root", new SpanProps { SetActiveContext = true });
+        var attrs = tracer.FetchTraceAttrs();
+        span?.Dispose();
+        Assert.NotNull(attrs);
+        Assert.True(attrs!.ContainsKey("traceparent"));
+        Assert.True(attrs.ContainsKey("b3"));
+
+        tracer.ExtractTraceAttrs(new Dictionary<string, string>
+        {
+            ["traceparent"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            ["b3"] = "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"
+        });
+        Assert.Equal("4bf92f3577b34da6a3ce929d0e0e4736", tracer.PropagationContext.TraceId.ToString());
+
+        tracer.ExtractTraceAttrs(new Dictionary<string, string>
+        {
+            ["traceparent"] = "garbage",
+            ["b3"] = "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"
+        });
+        Assert.Equal("0af7651916cd43dd8448eb211c80319c", tracer.PropagationContext.TraceId.ToString());
+    }
+
 }

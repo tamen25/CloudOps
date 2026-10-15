@@ -55,6 +55,9 @@ int run_tracer_tests() {
 
     auto attrs = tracer.fetch_trace_attrs();
     failures += check(attrs.has_value() && attrs->count("b3") == 1, "fetch_trace_attrs b3");
+    failures += check(attrs.has_value() && attrs->count("traceparent") == 1 &&
+                          attrs->at("traceparent").rfind("00-" + span->trace_id() + "-" + span->span_id() + "-", 0) == 0,
+                      "fetch_trace_attrs traceparent");
     failures += check(attrs.has_value() && attrs->at("b3").rfind(span->trace_id() + "-" + span->span_id(), 0) == 0, "b3 prefix");
 
     span->end();
@@ -73,6 +76,21 @@ int run_tracer_tests() {
     auto ctx = tracer.propagation_context();
     failures += check(ctx.first == "0af7651916cd43dd8448eb211c80319c", "extract trace id");
     failures += check(ctx.second == "b7ad6b7169203331", "extract span id");
+  }
+
+  // A carrier is W3C first: other OpenTelemetry SDKs read and write
+  // `traceparent` by default; B3 stays as the fallback.
+  {
+    traces::TraceInstrumentation tracer("w3c-api");
+    tracer.extract_trace_attrs({
+        {"traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+        {"b3", "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"}});
+    failures += check(tracer.propagation_context().first == "4bf92f3577b34da6a3ce929d0e0e4736", "traceparent wins over b3");
+
+    tracer.extract_trace_attrs({
+        {"traceparent", "00-00000000000000000000000000000000-00f067aa0ba902b7-01"},
+        {"b3", "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"}});
+    failures += check(tracer.propagation_context().first == "0af7651916cd43dd8448eb211c80319c", "all-zero traceparent falls back to b3");
   }
 
   // OTLP export ships finished spans through the injected transport.

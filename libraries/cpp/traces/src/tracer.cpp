@@ -58,6 +58,32 @@ std::string render_span(const Span& span) {
   return os.str();
 }
 
+// is_hex reports whether s is exactly n lowercase hex digits.
+bool is_hex(const std::string& s, std::size_t n) {
+  if (s.size() != n) return false;
+  for (char c : s) {
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
+  return true;
+}
+
+// parse_traceparent reads "00-<32 hex trace id>-<16 hex span id>-<2 hex
+// flags>". A malformed value or all-zero ids return false, as the W3C spec
+// requires.
+bool parse_traceparent(const std::string& v, std::string& trace_id, std::string& span_id) {
+  if (v.size() < 55 || v[2] != '-' || v[35] != '-' || v[52] != '-') return false;
+  std::string version = v.substr(0, 2), tid = v.substr(3, 32), sid = v.substr(36, 16), flags = v.substr(53, 2);
+  if (!is_hex(version, 2) || version == "ff" || !is_hex(tid, 32) || !is_hex(sid, 16) || !is_hex(flags, 2)) {
+    return false;
+  }
+  if (tid.find_first_not_of('0') == std::string::npos || sid.find_first_not_of('0') == std::string::npos) {
+    return false;
+  }
+  trace_id = tid;
+  span_id = sid;
+  return true;
+}
+
 }  // namespace
 
 namespace detail {
@@ -238,19 +264,32 @@ void TraceInstrumentation::set_active_context(const std::shared_ptr<Span>& span)
   active_span_id_ = span->span_id();
 }
 
-// Fetch the trace attributes for context propagation (B3 single header).
+// The active span as a propagation carrier for a message (SNS, SQS): W3C
+// `traceparent`, which every OpenTelemetry SDK reads by default, and B3
+// single-header `b3` for consumers that only know B3.
 std::optional<std::map<std::string, std::string>> TraceInstrumentation::fetch_trace_attrs() {
   std::lock_guard<std::mutex> lock(mu_);
   if (!current_span_) return std::nullopt;
 
-  std::string sampled = current_span_->sampled() ? "1" : "0";
+  bool sampled = current_span_->sampled();
   std::map<std::string, std::string> carrier;
-  carrier["b3"] = current_span_->trace_id() + "-" + current_span_->span_id() + "-" + sampled;
+  carrier["traceparent"] = "00-" + current_span_->trace_id() + "-" + current_span_->span_id() + (sampled ? "-01" : "-00");
+  carrier["b3"] = current_span_->trace_id() + "-" + current_span_->span_id() + (sampled ? "-1" : "-0");
   return carrier;
 }
 
-// Extract trace attributes from a carrier (B3 single header).
+// Reads a carrier into the parent context for the next root span. W3C
+// `traceparent` wins; B3 single-header `b3` is the fallback.
 void TraceInstrumentation::extract_trace_attrs(const std::map<std::string, std::string>& carrier) {
+  auto tp = carrier.find("traceparent");
+  std::string w3c_trace, w3c_span;
+  if (tp != carrier.end() && parse_traceparent(tp->second, w3c_trace, w3c_span)) {
+    std::lock_guard<std::mutex> lock(mu_);
+    propagation_trace_id_ = w3c_trace;
+    propagation_span_id_ = w3c_span;
+    return;
+  }
+
   auto it = carrier.find("b3");
   if (it == carrier.end()) it = carrier.find("B3");
   if (it == carrier.end() || it->second.empty()) return;

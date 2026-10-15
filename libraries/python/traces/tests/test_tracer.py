@@ -162,6 +162,34 @@ class TraceInstrumentationTests(unittest.TestCase):
         span.end()
         instrumentation.export_spans()
 
+    # A carrier is W3C first: other OpenTelemetry SDKs read and write
+    # `traceparent` by default; B3 stays as the fallback.
+    def test_trace_attrs_use_w3c_and_fall_back_to_b3(self):
+        from opentelemetry import trace as otel_trace
+
+        with patch.dict("os.environ", {"OTEL_BACKEND_EXPORTERS": "console"}, clear=True):
+            instrumentation = TraceInstrumentation()
+        span = instrumentation.start_basic_span("root", set_active_context=True)
+        carrier = instrumentation.fetch_trace_attrs()
+        span.end()
+        self.assertIn("traceparent", carrier)
+        self.assertIn("x-b3-traceid", carrier)
+
+        def extracted_trace_id(headers):
+            instrumentation.extract_trace_attrs(headers)
+            ctx = otel_trace.get_current_span(instrumentation._propagation_context).get_span_context()
+            return format(ctx.trace_id, "032x")
+
+        both = {
+            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "x-b3-traceid": "0af7651916cd43dd8448eb211c80319c",
+            "x-b3-spanid": "b7ad6b7169203331",
+            "x-b3-sampled": "1",
+        }
+        self.assertEqual(extracted_trace_id(both), "4bf92f3577b34da6a3ce929d0e0e4736")
+        b3_only = {k: v for k, v in both.items() if k != "traceparent"}
+        self.assertEqual(extracted_trace_id(b3_only), "0af7651916cd43dd8448eb211c80319c")
+
 
 if __name__ == "__main__":
     unittest.main()

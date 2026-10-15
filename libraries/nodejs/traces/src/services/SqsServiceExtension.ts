@@ -5,6 +5,10 @@ import { AttributeNames } from "../enums";
 
 import { RequestMetadata, ServiceExtension } from "./types";
 
+// Message attributes that carry trace context: W3C (traceparent, tracestate,
+// baggage) and B3.
+const PROPAGATION_KEYS = new Set(["traceparent", "tracestate", "baggage", "b3"]);
+
 export class SqsServiceExtension implements ServiceExtension {
   /* eslint-disable class-methods-use-this */
   requestPreSpanHook(serviceName: string, attributes: ServiceAttributes): RequestMetadata {
@@ -40,7 +44,7 @@ export class SqsServiceExtension implements ServiceExtension {
     const contextAttributes: any = {};
 
     Object.keys(event.Records?.[0]?.messageAttributes).forEach((key) => {
-      if (key === "b3") {
+      if (PROPAGATION_KEYS.has(key)) {
         const { stringValue } = (event.Records?.[0]?.messageAttributes as any)[key];
         contextAttributes[key] = stringValue;
       }
