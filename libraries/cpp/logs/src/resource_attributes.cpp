@@ -242,7 +242,7 @@ std::map<std::string, std::string> runtime_resource_attributes() {
     if (svc.empty()) svc = "unknown_service";
     attrs["service.name"] = svc;
   }
-  attrs["pe-lib-log-ver"] = library_version;
+  attrs["cloudops-log-ver"] = library_version;
 
   auto lambda_name = getenv_str("AWS_LAMBDA_FUNCTION_NAME");
   if (!lambda_name.empty()) {

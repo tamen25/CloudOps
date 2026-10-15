@@ -24,6 +24,7 @@ const console_: NavItem[] = [
 const platform: NavItem[] = [
   { href: "/platform", label: "Platform" },
   { href: "/architecture", label: "Architecture" },
+  { href: "/diagrams", label: "Diagrams" },
   { href: "/pipeline", label: "Pipeline" },
   ...(designPreviewEnabled ? [{ href: "/design", label: "Design" }] : []),
 ];

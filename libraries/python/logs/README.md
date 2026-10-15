@@ -21,6 +21,6 @@ Configuration matches the Node.js logs library:
 - `OTEL_LOG_LEVEL`: JSON array or comma-separated list of `info`, `error`, `debug`, `warn`.
 - `OTEL_LOGS_SAMPLING_RATE`: percentage from `0` to `100`. Error logs are always exported.
 - `OTEL_SSM_PARAMETERS`: JSON object with `otel.logs.url` and `otel.logs.api_key`.
-- `/tmp/otelExporterParams.json`: original PE parameter file fallback. Set `OTEL_SSM_PARAMETERS_FILE` to override the path.
+- `/tmp/otelExporterParams.json`: parameter file fallback. Set `OTEL_SSM_PARAMETERS_FILE` to override the path.
 - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP HTTP endpoint fallback.
 - `OTEL_API_KEY` or `OTEL_EXPORTER_OTLP_HEADERS`: OTLP auth fallback.

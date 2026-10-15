@@ -22,7 +22,7 @@ public static class RuntimeResourceAttributes
             attributes.GetValueOrDefault(AttrServiceName),
             Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"),
             "unknown_service");
-        attributes["pe-lib-log-ver"] = "1.16.2";
+        attributes["cloudops-log-ver"] = "0.1.0";
 
         AddRuntimeAttributes(attributes);
         return attributes;

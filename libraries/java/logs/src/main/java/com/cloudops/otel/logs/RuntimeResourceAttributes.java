@@ -25,7 +25,7 @@ public final class RuntimeResourceAttributes {
     attributes.put(
         ATTR_SERVICE_NAME,
         firstEnv("OTEL_SERVICE_NAME", attributes.get(ATTR_SERVICE_NAME), "AWS_LAMBDA_FUNCTION_NAME", "unknown_service"));
-    attributes.put("pe-lib-log-ver", "1.16.2");
+    attributes.put("cloudops-log-ver", "0.1.0");
 
     addRuntimeAttributes(attributes);
     return Collections.unmodifiableMap(attributes);

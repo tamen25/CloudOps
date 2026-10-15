@@ -51,6 +51,7 @@ export function Footer() {
           <ul className="space-y-1 text-sm">
             <li><Link href="/platform" className="text-fg-base hover:text-brand-400">Overview</Link></li>
             <li><Link href="/architecture" className="text-fg-base hover:text-brand-400">Architecture</Link></li>
+            <li><Link href="/diagrams" className="text-fg-base hover:text-brand-400">Diagrams</Link></li>
             <li><Link href="/pipeline" className="text-fg-base hover:text-brand-400">Pipeline</Link></li>
             <li><Link href="/pipeline#security" className="text-fg-base hover:text-brand-400">Security</Link></li>
           </ul>

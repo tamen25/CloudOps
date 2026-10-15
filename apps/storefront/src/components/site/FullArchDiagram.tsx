@@ -39,7 +39,11 @@ type NodeId =
   | "otel"
   | "prom"
   | "loki"
-  | "tempo";
+  | "tempo"
+  | "cloudwatch"
+  | "yace"
+  | "grafana"
+  | "libraries";
 
 const ARCH_NODES: Record<NodeId, Node> = {
   browser: { x: 230, y: 40, w: 120, h: 40, label: "Browser", sub: "Next.js · TS", layer: "edge" },
@@ -57,12 +61,16 @@ const ARCH_NODES: Record<NodeId, Node> = {
   cognito: { x: 70, y: 408, w: 150, h: 48, label: "Cognito", sub: "PKCE · JWT", layer: "data" },
   aurora: { x: 240, y: 408, w: 150, h: 48, label: "RDS · Postgres", sub: "RLS FORCE", layer: "data" },
   kinesis: { x: 410, y: 408, w: 150, h: 48, label: "Kinesis", sub: "event stream", layer: "data" },
-  meshEvents: { x: 580, y: 408, w: 150, h: 48, label: "mesh-events", sub: "enrich → EventBridge → analytics λ", layer: "data" },
-  projection: { x: 410, y: 480, w: 150, h: 44, label: "projection-worker", sub: "Python · Kinesis read model", layer: "data" },
-  otel: { x: 70, y: 540, w: 170, h: 46, label: "OTel Collector", sub: "metrics · logs · spans", layer: "obs" },
-  prom: { x: 270, y: 540, w: 130, h: 46, label: "Mimir", sub: "metrics", layer: "obs" },
-  loki: { x: 420, y: 540, w: 130, h: 46, label: "Loki", sub: "logs", layer: "obs" },
-  tempo: { x: 570, y: 540, w: 160, h: 46, label: "Tempo", sub: "traces · service graph", layer: "obs" },
+  meshEvents: { x: 580, y: 408, w: 150, h: 48, label: "mesh-events", sub: "enrich → EB → λ", layer: "data" },
+  projection: { x: 410, y: 480, w: 150, h: 44, label: "projection-worker", sub: "Python · read model", layer: "data" },
+  cloudwatch: { x: 588, y: 480, w: 142, h: 44, label: "CloudWatch", sub: "AWS metrics", layer: "data" },
+  otel: { x: 60, y: 560, w: 150, h: 46, label: "OTel Collector", sub: "metrics·logs·spans", layer: "obs" },
+  yace: { x: 222, y: 560, w: 120, h: 46, label: "yace", sub: "CW → Prom", layer: "obs" },
+  prom: { x: 354, y: 560, w: 118, h: 46, label: "Mimir", sub: "metrics", layer: "obs" },
+  loki: { x: 484, y: 560, w: 110, h: 46, label: "Loki", sub: "logs", layer: "obs" },
+  tempo: { x: 606, y: 560, w: 124, h: 46, label: "Tempo", sub: "traces · svc graph", layer: "obs" },
+  grafana: { x: 300, y: 638, w: 200, h: 46, label: "Grafana", sub: "dashboards · alerts", layer: "obs" },
+  libraries: { x: 596, y: 40, w: 150, h: 52, label: "client libraries", sub: "6 langs → CodeArtifact", layer: "edge" },
 };
 
 const EKS_BOX = { x: 55, y: 192, w: 670, h: 168 };
@@ -91,6 +99,13 @@ const ARCH_EDGES: [NodeId, NodeId][] = [
   ["otel", "prom"],
   ["otel", "loki"],
   ["otel", "tempo"],
+  // yace: CloudWatch → Prometheus (scrape, ServiceMonitor)
+  ["cloudwatch", "yace"],
+  ["yace", "prom"],
+  // Grafana reads the three backends
+  ["prom", "grafana"],
+  ["loki", "grafana"],
+  ["tempo", "grafana"],
 ];
 
 const NODE_DETAILS: Record<NodeId, { tech: string; notes: string }> = {
@@ -154,7 +169,7 @@ const NODE_DETAILS: Record<NodeId, { tech: string; notes: string }> = {
   },
   meshEvents: {
     tech: "modules/mesh-events · 2 Lambdas",
-    notes: "enrichment λ → EventBridge bus → analytics λ · async rollups",
+    notes: "enrichment λ → EventBridge bus → analytics λ · EMF metrics",
   },
   projection: {
     tech: "projection-worker · Python",
@@ -175,6 +190,22 @@ const NODE_DETAILS: Record<NodeId, { tech: string; notes: string }> = {
   tempo: {
     tech: "Grafana Tempo · distributed traces",
     notes: "Full-stack spans · 3d retention · service graph",
+  },
+  cloudwatch: {
+    tech: "AWS CloudWatch · native metrics",
+    notes: "RDS, ALB, NAT GW, Lambda, Kinesis, Step Functions — source for yace",
+  },
+  yace: {
+    tech: "yace · Yet Another CloudWatch Exporter",
+    notes: "Scrapes CloudWatch → Prometheus metrics · IRSA · gated by enable_yace",
+  },
+  grafana: {
+    tech: "Grafana · dashboards + alerting",
+    notes: "Auto-provisioned datasources: Mimir, Loki, Tempo · 8 dashboards · SLO alerts",
+  },
+  libraries: {
+    tech: "OTel client libraries · 6 languages",
+    notes: "Node/Java/.NET/Python/Go/C++ logs+metrics+traces · published to CodeArtifact, not imported in-repo",
   },
 };
 
@@ -218,6 +249,9 @@ const LAYER_LABELS = [
   { y: 532, t: "observability", c: LAYER_COLOR.obs },
 ];
 
+// Smooth Bézier connectors: drop out of the source, curve through the midline,
+// and ease into the target. Rounded by design — matches the soft look the rest
+// of this diagram uses.
 function edgePath(a: Node, b: Node): { d: string; x1: number; y1: number; x2: number; y2: number } {
   const x1 = a.x + a.w / 2;
   const y1 = a.y + a.h;
@@ -235,9 +269,8 @@ function edgePath(a: Node, b: Node): { d: string; x1: number; y1: number; x2: nu
 
 export function FullArchDiagram() {
   const [hovered, setHovered] = useState<NodeId | null>(null);
-  const [selected, setSelected] = useState<NodeId>("orderApi");
-  const active: NodeId = hovered ?? selected;
-  const details = NODE_DETAILS[active];
+  const active = hovered;
+  const details = active ? NODE_DETAILS[active] : null;
 
   return (
     <section id="architecture-full" className="border-b border-border-muted/60 py-20">
@@ -249,14 +282,14 @@ export function FullArchDiagram() {
           One diagram. <span className="display-italic">Every layer.</span>
         </h2>
         <p className="mt-4 max-w-2xl text-base text-fg-muted">
-          Click any node to inspect tech, cost, and ownership. The whole stack
+          Hover any node to inspect tech, cost, and ownership. The whole stack
           — from browser request to observability backend.
         </p>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
           <div className="relative overflow-hidden rounded-2xl border border-border-default/80 bg-bg-raised/40 p-6 backdrop-blur-md">
             <svg
-              viewBox="0 0 800 610"
+              viewBox="0 0 800 700"
               className="block h-auto w-full"
               role="img"
               aria-label="CloudOps full architecture"
@@ -354,12 +387,10 @@ export function FullArchDiagram() {
                   return (
                     <g
                       key={k}
-                      style={{ cursor: "pointer" }}
                       onMouseEnter={() => setHovered(k)}
                       onMouseLeave={() =>
                         setHovered((h) => (h === k ? null : h))
                       }
-                      onClick={() => setSelected(k)}
                     >
                       <rect
                         x={n.x}
@@ -370,6 +401,7 @@ export function FullArchDiagram() {
                         fill={isActive ? `${c}30` : "rgba(20,28,45,0.85)"}
                         stroke={isActive ? c : "rgba(94,234,212,0.35)"}
                         strokeWidth={isActive ? 1.6 : 1}
+                        strokeDasharray={k === "libraries" ? "5 4" : undefined}
                         filter={isActive ? "url(#archGlow)" : undefined}
                       />
                       <text
@@ -416,20 +448,22 @@ export function FullArchDiagram() {
               </svg>
             </div>
 
-            <div
-              className="pointer-events-none absolute bottom-7 right-7 w-[320px] max-w-[calc(100%-3.5rem)] rounded-xl border border-border-default bg-bg-elev/85 p-4 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-xl"
-              key={active}
-            >
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-subtle">
-                ▸ {ARCH_NODES[active].label}
-              </p>
-              <p className="mt-2 font-mono text-[12px] text-brand-400">
-                {details.tech}
-              </p>
-              <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
-                {details.notes}
-              </p>
-            </div>
+            {active && details ? (
+              <div
+                className="animate-fade-up pointer-events-none absolute bottom-7 right-7 w-[320px] max-w-[calc(100%-3.5rem)] rounded-xl border border-border-default bg-bg-elev/85 p-4 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+                key={active}
+              >
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-subtle">
+                  ▸ {ARCH_NODES[active].label}
+                </p>
+                <p className="mt-2 font-mono text-[12px] text-brand-400">
+                  {details.tech}
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                  {details.notes}
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <aside className="flex flex-col gap-4">

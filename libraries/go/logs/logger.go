@@ -18,7 +18,7 @@
 //	OTEL_LOG_LEVEL                 JSON array or CSV of info/error/debug/warn
 //	OTEL_LOGS_SAMPLING_RATE        percentage 0..100; errors always export
 //	OTEL_SSM_PARAMETERS            JSON object with otel.logs.{url,api_key}
-//	/tmp/otelExporterParams.json    original PE parameter file fallback
+//	/tmp/otelExporterParams.json    parameter file fallback
 //	OTEL_SSM_PARAMETERS_FILE        optional override for that file path
 //	OTEL_EXPORTER_OTLP_LOGS_ENDPOINT  OTLP HTTP endpoint fallback
 //	OTEL_EXPORTER_OTLP_ENDPOINT       same, base URL (suffixed /v1/logs)
@@ -40,8 +40,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// LibraryVersion stays in sync with the Python/Node libraries' header tag.
-const LibraryVersion = "1.16.2"
+// LibraryVersion is emitted as the cloudops-log-ver resource attribute.
+const LibraryVersion = "0.1.0"
 
 const defaultSSMParametersFile = "/tmp/otelExporterParams.json"
 
@@ -449,7 +449,7 @@ func runtimeResourceAttributes() map[string]string {
 			attrs["service.name"] = "unknown_service"
 		}
 	}
-	attrs["pe-lib-log-ver"] = LibraryVersion
+	attrs["cloudops-log-ver"] = LibraryVersion
 
 	if name := os.Getenv("AWS_LAMBDA_FUNCTION_NAME"); name != "" {
 		attrs["cloud.platform"] = "aws_lambda"

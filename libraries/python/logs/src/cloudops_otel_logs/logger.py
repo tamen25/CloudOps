@@ -193,7 +193,7 @@ def _runtime_resource_attributes() -> dict[str, str]:
         or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
         or "unknown_service"
     )
-    attributes["pe-lib-log-ver"] = "1.16.2"
+    attributes["cloudops-log-ver"] = "0.1.0"
 
     lambda_name = os.getenv("AWS_LAMBDA_FUNCTION_NAME")
     if lambda_name:

@@ -37,8 +37,11 @@ const CAT_COLORS: Record<Category, string> = {
 
 // Flows mirror the real platform. The mesh fan-out is the showcase: one
 // synthetic place-order crosses six languages. The async lanes are the two
-// Kinesis consumers. IDs double as scroll anchors (#mesh, #search, #realtime,
-// #saga) — chrome links in Bento/FeatureGrid point at them (#148/#152).
+// Kinesis consumers. The observability lane shows the OTel + yace telemetry
+// path into Grafana. IDs double as scroll anchors (#mesh, #search, #realtime,
+// #saga, #observability) — chrome links in Bento/FeatureGrid point at them
+// (#148/#152). Client libraries are published artifacts (CodeArtifact), not a
+// runtime flow, so they appear as a note below rather than a lane.
 const FLOWS: Flow[] = [
   {
     id: "mesh",
@@ -69,14 +72,14 @@ const FLOWS: Flow[] = [
       },
       { name: "enrichment λ", cat: "compute", desc: "mesh-events" },
       { name: "EventBridge", cat: "integration", desc: "event bus" },
-      { name: "analytics λ", cat: "analytics", desc: "rollups" },
+      { name: "analytics λ", cat: "analytics", desc: "EMF metrics" },
     ],
   },
   {
     id: "search",
     label: "Projection read",
     accent: "#539bf5",
-    note: "Kinesis → projection-worker (Python) → read model · CQRS-style",
+    note: "Kinesis → projection-worker (Python) → in-memory read model · CQRS-style",
     steps: [
       { name: "Kinesis", cat: "integration", desc: "same stream" },
       {
@@ -85,27 +88,42 @@ const FLOWS: Flow[] = [
         desc: "Python · poller",
         primary: true,
       },
-      { name: "read model", cat: "database", desc: "query-optimised" },
-      { name: "console", cat: "compute", desc: "Tempo/Mimir BFF" },
+      { name: "read model", cat: "compute", desc: "per-tenant · in-mem" },
     ],
   },
   {
     id: "saga",
     label: "Checkout saga",
     accent: CAT_COLORS.analytics,
-    note: "Step Functions Standard · idempotent · compensate on failure",
+    note: "storefront creates the order, then Step Functions enqueues the email",
     steps: [
-      { name: "order-api /order", cat: "compute", desc: "Idempotency-Key" },
+      { name: "/api/checkout", cat: "compute", desc: "storefront BFF" },
+      { name: "order-api /order", cat: "compute", desc: "Idempotency-Key · RLS write" },
       {
         name: "Step Functions",
         cat: "analytics",
-        desc: "Standard SM · 99.0% SLO",
+        desc: "Standard · EnqueueEmail",
         primary: true,
       },
-      { name: "Postgres INSERT", cat: "database", desc: "RLS-bound write" },
       { name: "SQS · email", cat: "integration", desc: "durable buffer" },
-      { name: "email λ", cat: "compute", desc: "SES + retry" },
-      { name: "Audit · CW", cat: "analytics", desc: "execution log" },
+      { name: "email λ", cat: "compute", desc: "SES (sesv2)" },
+    ],
+  },
+  {
+    id: "observability",
+    label: "Observability",
+    accent: "#fbbf24",
+    note: "app spans via OTel + AWS metrics via yace → Prometheus → Grafana",
+    steps: [
+      { name: "services + AWS", cat: "compute", desc: "OTLP · CloudWatch" },
+      { name: "OTel · yace", cat: "integration", desc: "collector + CW export" },
+      {
+        name: "Mimir / Loki / Tempo",
+        cat: "database",
+        desc: "metrics · logs · traces",
+        primary: true,
+      },
+      { name: "Grafana", cat: "analytics", desc: "dashboards · alerts" },
     ],
   },
 ];
@@ -286,10 +304,10 @@ export function ArchitectureFlow() {
     <section id="architecture" className="border-b border-border-muted/60 py-20">
       <div className="mx-auto max-w-7xl px-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-fg-subtle">
-          flows · four lanes
+          flows · five lanes
         </p>
         <h2 className="mt-3 max-w-3xl text-balance text-4xl font-medium leading-tight tracking-tight text-fg-base sm:text-5xl">
-          Four flows, drawn the way{" "}
+          Five flows, drawn the way{" "}
           <span className="display-italic text-brand-400">
             the console shows them.
           </span>
@@ -346,6 +364,17 @@ export function ArchitectureFlow() {
               <span className="font-mono text-[11px] text-fg-muted">{k}</span>
             </span>
           ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border-default bg-bg-raised/20 px-4 py-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-fg-subtle">
+            not a runtime flow:
+          </span>
+          <span className="font-mono text-[11.5px] text-fg-muted">
+            client libraries (logs · metrics · traces · 6 languages) ship to AWS
+            CodeArtifact for downstream consumers — they are published artifacts,
+            not a live hop in any path above.
+          </span>
         </div>
       </div>
     </section>

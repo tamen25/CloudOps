@@ -23,7 +23,7 @@
 //     OTEL_LOG_LEVEL                 JSON array or CSV of info/error/debug/warn
 //     OTEL_LOGS_SAMPLING_RATE        percentage 0..100; errors always export
 //     OTEL_SSM_PARAMETERS            JSON object with otel.logs.{url,api_key}
-//     /tmp/otelExporterParams.json    original PE parameter file fallback
+//     /tmp/otelExporterParams.json    parameter file fallback
 //     OTEL_SSM_PARAMETERS_FILE        optional override for that file path
 //     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT  OTLP HTTP endpoint fallback
 //     OTEL_EXPORTER_OTLP_ENDPOINT       same, base URL (suffixed /v1/logs)
@@ -45,7 +45,7 @@
 
 namespace cloudops::otel::logs {
 
-constexpr const char* library_version = "1.16.2";
+constexpr const char* library_version = "0.1.0";
 
 enum class LogLevel { Info, Error, Debug, Warn };
 
