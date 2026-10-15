@@ -384,7 +384,7 @@ class TraceInstrumentation {
    *
    * @param event Lambda handler event attributes
    */
-  extractTraceAttrs(baggageAttrs: { b3: string }): void {
+  extractTraceAttrs(baggageAttrs: Record<string, string>): void {
     this.propagationContext = api.propagation.extract(api.context.active(), baggageAttrs);
   }
 
