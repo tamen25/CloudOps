@@ -10,7 +10,10 @@ from typing import Any
 try:
     from opentelemetry import baggage, context as otel_context, propagate, trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.baggage.propagation import W3CBaggagePropagator
     from opentelemetry.propagators.b3 import B3MultiFormat
+    from opentelemetry.propagators.composite import CompositePropagator
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import (
@@ -27,6 +30,9 @@ except ImportError:  # pragma: no cover - exercised only before package deps are
     trace = None
     OTLPSpanExporter = None
     B3MultiFormat = None
+    CompositePropagator = None
+    TraceContextTextMapPropagator = None
+    W3CBaggagePropagator = None
     Resource = None
     TracerProvider = None
     BatchSpanProcessor = None
@@ -219,6 +225,9 @@ def _otel_available() -> bool:
         propagate,
         OTLPSpanExporter,
         B3MultiFormat,
+        CompositePropagator,
+        TraceContextTextMapPropagator,
+        W3CBaggagePropagator,
         Resource,
         TracerProvider,
         BatchSpanProcessor,
@@ -294,7 +303,15 @@ class TraceInstrumentation:
         else:
             self._provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 
-        propagate.set_global_textmap(B3MultiFormat())
+        # W3C trace context is what every OpenTelemetry SDK reads by default;
+        # B3 stays for consumers that only know it. Injection writes all of
+        # them. On extraction the last propagator that finds a header wins,
+        # so W3C goes last and beats B3 when a carrier holds both.
+        propagate.set_global_textmap(CompositePropagator([
+            B3MultiFormat(),
+            W3CBaggagePropagator(),
+            TraceContextTextMapPropagator(),
+        ]))
         trace.set_tracer_provider(self._provider)
         self._tracer = trace.get_tracer(f"{self.service_name}-tracer")
         self._initialized = True

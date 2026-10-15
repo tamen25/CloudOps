@@ -13,6 +13,7 @@ for this repo.
 | Terraform lint | `tflint --recursive --config="$(pwd)/.tflint.hcl" --minimum-failure-severity=error` | `infra.yml` quality | tflint error |
 | Workflow lint | `actionlint 1.7.4` | `infra.yml` quality | invalid action input, shellcheck violation in `run:` |
 | IaC security | `aquasecurity/tfsec-action@v1.0.3` (`--minimum-severity HIGH`, `soft_fail: false`) | `infra.yml` quality | HIGH/CRITICAL tfsec finding |
+| Secret scan | `gitleaks` over the full history (`.gitleaksignore` for reviewed false positives) | `secrets.yml` | any finding not in `.gitleaksignore` |
 | Image scan | `trivy@0.28.0` (HIGH/CRITICAL) | `app.yml` build-and-push | unsuppressed vulnerable layer |
 | Manifest schema | `kubeconform v0.6.7 -strict -kubernetes-version 1.32.0` | `app.yml` manifest-validation, `scripts/validate-k8s-manifests.sh` | invalid manifest |
 | Node lint | `eslint src test scripts` (flat config) | `app.yml` test, `libraries.yml` nodejs-check | error-level rule |

@@ -258,7 +258,32 @@ test("tracer records errors, sets active context, and propagates trace attribute
   span.end();
 });
 
-test("SNS and SQS extensions inject and retrieve b3 propagation attributes", () => {
+// A carrier is W3C first: other OpenTelemetry SDKs read and write
+// `traceparent` by default; B3 stays as the fallback.
+test("trace attributes use W3C and fall back to B3", () => {
+  resetEnv({ OTEL_BACKEND_EXPORTERS: "console", OTEL_SERVICE_NAME: "orders-api" });
+  const { tracer } = freshRequire(instrumentationPath);
+  const api = require("@opentelemetry/api");
+
+  const span = tracer.startBasicSpan("root", { setActiveContext: true });
+  const carrier = tracer.fetchTraceAttrs();
+  span.end();
+  assert.match(carrier.traceparent ?? "", /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/);
+  assert.ok(carrier.b3, "carrier keeps b3");
+
+  const traceIdAfter = (headers) => {
+    tracer.extractTraceAttrs(headers);
+    return api.trace.getSpanContext(tracer.propagationContext)?.traceId;
+  };
+  const b3 = "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1";
+  assert.equal(
+    traceIdAfter({ traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", b3 }),
+    "4bf92f3577b34da6a3ce929d0e0e4736",
+  );
+  assert.equal(traceIdAfter({ b3 }), "0af7651916cd43dd8448eb211c80319c");
+});
+
+test("SNS and SQS extensions retrieve W3C and B3 propagation attributes, nothing else", () => {
   resetEnv({ OTEL_BACKEND_EXPORTERS: "console", OTEL_SERVICE_NAME: "orders-api" });
   const { tracer } = freshRequire(instrumentationPath);
   const { SnsServiceExtension } = freshRequire(path.resolve(__dirname, "../dist/services/SnsServiceExtension.js"));
@@ -270,16 +295,20 @@ test("SNS and SQS extensions inject and retrieve b3 propagation attributes", () 
   const snsAttrs = sns.requestPropagationAttributes(span);
   assert.equal(typeof snsAttrs, "object");
   assert.deepEqual(
-    sns.retrievePropagationAttributes({ Records: [{ Sns: { MessageAttributes: { b3: { Value: "trace-b3" } } } }] }),
-    { b3: "trace-b3" },
+    sns.retrievePropagationAttributes({ Records: [{ Sns: { MessageAttributes: {
+      traceparent: { Value: "trace-w3c" }, b3: { Value: "trace-b3" }, orderId: { Value: "42" },
+    } } }] }),
+    { traceparent: "trace-w3c", b3: "trace-b3" },
   );
 
   const sqs = new SqsServiceExtension();
   const sqsAttrs = sqs.requestPropagationAttributes(span);
   assert.equal(typeof sqsAttrs, "object");
   assert.deepEqual(
-    sqs.retrievePropagationAttributes({ Records: [{ messageAttributes: { b3: { stringValue: "trace-b3" } } }] }),
-    { b3: "trace-b3" },
+    sqs.retrievePropagationAttributes({ Records: [{ messageAttributes: {
+      traceparent: { stringValue: "trace-w3c" }, b3: { stringValue: "trace-b3" }, orderId: { stringValue: "42" },
+    } }] }),
+    { traceparent: "trace-w3c", b3: "trace-b3" },
   );
 
   span?.end();

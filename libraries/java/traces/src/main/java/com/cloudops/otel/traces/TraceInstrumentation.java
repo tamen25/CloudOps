@@ -1,5 +1,7 @@
 package com.cloudops.otel.traces;
 
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.trace.Span;
@@ -174,7 +176,9 @@ public final class TraceInstrumentation {
     activeContext = Context.current().with(span);
   }
 
-  // Fetch the trace attributes for context propagation (B3 single header).
+  // The active span as a propagation carrier for a message (SNS, SQS): W3C
+  // `traceparent`, which every OpenTelemetry SDK reads by default, and B3
+  // single-header `b3` for consumers that only know B3.
   public Map<String, String> fetchTraceAttrs() {
     if (currentSpan == null) return null;
 
@@ -182,15 +186,24 @@ public final class TraceInstrumentation {
     if (!spanContext.isValid()) return null;
 
     Map<String, String> carrier = new HashMap<>();
+    W3CTraceContextPropagator.getInstance().inject(Context.root().with(currentSpan), carrier, Map::put);
     carrier.put(
         "b3",
         spanContext.getTraceId() + "-" + spanContext.getSpanId() + "-" + (spanContext.isSampled() ? "1" : "0"));
     return carrier;
   }
 
-  // Extract trace attributes from a carrier (B3 single header).
+  // Reads a carrier into the parent context for the next root span. W3C
+  // `traceparent` wins (the propagator ignores a malformed one, as the spec
+  // requires); B3 single-header `b3` is the fallback.
   public void extractTraceAttrs(Map<String, String> carrier) {
     if (carrier == null) return;
+
+    Context w3c = W3CTraceContextPropagator.getInstance().extract(Context.root(), carrier, MAP_GETTER);
+    if (Span.fromContext(w3c).getSpanContext().isValid()) {
+      propagationContext = w3c;
+      return;
+    }
 
     String raw = carrier.getOrDefault("b3", carrier.get("B3"));
     if (!TracesConfiguration.hasValue(raw)) return;
@@ -203,6 +216,19 @@ public final class TraceInstrumentation {
         parts[0], parts[1], sampled ? TraceFlags.getSampled() : TraceFlags.getDefault(), TraceState.getDefault());
     propagationContext = Context.root().with(Span.wrap(remote));
   }
+
+  private static final TextMapGetter<Map<String, String>> MAP_GETTER =
+      new TextMapGetter<>() {
+        @Override
+        public Iterable<String> keys(Map<String, String> carrier) {
+          return carrier.keySet();
+        }
+
+        @Override
+        public String get(Map<String, String> carrier, String key) {
+          return carrier == null ? null : carrier.get(key);
+        }
+      };
 
   // Force all the spans to get exported.
   public void exportSpans() {

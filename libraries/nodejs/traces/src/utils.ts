@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { AWSXRayIdGenerator } from "@opentelemetry/id-generator-aws-xray";
 import { SDKRegistrationConfig } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerConfig } from "@opentelemetry/sdk-trace-node";
-import { CompositePropagator } from "@opentelemetry/core";
+import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from "@opentelemetry/core";
 import { B3Propagator } from "@opentelemetry/propagator-b3";
 
 const DEFAULT_SSM_PARAMETERS_FILE = "/tmp/otelExporterParams.json";
@@ -25,8 +25,12 @@ export interface SSMParameters {
 export function configureSdkRegistration(config: SDKRegistrationConfig): SDKRegistrationConfig {
   return {
     ...config,
+    // W3C trace context is what every OpenTelemetry SDK reads by default; B3
+    // stays for consumers that only know it. Injection writes all of them. On
+    // extraction the last propagator that finds a header wins, so W3C goes
+    // last and beats B3 when a carrier holds both.
     propagator: new CompositePropagator({
-      propagators: [new B3Propagator()],
+      propagators: [new B3Propagator(), new W3CBaggagePropagator(), new W3CTraceContextPropagator()],
     }),
   };
 }
