@@ -170,11 +170,14 @@ jobs:
   #─────────────────────────────────────────────────────────────────────────────
   #Job 2: Cost estimation — PR events only
   #Compares base branch vs PR branch; fails if monthly cost increases > $50.
+  #Infracost prices the HCL itself (no AWS credentials), but needs its own API
+  #key: it runs when the INFRACOST_ENABLED repository variable is true and the
+  #INFRACOST_API_KEY secret is set.
   #─────────────────────────────────────────────────────────────────────────────
   cost:
     runs-on: ubuntu-latest
     needs: quality
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && vars.INFRACOST_ENABLED == 'true'
     permissions:
       contents: read
       pull-requests: write
@@ -298,100 +301,6 @@ jobs:
           path: stacks/**/tfplan
           retention-days: 5
 
-  #─────────────────────────────────────────────────────────────────────────────
-  #Job 4: PR Terraform plan — no AWS credentials or production secrets.
-  #Posts an informational plan comment from terraform.tfvars.example.
-  #─────────────────────────────────────────────────────────────────────────────
-  plan-pr:
-    runs-on: ubuntu-latest
-    needs: quality
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '22'
-
-      - name: Build Lambda dependencies
-        run: bash scripts/build-lambdas.sh
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Write PR terraform.tfvars
-        run: cp terraform.tfvars.example terraform.tfvars
-
-      - name: terraform init (no backend)
-        run: terraform init -backend=false
-
-      - name: terraform plan (no AWS credentials)
-        id: plan
-        shell: bash
-        run: |
-          set -o pipefail
-          terraform plan -lock=false -refresh=false \
-            -out=tfplan -no-color 2>&1 | tee plan-output.txt
-
-      - name: Post plan to PR
-        if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        with:
-          script: |
-            const fs = require('fs');
-            let output = fs.existsSync('plan-output.txt')
-              ? fs.readFileSync('plan-output.txt', 'utf8')
-              : 'Terraform plan did not produce output. Check the workflow logs.';
-
-            if (output.length > 65000) {
-              output = output.substring(0, 65000) + '\n\n... output truncated (exceeded 65000 chars)';
-            }
-
-            const marker = '<!-- terraform-plan-comment -->';
-            const body = `## Terraform Plan (PR, no AWS credentials)
-
-            <details><summary>Show Plan Output</summary>
-
-            \`\`\`hcl
-            ${output}
-            \`\`\`
-
-            </details>
-
-            *Triggered by @${{ github.actor }} — \`${{ github.event_name }}\` on \`${{ github.ref }}\`*
-            ${marker}`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existing = comments.find(c => c.body && c.body.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
   #Job 5: Security scan — Trivy (hard fail on HIGH/CRITICAL) + Checkov.
   security-scan:
     runs-on: ubuntu-latest
@@ -451,101 +360,23 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - name: Install kubeconform
-        run: |
-          wget -q https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
-          tar xf kubeconform-linux-amd64.tar.gz
-          sudo mv kubeconform /usr/local/bin/
-          kubeconform -v
-
-      - name: kubeconform — schema validation
-        run: |
-          kubeconform -strict -ignore-missing-schemas -summary apps/order-api/k8s/
-
-  #─────────────────────────────────────────────────────────────────────────────
-  #Job 6: Architecture diagram — Pluralith
-  #Generates an infrastructure diagram from the Terraform plan.
-  #On PRs: posts a comment with a change summary table and diagram link.
-  #On push to main: commits architecture/current-architecture.png to the repo.
-  #Runs in parallel with plan. continue-on-error so a missing PLURALITH_API_KEY
-  #or CLI failure does not block the approve gate.
-  #─────────────────────────────────────────────────────────────────────────────
-  diagram:
-    runs-on: ubuntu-latest
-    needs: quality
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      PLURALITH_API_KEY: ${{ secrets.PLURALITH_API_KEY }}
-      PLURALITH_ORG_ID: ${{ secrets.PLURALITH_ORG_ID }}
-      PLURALITH_PROJECT_ID: ${{ secrets.PLURALITH_PROJECT_ID }}
-      PLURALITH_PROJECT_NAME: ${{ secrets.PLURALITH_PROJECT_NAME }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # The manifests are templates (replicas: ${ORDER_API_REPLICAS}, …):
+      # they are only valid once rendered, so validate through the shared
+      # script, which renders order-api, storefront and the mesh services
+      # with placeholder values and runs kubeconform on the result.
+      - name: Setup Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          fetch-depth: 0
+          node-version: '22'
 
-      - name: Write terraform.tfvars
-        run: cp terraform.tfvars.example terraform.tfvars
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        run: terraform init -backend=false
-
-      - name: Pluralith Init
-        uses: Pluralith/actions/init@7f562c43f337f0065c827b27d0ba88f4f5a0775d # v1.4.0
-        with:
-          terraform-path: ${{ github.workspace }}
-          api-key: ${{ secrets.PLURALITH_API_KEY }}
-          org-id: ${{ secrets.PLURALITH_ORG_ID }}
-          project-id: ${{ secrets.PLURALITH_PROJECT_ID }}
-          project-name: ${{ secrets.PLURALITH_PROJECT_NAME }}
-
-      - name: Install Pluralith graphing engine
+      - name: Install the renderers' dependencies
         run: |
-          GRAPHING_URL=$(curl -s https://api.github.com/repos/Pluralith/pluralith-cli-graphing-release/releases/latest \
-            | grep -o '"browser_download_url": "[^"]*linux_amd64[^"]*"' \
-            | grep -o 'https://[^"]*' \
-            | head -1)
-          mkdir -p /home/runner/Pluralith/bin
-          curl -L "$GRAPHING_URL" -o /home/runner/Pluralith/bin/pluralith-cli-graphing
-          chmod +x /home/runner/Pluralith/bin/pluralith-cli-graphing
+          for app in order-api storefront api-gateway; do
+            npm ci --prefix "apps/$app"
+          done
 
-      - name: Generate Terraform plan
-        run: |
-          terraform plan -lock=false \
-            -refresh=false \
-            -var 'enable_ingress=false' \
-            -var 'enable_observability=false' \
-            -var 'enable_security=false' \
-            -out=pluralith.tfplan -no-color
-          terraform show -json pluralith.tfplan > plan.json
-
-      - name: Generate Pluralith diagram
-        run: |
-          pluralith graph \
-            --plan-file-json plan.json \
-            --var 'enable_ingress=false' \
-            --var 'enable_observability=false' \
-            --var 'enable_security=false' \
-            --title "CloudOps Infrastructure" \
-            --show-changes \
-            --local-only \
-            --out-dir /tmp/pluralith-out \
-            --file-name diagram
-
-      - name: Pluralith Comment
-        uses: Pluralith/actions/comment@7f562c43f337f0065c827b27d0ba88f4f5a0775d # v1.4.0
-        with:
-          terraform-path: ${{ github.workspace }}
+      - name: Render and validate the manifests
+        run: bash scripts/validate-k8s-manifests.sh
 
   #─────────────────────────────────────────────────────────────────────────────
   #Job 7: Manual approval gate — push to main only
@@ -868,7 +699,7 @@ jobs:
             --log-type None \
             /tmp/compliance-scan.json \
             > /tmp/invoke-meta.json 2>&1 || {
-            HTTP_CODE=$(cat /tmp/invoke-meta.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Error','not found'))" 2>/dev/null || echo "not found")
+            HTTP_CODE=$(python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Error','not found'))" < /tmp/invoke-meta.json 2>/dev/null || echo "not found")
             echo "::warning::Compliance scanner Lambda '${LAMBDA_NAME}' not found or invocation failed (${HTTP_CODE})."
             echo "::warning::The security module may not be deployed. Scan skipped."
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
