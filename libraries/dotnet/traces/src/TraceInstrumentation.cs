@@ -160,7 +160,9 @@ public sealed class TraceInstrumentation : IDisposable
         activeContext = span.Context;
     }
 
-    // Fetch the trace attributes for context propagation (B3 single header).
+    // The active span as a propagation carrier for a message (SNS, SQS): W3C
+    // `traceparent`, which every OpenTelemetry SDK reads by default, and B3
+    // single-header `b3` for consumers that only know B3.
     public IReadOnlyDictionary<string, string>? FetchTraceAttrs()
     {
         var span = currentSpan;
@@ -170,14 +172,24 @@ public sealed class TraceInstrumentation : IDisposable
         var sampled = (context.TraceFlags & ActivityTraceFlags.Recorded) != 0;
         return new Dictionary<string, string>
         {
+            ["traceparent"] = $"00-{context.TraceId}-{context.SpanId}-{(sampled ? "01" : "00")}",
             ["b3"] = $"{context.TraceId}-{context.SpanId}-{(sampled ? "1" : "0")}"
         };
     }
 
-    // Extract trace attributes from a carrier (B3 single header).
+    // Reads a carrier into the parent context for the next root span. W3C
+    // `traceparent` wins (TryParse rejects a malformed one, as the spec
+    // requires); B3 single-header `b3` is the fallback.
     public void ExtractTraceAttrs(IReadOnlyDictionary<string, string> carrier)
     {
         if (carrier is null) return;
+
+        if (carrier.TryGetValue("traceparent", out var traceparent)
+            && ActivityContext.TryParse(traceparent, null, isRemote: true, out var w3c))
+        {
+            propagationContext = w3c;
+            return;
+        }
 
         if ((!carrier.TryGetValue("b3", out var raw) || string.IsNullOrWhiteSpace(raw))
             && (!carrier.TryGetValue("B3", out raw) || string.IsNullOrWhiteSpace(raw)))

@@ -68,4 +68,30 @@ class TraceInstrumentationTest {
       System.setOut(originalOut);
     }
   }
+
+  // A carrier is W3C first: other OpenTelemetry SDKs read and write
+  // `traceparent` by default; B3 stays as the fallback.
+  @Test
+  void traceAttrsUseW3CAndFallBackToB3() {
+    TraceInstrumentation tracer = new TraceInstrumentation();
+    Span span = tracer.startBasicSpan("root", new SpanProps().setActiveContext(true));
+    Map<String, String> attrs = tracer.fetchTraceAttrs();
+    span.end();
+    assertTrue(attrs.containsKey("traceparent"), "carrier has traceparent: " + attrs);
+    assertTrue(attrs.containsKey("b3"), "carrier has b3: " + attrs);
+
+    tracer.extractTraceAttrs(Map.of(
+        "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "b3", "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"));
+    org.junit.jupiter.api.Assertions.assertEquals("4bf92f3577b34da6a3ce929d0e0e4736", traceIdOf(tracer));
+
+    tracer.extractTraceAttrs(Map.of(
+        "traceparent", "garbage",
+        "b3", "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"));
+    org.junit.jupiter.api.Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", traceIdOf(tracer));
+  }
+
+  private static String traceIdOf(TraceInstrumentation tracer) {
+    return Span.fromContext(tracer.propagationContext()).getSpanContext().getTraceId();
+  }
 }

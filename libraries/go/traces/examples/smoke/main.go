@@ -40,8 +40,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "child did not inherit trace id")
 		os.Exit(1)
 	}
-	if attrs["b3"] == "" {
-		fmt.Fprintln(os.Stderr, "b3 propagation header missing")
+	if attrs["traceparent"] == "" || attrs["b3"] == "" {
+		fmt.Fprintln(os.Stderr, "traceparent or b3 propagation header missing")
 		os.Exit(1)
 	}
 
