@@ -296,6 +296,8 @@ module "security" {
   count  = var.enable_security ? 1 : 0
   source = "../../modules/security"
 
+  chaos_mesh_namespace = var.enable_chaos_mesh ? local.chaos_mesh_namespace : ""
+
   eks_cluster_name = local.eks_cluster_name
   otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
   environment      = var.environment
@@ -734,4 +736,21 @@ module "loadgen" {
   enable_chaos = var.loadgen_enable_chaos
 
   tags = local.common_tags
+}
+
+# Chaos Mesh for fault injection: the Argus bench scenarios and game days.
+# Experiments reach only the application namespaces.
+locals {
+  chaos_mesh_namespace = "chaos-mesh"
+}
+
+module "chaos_mesh" {
+  count  = var.enable_chaos_mesh ? 1 : 0
+  source = "../../modules/chaos-mesh"
+
+  namespace         = local.chaos_mesh_namespace
+  target_namespaces = distinct([var.mesh_namespace, var.order_api_namespace])
+
+  # The Gatekeeper exemption must exist before the privileged daemon starts.
+  depends_on = [module.security]
 }

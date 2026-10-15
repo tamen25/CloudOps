@@ -894,6 +894,12 @@ variable "loadgen_trickle_duration_seconds" {
   default = 60
 }
 
+variable "enable_chaos_mesh" {
+  description = "Install Chaos Mesh for fault injection (Argus bench scenarios, game days). Exempts its namespace from the cluster-wide Gatekeeper constraints while on. See docs/runbooks/chaos-mesh.md."
+  type        = bool
+  default     = false
+}
+
 variable "loadgen_enable_chaos" {
   description = "Grant loadgen namespace-scoped pod-delete RBAC + expose /chaos/kill for real pod-kill fault injection (#143). OFF by default; app guards (mesh allowlist + dry-run default) still apply when on."
   type        = bool
