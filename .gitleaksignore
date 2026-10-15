@@ -1,0 +1,6 @@
+# Reviewed gitleaks false positives, by fingerprint (commit:file:rule:line).
+# A new finding fails CI; add it here only after checking it is not a secret.
+# modules/observability/jwks_alerts.tf: Prometheus recording-rule name, not a key
+c556e59a27efe968474dc2630a99744589bddfcb:modules/observability/jwks_alerts.tf:generic-api-key:56
+# modules/observability/grafana.tf: name of the key inside a Kubernetes secret, not its value
+984fb4ddfce87ab9e7dd92c9af27b59d4a0089ac:modules/observability/grafana.tf:hashicorp-tf-password:16
