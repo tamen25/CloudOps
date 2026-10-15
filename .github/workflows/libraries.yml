@@ -75,6 +75,12 @@ env:
 jobs:
   nodejs-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -89,8 +95,8 @@ jobs:
           CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_NODEJS_REPOSITORY }}
         run: bash scripts/publish-node-packages.sh --check
 
-      - name: Test Node logs package with coverage
-        working-directory: libraries/nodejs/logs
+      - name: Test Node ${{ matrix.lib }} package with coverage
+        working-directory: libraries/nodejs/${{ matrix.lib }}
         run: |
           npm ci
           npm run test:coverage 2>&1 | tee coverage-summary.txt
@@ -100,13 +106,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-nodejs-logs
-          path: libraries/nodejs/logs/coverage-summary.txt
+          name: coverage-nodejs-${{ matrix.lib }}
+          path: libraries/nodejs/${{ matrix.lib }}/coverage-summary.txt
           retention-days: 14
           if-no-files-found: ignore
 
   java-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -122,23 +134,29 @@ jobs:
           CODEARTIFACT_REPOSITORY: ${{ env.CODEARTIFACT_JAVA_REPOSITORY }}
         run: bash scripts/publish-java-packages.sh --check
 
-      - name: Test Java logs package with coverage
-        working-directory: libraries/java/logs
+      - name: Test Java ${{ matrix.lib }} package with coverage
+        working-directory: libraries/java/${{ matrix.lib }}
         run: mvn -q verify
 
       - name: Upload Java coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-java-logs
+          name: coverage-java-${{ matrix.lib }}
           path: |
-            libraries/java/logs/target/site/jacoco/
-            libraries/java/logs/target/site/jacoco/jacoco.xml
+            libraries/java/${{ matrix.lib }}/target/site/jacoco/
+            libraries/java/${{ matrix.lib }}/target/site/jacoco/jacoco.xml
           retention-days: 14
           if-no-files-found: ignore
 
   dotnet-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -156,10 +174,10 @@ jobs:
       #Threshold raised 40 → 45 in #69. Java is at 0.50 (actual ~57%); .NET
       #shape mirrors Java so 45 is a conservative lift with margin. Revert
       #here if a future change drops below the new gate.
-      - name: Test .NET logs package with coverage
-        working-directory: libraries/dotnet/logs
+      - name: Test .NET ${{ matrix.lib }} package with coverage
+        working-directory: libraries/dotnet/${{ matrix.lib }}
         run: >
-          dotnet test tests/CloudOps.Otel.Logs.Tests.csproj
+          dotnet test tests/CloudOps.Otel.${{ matrix.pascal }}.Tests.csproj
           --configuration Release
           /p:CollectCoverage=true
           /p:CoverletOutputFormat=cobertura
@@ -171,13 +189,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-dotnet-logs
-          path: libraries/dotnet/logs/tests/TestResults/coverage/
+          name: coverage-dotnet-${{ matrix.lib }}
+          path: libraries/dotnet/${{ matrix.lib }}/tests/TestResults/coverage/
           retention-days: 14
           if-no-files-found: ignore
 
   python-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -195,11 +219,16 @@ jobs:
       - name: Install Python coverage tooling
         run: python -m pip install --upgrade coverage
 
-      - name: Run Python logs tests with coverage
+      # The package's own dependencies (the traces library needs the
+      # OpenTelemetry SDK); the tests still import from src/ via PYTHONPATH.
+      - name: Install the ${{ matrix.lib }} package dependencies
+        run: python -m pip install ./libraries/python/${{ matrix.lib }}
+
+      - name: Run Python ${{ matrix.lib }} tests with coverage
         env:
-          PYTHONPATH: libraries/python/logs/src
+          PYTHONPATH: libraries/python/${{ matrix.lib }}/src
         run: |
-          python -m coverage run --source=libraries/python/logs/src/cloudops_otel_logs -m unittest discover -s libraries/python/logs/tests
+          python -m coverage run --source=libraries/python/${{ matrix.lib }}/src/cloudops_otel_${{ matrix.lib }} -m unittest discover -s libraries/python/${{ matrix.lib }}/tests
           python -m coverage report --fail-under=70 | tee coverage-summary.txt
           python -m coverage xml -o coverage.xml
           python -m coverage html -d htmlcov
@@ -208,7 +237,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-python-logs
+          name: coverage-python-${{ matrix.lib }}
           path: |
             coverage-summary.txt
             coverage.xml
@@ -218,6 +247,12 @@ jobs:
 
   go-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -225,13 +260,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: libraries/go/logs/go.mod
-          cache-dependency-path: libraries/go/logs/go.sum
+          go-version-file: libraries/go/${{ matrix.lib }}/go.mod
+          cache-dependency-path: libraries/go/${{ matrix.lib }}/go.sum
 
-      - name: Run Go logs tests with coverage
-        working-directory: libraries/go/logs
+      - name: Run Go ${{ matrix.lib }} tests with coverage
+        working-directory: libraries/go/${{ matrix.lib }}
         run: |
-          go test -coverprofile coverage.out -covermode atomic -coverpkg github.com/cloudops/otel-logs ./...
+          go test -coverprofile coverage.out -covermode atomic -coverpkg github.com/cloudops/otel-${{ matrix.lib }} ./...
           go tool cover -func coverage.out | tee coverage-summary.txt
           go tool cover -html coverage.out -o coverage.html
           coverage="$(go tool cover -func coverage.out | awk '/^total:/ { gsub("%", "", $3); print $3 }')"
@@ -242,16 +277,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-go-logs
+          name: coverage-go-${{ matrix.lib }}
           path: |
-            libraries/go/logs/coverage.out
-            libraries/go/logs/coverage.html
-            libraries/go/logs/coverage-summary.txt
+            libraries/go/${{ matrix.lib }}/coverage.out
+            libraries/go/${{ matrix.lib }}/coverage.html
+            libraries/go/${{ matrix.lib }}/coverage-summary.txt
           retention-days: 14
           if-no-files-found: ignore
 
   cpp-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { lib: logs, pascal: Logs, upper: LOGS }
+          - { lib: traces, pascal: Traces, upper: TRACES }
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -264,49 +305,49 @@ jobs:
       - name: Install C++ coverage tooling
         run: python -m pip install --upgrade gcovr
 
-      - name: Configure C++ logs
-        run: cmake -S libraries/cpp/logs -B libraries/cpp/logs/build -DCMAKE_BUILD_TYPE=Debug -DCLOUDOPS_LOGS_ENABLE_COVERAGE=ON
+      - name: Configure C++ ${{ matrix.lib }}
+        run: cmake -S libraries/cpp/${{ matrix.lib }} -B libraries/cpp/${{ matrix.lib }}/build -DCMAKE_BUILD_TYPE=Debug -DCLOUDOPS_${{ matrix.upper }}_ENABLE_COVERAGE=ON
 
-      - name: Build C++ logs
-        run: cmake --build libraries/cpp/logs/build --config Debug
+      - name: Build C++ ${{ matrix.lib }}
+        run: cmake --build libraries/cpp/${{ matrix.lib }}/build --config Debug
 
-      - name: Run C++ logs tests
-        run: ctest --test-dir libraries/cpp/logs/build --output-on-failure -C Debug
+      - name: Run C++ ${{ matrix.lib }} tests
+        run: ctest --test-dir libraries/cpp/${{ matrix.lib }}/build --output-on-failure -C Debug
 
-      - name: Check C++ logs coverage
+      - name: Check C++ ${{ matrix.lib }} coverage
         run: |
           gcovr \
-            --root libraries/cpp/logs \
-            --filter libraries/cpp/logs/src \
-            --filter libraries/cpp/logs/include \
-            --exclude libraries/cpp/logs/tests \
-            --exclude libraries/cpp/logs/examples \
+            --root libraries/cpp/${{ matrix.lib }} \
+            --filter libraries/cpp/${{ matrix.lib }}/src \
+            --filter libraries/cpp/${{ matrix.lib }}/include \
+            --exclude libraries/cpp/${{ matrix.lib }}/tests \
+            --exclude libraries/cpp/${{ matrix.lib }}/examples \
             --fail-under-line 50 \
-            --print-summary | tee libraries/cpp/logs/coverage-summary.txt
+            --print-summary | tee libraries/cpp/${{ matrix.lib }}/coverage-summary.txt
           gcovr \
-            --root libraries/cpp/logs \
-            --filter libraries/cpp/logs/src \
-            --filter libraries/cpp/logs/include \
-            --exclude libraries/cpp/logs/tests \
-            --exclude libraries/cpp/logs/examples \
-            --xml -o libraries/cpp/logs/coverage.xml || true
+            --root libraries/cpp/${{ matrix.lib }} \
+            --filter libraries/cpp/${{ matrix.lib }}/src \
+            --filter libraries/cpp/${{ matrix.lib }}/include \
+            --exclude libraries/cpp/${{ matrix.lib }}/tests \
+            --exclude libraries/cpp/${{ matrix.lib }}/examples \
+            --xml -o libraries/cpp/${{ matrix.lib }}/coverage.xml || true
           gcovr \
-            --root libraries/cpp/logs \
-            --filter libraries/cpp/logs/src \
-            --filter libraries/cpp/logs/include \
-            --exclude libraries/cpp/logs/tests \
-            --exclude libraries/cpp/logs/examples \
-            --html-details libraries/cpp/logs/coverage.html || true
+            --root libraries/cpp/${{ matrix.lib }} \
+            --filter libraries/cpp/${{ matrix.lib }}/src \
+            --filter libraries/cpp/${{ matrix.lib }}/include \
+            --exclude libraries/cpp/${{ matrix.lib }}/tests \
+            --exclude libraries/cpp/${{ matrix.lib }}/examples \
+            --html-details libraries/cpp/${{ matrix.lib }}/coverage.html || true
 
       - name: Upload C++ coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: coverage-cpp-logs
+          name: coverage-cpp-${{ matrix.lib }}
           path: |
-            libraries/cpp/logs/coverage-summary.txt
-            libraries/cpp/logs/coverage.xml
-            libraries/cpp/logs/coverage.html*
+            libraries/cpp/${{ matrix.lib }}/coverage-summary.txt
+            libraries/cpp/${{ matrix.lib }}/coverage.xml
+            libraries/cpp/${{ matrix.lib }}/coverage.html*
           retention-days: 14
           if-no-files-found: ignore
 
@@ -608,7 +649,7 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: coverage
-          pattern: coverage-*-logs
+          pattern: coverage-*
           merge-multiple: false
 
       - name: Aggregate and summarise
@@ -635,9 +676,11 @@ jobs:
             printf '| %s | %s | %s | `%s` |\n' "$lang" "${val:-—}" "$gate" "$file" >> "$GITHUB_STEP_SUMMARY"
           }
 
-          extract "Node.js"  "coverage/coverage-nodejs-logs/coverage-summary.txt"      "80%" "Lines"
-          extract "Java"     "coverage/coverage-java-logs/jacoco.xml"                  "50%" "line-rate"
-          extract ".NET"     "coverage/coverage-dotnet-logs/coverage.cobertura.xml"    "45%" "line-rate"
-          extract "Python"   "coverage/coverage-python-logs/coverage-summary.txt"      "70%" "TOTAL"
-          extract "Go"       "coverage/coverage-go-logs/coverage-summary.txt"          "75%" "^total:"
-          extract "C++"      "coverage/coverage-cpp-logs/coverage-summary.txt"         "50%" "lines:"
+          for lib in logs traces; do
+            extract "Node.js $lib" "coverage/coverage-nodejs-$lib/coverage-summary.txt"   "80%" "Lines"
+            extract "Java $lib"    "coverage/coverage-java-$lib/jacoco.xml"               "50%" "line-rate"
+            extract ".NET $lib"    "coverage/coverage-dotnet-$lib/coverage.cobertura.xml" "45%" "line-rate"
+            extract "Python $lib"  "coverage/coverage-python-$lib/coverage-summary.txt"   "70%" "TOTAL"
+            extract "Go $lib"      "coverage/coverage-go-$lib/coverage-summary.txt"       "75%" "^total:"
+            extract "C++ $lib"     "coverage/coverage-cpp-$lib/coverage-summary.txt"      "50%" "lines:"
+          done

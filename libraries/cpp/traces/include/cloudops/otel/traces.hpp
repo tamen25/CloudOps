@@ -127,9 +127,9 @@ class TraceInstrumentation {
                                      const std::shared_ptr<Span>& span = nullptr);
   void                  set_active_context(const std::shared_ptr<Span>& span);
 
-  // Injects the current span into a B3 single-header carrier.
+  // The current span as W3C `traceparent` and B3 `b3` carrier entries.
   std::optional<std::map<std::string, std::string>> fetch_trace_attrs();
-  // Parses a B3 single-header carrier into the stored propagation context.
+  // Reads `traceparent` (preferred) or `b3` into the stored propagation context.
   void                                              extract_trace_attrs(
                                                         const std::map<std::string, std::string>& carrier);
 
