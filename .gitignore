@@ -55,10 +55,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Claude Code local settings (contains personal configuration)
-.claude/
-CLAUDE.md
-
 # Pluralith local output
 .pluralith/
 
@@ -119,5 +115,6 @@ libraries/dotnet/logs/obj/
 libraries/dotnet/logs/tests/bin/
 libraries/dotnet/logs/tests/obj/
 STOREFRONT_REDESIGN.md
-.gstack/
-.dual-graph/
+
+# CMake system-information probes left by local .NET/C++ builds
+__cmake_systeminformation/
