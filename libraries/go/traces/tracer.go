@@ -353,37 +353,76 @@ func (t *TraceInstrumentation) SetActiveContext(span *Span) {
 	t.mu.Unlock()
 }
 
-// FetchTraceAttrs injects the current span into a B3 single-header carrier.
+// FetchTraceAttrs returns the active span as a propagation carrier for a
+// message (SNS, SQS): W3C `traceparent`, which every OpenTelemetry SDK reads
+// by default, and B3 single-header `b3` for consumers that only know B3.
 func (t *TraceInstrumentation) FetchTraceAttrs() map[string]string {
 	span := t.ActiveSpan()
 	if span == nil {
 		return nil
 	}
-	sampled := "0"
+	flags, sampled := "00", "0"
 	if span.Sampled {
-		sampled = "1"
+		flags, sampled = "01", "1"
 	}
-	return map[string]string{"b3": fmt.Sprintf("%s-%s-%s", span.TraceID, span.SpanID, sampled)}
+	return map[string]string{
+		"traceparent": fmt.Sprintf("00-%s-%s-%s", span.TraceID, span.SpanID, flags),
+		"b3":          fmt.Sprintf("%s-%s-%s", span.TraceID, span.SpanID, sampled),
+	}
 }
 
-// ExtractTraceAttrs parses a B3 single-header carrier into the propagation
-// context used as the parent for the next root span.
+// ExtractTraceAttrs reads a propagation carrier into the context used as the
+// parent for the next root span. W3C `traceparent` wins; `b3` is the
+// fallback. A malformed value is ignored, as the W3C spec requires.
 func (t *TraceInstrumentation) ExtractTraceAttrs(carrier map[string]string) {
-	if carrier == nil {
+	traceID, spanID, ok := parseTraceparent(carrier["traceparent"])
+	if !ok {
+		traceID, spanID, ok = parseB3(carrier)
+	}
+	if !ok {
 		return
 	}
+	t.mu.Lock()
+	t.propagationTraceID = traceID
+	t.propagationSpanID = spanID
+	t.mu.Unlock()
+}
+
+// parseTraceparent reads "00-<32 hex trace id>-<16 hex span id>-<2 hex flags>".
+// All-zero IDs are invalid.
+func parseTraceparent(v string) (traceID, spanID string, ok bool) {
+	parts := strings.Split(strings.TrimSpace(v), "-")
+	if len(parts) < 4 || len(parts[0]) != 2 || parts[0] == "ff" ||
+		!isHex(parts[1], 32) || !isHex(parts[2], 16) || !isHex(parts[3], 2) ||
+		strings.Trim(parts[1], "0") == "" || strings.Trim(parts[2], "0") == "" {
+		return "", "", false
+	}
+	return parts[1], parts[2], true
+}
+
+// parseB3 reads the single-header form "<trace id>-<span id>[-<sampled>]".
+func parseB3(carrier map[string]string) (traceID, spanID string, ok bool) {
 	raw := carrier["b3"]
 	if raw == "" {
 		raw = carrier["B3"]
 	}
 	parts := strings.Split(raw, "-")
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		return
+		return "", "", false
 	}
-	t.mu.Lock()
-	t.propagationTraceID = parts[0]
-	t.propagationSpanID = parts[1]
-	t.mu.Unlock()
+	return parts[0], parts[1], true
+}
+
+func isHex(s string, n int) bool {
+	if len(s) != n {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // PropagationContext returns the parent trace/span IDs captured by

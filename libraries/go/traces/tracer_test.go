@@ -289,3 +289,37 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	return string(body)
 }
+
+// A carrier is W3C first: other OpenTelemetry SDKs read and write
+// `traceparent` by default, and B3 stays as the fallback.
+func TestTraceAttrsUseW3CAndFallBackToB3(t *testing.T) {
+	t.Setenv("OTEL_BACKEND_EXPORTERS", "console")
+	tracer := NewTraceInstrumentation("w3c-test")
+
+	captureStdout(t, func() {
+		span := tracer.StartBasicSpan("root", &SpanOptions{SetActiveContext: true})
+		attrs := tracer.FetchTraceAttrs()
+		want := "00-" + span.TraceID + "-" + span.SpanID + "-"
+		if !strings.HasPrefix(attrs["traceparent"], want) || attrs["b3"] == "" {
+			t.Fatalf("carrier = %#v, want traceparent %s… and b3", attrs, want)
+		}
+		span.End()
+	})
+
+	// traceparent wins over b3 when both are present.
+	tracer.ExtractTraceAttrs(map[string]string{
+		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		"b3":          "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1",
+	})
+	if traceID, spanID := tracer.PropagationContext(); traceID != "4bf92f3577b34da6a3ce929d0e0e4736" || spanID != "00f067aa0ba902b7" {
+		t.Errorf("with both headers: %s / %s, want the traceparent IDs", traceID, spanID)
+	}
+
+	// A malformed or all-zero traceparent is ignored, and b3 is used.
+	for _, bad := range []string{"garbage", "00-00000000000000000000000000000000-00f067aa0ba902b7-01", "00-4bf92f35-00f067aa-01"} {
+		tracer.ExtractTraceAttrs(map[string]string{"traceparent": bad, "b3": "0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-1"})
+		if traceID, _ := tracer.PropagationContext(); traceID != "0af7651916cd43dd8448eb211c80319c" {
+			t.Errorf("traceparent %q: trace %s, want the b3 fallback", bad, traceID)
+		}
+	}
+}
