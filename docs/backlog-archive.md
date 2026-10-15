@@ -1,12 +1,11 @@
 # Backlog Archive — Resolved Work and Historical Change Log
 
-Snapshot of CLAUDE.md sections describing completed work as of 2026-05-14.
+Snapshot of the project guide's sections describing completed work as of 2026-05-14.
 Source of truth for completed work is git history + closed PRs; this file
 exists as a searchable index of resolved backlog IDs (#1 … #94) and the
 2026-04-21 → 2026-04-27 platform-hardening narrative.
 
-Agents: do NOT load this for context unless the user references a specific
-historical row by ID. CLAUDE.md is the live operating guide.
+This is history: open work lives in `BACKLOG.md`.
 
 ---
 
@@ -55,50 +54,6 @@ These are tripwires from past incidents. Don't undo them without an explicit ask
 
 ---
 
-## Workflows
-
-Pre-built multi-plugin workflows in `.claude/workflows/`:
-
-### 🎨 Frontend Fix
-**Trigger**: "frontend fix" or "storefront fix"
-
-**Pipeline**: Security Guidance → Code Review → Frontend Design → Superpowers → Verification
-
-**Current priorities**:
-- S1 (P1): Guest cart UUID collision check
-- S2 (P1): JWT verification on static assets
-- S3 (P2): Checkout cart hash race condition
-
-### 🔒 Security Review
-**Trigger**: "security review" or "security audit"
-
-**Pipeline**: Security Guidance (threat model) → Code Review (patterns) → Superpowers (batch fixes) → Report → Backlog update
-
-**Outputs**: Score /100, findings by severity, compliance gaps
-
-### 📝 Code Review
-**Trigger**: "code review" or "review code"
-
-**Pipeline**: Code Review (comprehensive) → Security Guidance (security focus) → Frontend Design (if storefront) → Report → Backlog update
-
-**Outputs**: Score /100, findings by category, file:line refs
-
-### ⚡ Bulk Refactor
-**Trigger**: "bulk refactor", "batch fix", or "superpowers fix"
-
-**Pipeline**: Code Review (scope) → Superpowers (multi-file changes) → Verification → Git operations
-
-**Common targets**:
-- A1: Convert 11 test files CommonJS → ESM
-- M1: Change 6 SQL files `--` → `/* */`
-- C1: Fix 3 workflow hardcoded ARNs
-- I5: Extend OIDC trust policy
-
-See [`.claude/workflows/`](./.claude/workflows/) for detailed steps.
-
-
----
-
 ## Known Risks / Follow-ups (backlog)
 
 Status: `open` / `in-progress` / `resolved` / `wont-fix`. Priority: `P1`-`P4`.
@@ -132,11 +87,11 @@ Status: `open` / `in-progress` / `resolved` / `wont-fix`. Priority: `P1`-`P4`.
 | 28 | resolved | P2 | Toggle guards miss base infrastructure dependencies | Resolved 2026-05-02: extended `terraform_data.toggle_guard` in `main.tf` with two preconditions: (1) `enable_eks=true` with `enable_networking=false` now requires non-empty `existing_vpc_id` + `existing_private_subnet_ids` + `existing_public_subnet_ids` + `existing_node_sg_id`; (2) `enable_database=true` requires `enable_networking=true` today (DB subnet group + SG come from the networking module — bring-your-own networking for RDS would need module-level vars first). Both fail plan with actionable messages. |
 | 29 | resolved | P2 | Supply-chain reproducibility gaps | Resolved 2026-05-02: (1) `package-lock.json` generated and committed for all 8 Lambda dirs (`modules/{slo,finops/{cost_ingestion,idle_detector},self_healing/{lambda_function,lambda_function_scale_in},security/{auto_remediation,compliance_scanner,kube_bench_processor}}`); `scripts/build-lambdas.sh` now prefers `npm ci --omit=dev` when a lockfile is present, falls back to `npm install` only if missing. (2) AWS Load Balancer Controller Helm chart pinned to `version = "1.8.4"` in `modules/ingress/lb_controller.tf`. (3) RDS rotation SAR app pinned via new `var.rotation_sar_semantic_version` in `modules/database/variables.tf` (default `1.1.656`, latest at pin time); `modules/database/rotation_lambda.tf` uses the var instead of `null`. |
 | 30 | resolved | P3 | Line-ending churn in working tree | Resolved 2026-05-03: ran `git add --renormalize .` against the clean tree after committing the auth/tenancy/hardening batch (`b98a615`). 0 files staged — the index already matches what `.gitattributes`' `eol=lf` would produce. The `w/crlf` reported by `git ls-files --eol` is core.autocrlf converting on checkout, not an index discrepancy. No follow-up needed. |
-| 31 | resolved | P3 | TFLint warning cleanup | Resolved 2026-05-03: root `.tflint.hcl` already disables `terraform_required_providers`; the recursive run was bypassing it. Fix: pass `--config="$(pwd)/.tflint.hcl"` to `tflint --recursive` (updated `.github/workflows/infra.yml` and the CLAUDE.md validation block). Cleaned the remaining 4 real warnings: added `terraform { required_version = ">= 1.5.0" }` to `modules/dns/main.tf`; removed unused `environment` from `modules/backup/variables.tf` (and its root call) plus unused `environment` and `region` from `modules/compliance/variables.tf` (and its root call). `tflint --recursive --config=… --minimum-failure-severity=error` now exits 0 with 0 warnings. |
+| 31 | resolved | P3 | TFLint warning cleanup | Resolved 2026-05-03: root `.tflint.hcl` already disables `terraform_required_providers`; the recursive run was bypassing it. Fix: pass `--config="$(pwd)/.tflint.hcl"` to `tflint --recursive` (updated `.github/workflows/infra.yml` and the the project guide validation block). Cleaned the remaining 4 real warnings: added `terraform { required_version = ">= 1.5.0" }` to `modules/dns/main.tf`; removed unused `environment` from `modules/backup/variables.tf` (and its root call) plus unused `environment` and `region` from `modules/compliance/variables.tf` (and its root call). `tflint --recursive --config=… --minimum-failure-severity=error` now exits 0 with 0 warnings. |
 | 32 | resolved | P1 | Fix NetworkPolicy RDS egress when `db_subnet_cidrs = null` | Resolved 2026-05-03: `modules/networking/outputs.tf` now exposes `db_subnet_cidrs`, `public_subnet_cidrs`, and `private_subnet_cidrs` (the effective values — caller input or `cidrsubnet`-generated). `main.tf` security module call now passes `module.networking[0].db_subnet_cidrs` when networking is on, falling back to `var.db_subnet_cidrs ?? []` only on bring-your-own networking. The order-api egress rule on TCP 5432 to RDS now emits with real CIDRs even when root `db_subnet_cidrs = null`, so the migration Job + app pods can reach Postgres after VPC CNI NetworkPolicy enforcement (#26) is enabled. |
 | 33 | resolved | P2 | Make app PR `notify` job report skipped deploys correctly | Resolved 2026-05-03: `.github/workflows/app.yml` `notify` job now branches on `github.event_name`. PR runs read `needs.test.result` + `needs.manifest-validation.result` and emit a PR-shaped summary ("✅ PR Validation Passed" / "❌ PR Validation Failed"). Push/dispatch runs keep the existing deploy summary. `notify` `needs:` extended to include `test` + `manifest-validation` so the PR branch has results to read. |
 | 34 | resolved | P2 | Include generated Lambda lockfiles in the current change batch | Resolved 2026-05-03: verified all 8 lockfiles exist on disk (`modules/{slo,finops/{cost_ingestion,idle_detector},self_healing/{lambda_function,lambda_function_scale_in},security/{auto_remediation,compliance_scanner,kube_bench_processor}}/package-lock.json`) and that `git check-ignore` returns non-zero for each — `.gitignore` only excludes `node_modules/`, never the locks. They are tracked-by-default and will land in the next commit alongside `scripts/build-lambdas.sh`, so `npm ci --omit=dev` becomes the active path. |
-| 35 | resolved | P3 | Restore local Kubernetes manifest validation tools | Resolved 2026-05-03: new `scripts/validate-k8s-manifests.sh` renders `apps/order-api/k8s` with placeholder env vars (including `VPC_CIDR`) into a temp dir and runs `kubeconform -strict -kubernetes-version 1.32.0 -ignore-missing-schemas -summary` against the result. The script auto-downloads kubeconform v0.6.7 (Linux/macOS/Windows) into `.tools/` on first run; `.gitignore` excludes `.tools/`. Verified locally: 11 valid resources, 0 invalid. CLAUDE.md "Kubernetes manifests" validation block now points at the new script. Replaces the old `kubeval` reference (kubeval is unmaintained; kubeconform is the active fork). |
+| 35 | resolved | P3 | Restore local Kubernetes manifest validation tools | Resolved 2026-05-03: new `scripts/validate-k8s-manifests.sh` renders `apps/order-api/k8s` with placeholder env vars (including `VPC_CIDR`) into a temp dir and runs `kubeconform -strict -kubernetes-version 1.32.0 -ignore-missing-schemas -summary` against the result. The script auto-downloads kubeconform v0.6.7 (Linux/macOS/Windows) into `.tools/` on first run; `.gitignore` excludes `.tools/`. Verified locally: 11 valid resources, 0 invalid. the project guide "Kubernetes manifests" validation block now points at the new script. Replaces the old `kubeval` reference (kubeval is unmaintained; kubeconform is the active fork). |
 | 36 | resolved | P1 | Add explicit pod security contexts so Gatekeeper admits order-api | Resolved 2026-05-03: pod-level `securityContext { runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001, seccompProfile: { type: RuntimeDefault } }` added to `apps/order-api/k8s/deployment.yaml` and `apps/order-api/k8s/migration-job.yaml`. UID 1001 matches the `nodejs` user created by the Dockerfile. Container-level `securityContext { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }` added to both. Render verified — Gatekeeper `K8sNoRootContainers` rule now admits both Pod templates (matches `c.securityContext.runAsUser > 0` AND pod-level `spec.securityContext.runAsNonRoot == true`). |
 | 37 | resolved | P1 | Tighten secret access and GitHub/Terraform secret coupling | Resolved 2026-05-03: (1) `modules/eks/irsa.tf` order-api policy + `modules/security/external_secrets.tf` ESO policy now have `lifecycle.precondition` blocks that fail plan when `order_api_secret_arns` / `external_secrets_allowed_arns` is empty in `environment != "dev"`. The `*` fallback survives only as a dev bootstrap convenience. (2) New root output `order_api_api_key_secret_arn` exposes the Terraform-managed ARN. (3) `.github/workflows/app.yml` deploy step now asserts in non-dev/test/local envs that `secrets.ORDER_API_KEY_SECRET_ARN` matches `terraform output -raw order_api_api_key_secret_arn`, failing the run on drift or empty TF output. (4) `environments/staging.tfvars.example` documents `external_secrets_allowed_arns` + `order_api_api_key_secret_arn` placeholders so staging cannot accidentally apply with wildcard ESO permissions. |
 | 38 | resolved | P1 | Harden public OpenTelemetry ingestion before production | Resolved 2026-05-03: 4 new root vars surface OTel ingestion controls (`otel_ingestion_internal`, `otel_allowed_cidrs`, `otel_rate_limit_per_5min`, `otel_token_rotation_days`) and flow through `module.observability`. (1) `modules/observability/otel_collector.tf` ALB scheme is now `internal` when `otel_ingestion_internal=true` (production default). (2) New `modules/observability/otel_waf.tf` provisions a regional WAFv2 web ACL specifically for the `cloudops-otel` ALB — default-deny + IPSet allow-list when `otel_allowed_cidrs` is set, default-allow + per-IP rate limit when only `otel_rate_limit_per_5min > 0`. ALB association uses the same two-pass marker pattern as the cloudops WAF (`var.otel_alb_dns_name != ""`). (3) `modules/observability/secrets.tf` `random_password.otel_api_key` now carries a `keepers` block that rotates the token at `otel_token_rotation_days` windows; the SM secret + k8s `otel-auth` Secret pick up the new value automatically. (4) `environments/prod.tfvars.example` ships with `otel_ingestion_internal=true`, rate limit 60k/5min, 30d token rotation. Tenant-aware tokens deferred to #8 (multi-tenant DB lands first). |
@@ -164,7 +119,7 @@ Status: `open` / `in-progress` / `resolved` / `wont-fix`. Priority: `P1`-`P4`.
 | 57 | resolved | P2 | Force TLS for RDS connections | Resolved 2026-05-05: `modules/database/parameter_group.tf` adds `rds.force_ssl=1` so RDS refuses plaintext connections at the server. `apps/order-api/src/server.js` and `migrate.js` now configure `pg.Pool` with `ssl: { rejectUnauthorized: true, ca: <bundle> }` in every deployed env (`test`/`local` skip TLS for the unit-test path; `DB_SSL_DISABLED=true` is the explicit escape hatch). New `fetch-rds-ca` initContainer in both `deployment.yaml` and `migration-job.yaml` pulls the AWS-published RDS global CA bundle from `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem` into a shared `emptyDir` volume mounted at `/etc/rds`; `DB_SSL_CA_BUNDLE` env var points pg at it. CA fetch needs no IAM and no in-tree image. 37/37 tests still pass. |
 | 58 | resolved | P2 | Make NetworkPolicy default-deny behavior prod-like | Resolved 2026-05-05: (1) `apps/order-api/k8s/networkpolicy.yaml` now ships a `order-api-default-deny-egress` policy plus a tightly-scoped `order-api-allow-egress` allow list (DNS to kube-system 53, RDS 5432 to VPC, AWS APIs 443 to anywhere, OTel 4317/4318 to monitoring namespace). Egress regressions in dev surface before prod instead of being masked by the previous "egress unrestricted" comment. (2) `modules/security/network_policies.tf` `otel_collector_ingress` (port 4318) and `grafana_ingress` (port 3000) replaced their `0.0.0.0/0` ip_block with `var.vpc_cidr`. With ALB target-type=ip the policy enforcer sees the ALB ENI IP (in-VPC), not the internet client, so the narrower CIDR has identical effective surface and shrinks lateral-movement risk. 13/13 kubeconform-valid resources. |
 | 59 | resolved | P2 | Make drift detection per-env and per-stack | Resolved 2026-05-05: `.github/workflows/drift-detection.yml` rewritten to a 2-job model. New `plan-matrix` job emits the env list (full set on schedule, single env on dispatch). `detect-drift` matrix expands `{environment} × {foundation, cluster, platform}` and runs `terraform plan -detailed-exitcode` per cell with `STACK=<stack> ./scripts/tf-init.sh` and `terraform -chdir=stacks/<stack> plan`. Drift issues are scoped per env+stack via three labels (`drift`, `drift-<env>`, `drift-<stack>`) so a dev-only drift no longer comments on the prod issue. Step summary now shows `<env> / <stack>` in the heading. `fail-fast: false` keeps one cell failing from cancelling the others. |
-| 60 | resolved | P3 | Refresh roadmap/backlog status after prod-parity work | Resolved 2026-05-05: `docs/prod-roadmap.md` header now declares CLAUDE.md as the canonical day-to-day backlog and points roadmap items to their CLAUDE.md ID + resolution. New "What landed since the original snapshot" section maps roadmap IDs (A/D/E/K/N/O) to CLAUDE.md backlog rows that closed them, and explicitly flags the items still open (#9 Cilium, #56 cosign provider follow-up, K-4 Karpenter, N-4 Transit Gateway). |
+| 60 | resolved | P3 | Refresh roadmap/backlog status after prod-parity work | Resolved 2026-05-05: `docs/prod-roadmap.md` header now declares the project guide as the canonical day-to-day backlog and points roadmap items to their the project guide ID + resolution. New "What landed since the original snapshot" section maps roadmap IDs (A/D/E/K/N/O) to the project guide backlog rows that closed them, and explicitly flags the items still open (#9 Cilium, #56 cosign provider follow-up, K-4 Karpenter, N-4 Transit Gateway). |
 | 61 | resolved | P2 | Story: publish OTel ingestion config to SSM Parameter Store | Resolved 2026-05-05: new `modules/observability/ssm_otel_config.tf` provisions SSM parameters under `/<name_prefix>/<environment>/otel/*`: base endpoint host, full `/v1/metrics`, `/v1/traces`, `/v1/logs` URLs (String), and the bearer token (SecureString, encrypted with `alias/aws/ssm` by default — pass `var.ssm_kms_key_id` for a CMK). Token rotates with the existing `random_password.otel_api_key.keepers` from #38. Two new module vars (`publish_otel_ssm_config`, `ssm_kms_key_id`) plumb through root `main.tf`/`variables.tf` and `stacks/platform/main.tf`/`variables.tf`; defaults stay off so no parameters are created until producers exist. Producer IAM (`ssm:GetParameter*` + `kms:Decrypt`) documented inline in the resource header. Root `terraform validate` clean. |
 | 62 | resolved | P3 | Story: reduce root-folder clutter without breaking repo entrypoints | Resolved 2026-05-05: `git mv` shifted `deploy.sh`, `destroy.sh`, `oidc.sh` from repo root to `scripts/`. Each script now resolves its own `REPO_ROOT` via `BASH_SOURCE` and `cd`s back to the root before reading `terraform.tfvars` / running `terraform`, so caller cwd is irrelevant. References updated in `README.md`, `apps/order-api/README.md`, `docs/runbooks/master-runbook.md`, and `.github/workflows/infra.yml` comments. `bash -n` clean for all three. `terraform validate` clean at root. Per the story scope boundary, root TF entrypoints (`main.tf`, `variables.tf`, `outputs.tf`, `provider.tf`, `.terraform.lock.hcl`, `terraform.tfvars.example`) stay in place until #16 retires the legacy root. `PROJECT_EXPLAINER.md` references untouched per guardrail #9; private/case-study refs untouched (gitignored). |
 | 63 | resolved | P1 | Pod Security Standards `restricted` profile via admission | Resolved 2026-05-05: `apps/order-api/k8s/namespace.yaml` carries the in-tree PSA labels `pod-security.kubernetes.io/{enforce,audit,warn}: restricted` (with matching `*-version: latest`). Deployment + migration-job pods already satisfied restricted from prior backlog work — `runAsNonRoot=true`, non-zero UID/GID 1001, `allowPrivilegeEscalation=false`, `capabilities.drop=[ALL]`, `readOnlyRootFilesystem=true`, `seccompProfile=RuntimeDefault`. `fetch-rds-ca` initContainer carries the same securityContext so it admits under restricted. Closes roadmap K-8. 13/13 kubeconform-valid resources. |
@@ -537,7 +492,7 @@ Sorted by prod-equivalence importance first, then difficulty. Difficulty:
 **What exists today:**
 - Root still contains legacy/root Terraform entrypoint files: `main.tf`, `variables.tf`, `outputs.tf`, `provider.tf`, `.terraform.lock.hcl`, `terraform.tfvars.example`.
 - Root also has operational scripts: `deploy.sh`, `destroy.sh`, `oidc.sh`.
-- Root has local-only files/directories such as `terraform.tfvars`, `terraform.dev-backup.tfvars`, `CLAUDE.md`, `.terraform/`, `.claude/`, `.pluralith/`.
+- Root has local-only files/directories such as `terraform.tfvars`, `terraform.dev-backup.tfvars`, the project guide, `.terraform/`, `.pluralith/`.
 - `scripts/`, `stacks/`, `modules/`, `docs/`, `architecture/`, `apps/`, and `environments/` already exist and should be used instead of inventing new top-level folders without a reason.
 
 **What to build:**
@@ -551,7 +506,7 @@ Sorted by prod-equivalence importance first, then difficulty. Difficulty:
 - Keep `.terraform.lock.hcl` in root and tracked. Do not re-ignore it.
 - Keep `terraform.tfvars.example` in root unless the docs and CI are changed to use a different template path.
 - Do not commit `terraform.tfvars`. If local backup tfvars files are still useful, move them under `private/` or document that they are local-only; otherwise ask before deleting.
-- Do not move `CLAUDE.md` unless the local agent workflow is updated at the same time. It is ignored/local but currently acts as the canonical local backlog.
+- Do not move the project guide unless the local agent workflow is updated at the same time. It is ignored/local but currently acts as the canonical local backlog.
 - Update `.gitignore` only if the cleanup introduces a new local/private file location.
 
 **Validation notes:**
@@ -1145,9 +1100,9 @@ Storefront (Next.js):
 
 ---
 
-## 2026-06-07 — resolved-backlog archive (moved out of CLAUDE.md)
+## 2026-06-07 — resolved-backlog archive (moved out of the project guide)
 
-Resolved rows lifted from CLAUDE.md "Open Backlog" so the live guide holds only
+Resolved rows lifted from the project guide "Open Backlog" so the live guide holds only
 `open`/`in-progress` work (#16, #9). These are the resolution notes as written
 at close time. IDs #105–#130 also appear above in their original `open` form
 (2026-05-14 snapshot); the rows below are the resolved state of those same IDs.

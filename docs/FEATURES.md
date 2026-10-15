@@ -1,13 +1,12 @@
 # CloudOps — Feature Inventory
 
-This document is a feature-by-feature reference for another Claude (or human)
-that needs to understand what this project does and is capable of, without
+This document is a feature-by-feature reference for anyone who needs to understand what this project does and is capable of, without
 reading the whole repo. It is descriptive, not promotional. Sections proceed
 top-down: storefront UX → API surface → data model → realtime / async →
 identity & auth → security controls → observability → infrastructure → CI/CD →
 operational tooling.
 
-Pair this file with `CLAUDE.md` (agent guardrails + open backlog) and
+Pair this file with `BACKLOG.md` (open work), `docs/adr/` (decisions) and
 `apps/order-api/openapi.yaml` (formal API contract) for full coverage.
 
 ---
@@ -558,7 +557,7 @@ Everything else is destroyed nightly and rebuilt by pipeline.
 
 ---
 
-## 15. Known open gaps (live; check `CLAUDE.md` for source of truth)
+## 15. Known open gaps (`BACKLOG.md` is the source of truth)
 
 - #16 — Layered stack migration: runbook needs validation on a live env.
 - #9 — Service mesh (Cilium / mTLS east-west) missing.
@@ -572,9 +571,9 @@ Everything else is destroyed nightly and rebuilt by pipeline.
 
 ## How to use this file
 
-If you are a Claude session starting cold on this repo:
+If you are starting cold on this repo:
 
 1. Read this file (high-level feature surface).
-2. Read `CLAUDE.md` (agent guardrails + open backlog + workflow rules).
+2. Read `BACKLOG.md` (open work) and `docs/adr/` (decisions).
 3. Read `apps/order-api/openapi.yaml` for the formal API contract.
 4. Pull module-level READMEs as needed by topic.

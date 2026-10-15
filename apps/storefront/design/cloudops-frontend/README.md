@@ -1,8 +1,8 @@
-# CODING AGENTS: READ THIS FIRST
+# Storefront design prototypes
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
-
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+HTML/CSS/JSX prototypes of the storefront pages, kept as the reference the
+implementation in `apps/storefront/src` was built from. They are not part of
+the build.
 
 ## What you should do — IMPORTANT
 
