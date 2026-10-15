@@ -490,6 +490,9 @@ jobs:
           severity: CRITICAL
           format: sarif
           output: trivy-image.sarif
+          # With SARIF output the action drops the severity filter unless
+          # this is set, so any finding would fail the gate.
+          limit-severities-for-sarif: true
 
       - name: Upload image scan SARIF results
         uses: github/codeql-action/upload-sarif@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3
