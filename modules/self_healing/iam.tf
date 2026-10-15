@@ -85,16 +85,35 @@ data "aws_iam_policy_document" "self_healing" {
 
   #── Auto Scaling — scale node group ASG for node replacement ─────────────────
   statement {
-    sid    = "AutoScaling"
+    sid    = "AutoScalingDescribe"
     effect = "Allow"
     actions = [
       "autoscaling:DescribeAutoScalingGroups",
       "autoscaling:DescribeAutoScalingInstances",
-      "autoscaling:SetDesiredCapacity",
-      "autoscaling:UpdateAutoScalingGroup",
-      "autoscaling:StartInstanceRefresh",
     ]
     resources = ["*"]
+  }
+
+  # Changes only to this cluster's node groups: EKS tags every managed node
+  # group's ASG with eks:cluster-name. Without the condition the controller
+  # could resize or refresh any Auto Scaling group in the account.
+  dynamic "statement" {
+    for_each = var.eks_cluster_name != "" ? [1] : []
+    content {
+      sid    = "AutoScalingClusterNodeGroups"
+      effect = "Allow"
+      actions = [
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:StartInstanceRefresh",
+      ]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/eks:cluster-name"
+        values   = [var.eks_cluster_name]
+      }
+    }
   }
 
   #── RDS — describe instances and reboot ──────────────────────────────────────
