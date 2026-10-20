@@ -236,7 +236,7 @@ variable "rds_port" {
 #tflint-ignore: terraform_unused_declarations
 variable "eks_kubernetes_version" {
   type    = string
-  default = "1.32"
+  default = "1.35"
 }
 
 #── Database ─────────────────────────────────────────────────────────────────
