@@ -23,8 +23,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **O01** (#9) — East-west mTLS: decide ADR 030. Assessed: Istio
   ambient (no CNI swap, no sidecars) after the first AWS run, or accept
   the risk (NetworkPolicy and request signatures only) and close.
-- [ ] **O02** (#76) — Self-hosted runners in the VPC (ARC on EKS): module,
-  runner image and workflow migration not built (ADR 025).
 
 ## AWS phase — checks that need a live environment
 
@@ -47,8 +45,18 @@ prove. I03 comes first.
 - [ ] **V02** — Run the Destroy workflow once at the end of the first AWS
   session and confirm nothing is left: `plan -destroy` empty per stack,
   no `<project>-*` buckets, no load balancers for the cluster.
+- [ ] **V03** — In-VPC runners (docs/runbooks/ci-runner.md): set the fork-PR
+  approval setting, register the GitHub App, build the runner image, turn
+  on `enable_ci_runner`, run the App Pipeline's deploy on `cloudops-vpc`,
+  check the runner NetworkPolicy blocks Postgres, then make the endpoint
+  private and run it again.
 
 ## Done
+
+- [x] **O02** (#76) — in-VPC runners: `modules/ci-runner` (ARC 0.14.2, off
+  by default, egress DNS/HTTPS only), the runner image and its workflow,
+  cluster jobs opt in through `DEPLOY_RUNNER`; ADR 025 accepted. Live check
+  is V03.
 
 - [x] **F01** — the storefront pipeline builds, signs, scans and deploys
   (storefront.yml): image to the foundation stack's ECR repository, values
