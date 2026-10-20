@@ -47,7 +47,7 @@ CloudOps is an AWS infrastructure project that hosts the **order-api** — a Nod
 | **OTel Collector** | Telemetry gateway: routes traces→Tempo, metrics→Prometheus, logs→Loki | EKS `monitoring` namespace | `https://otel.example.com` (ext), port 4317/4318 (int) | `kubectl get pods -n monitoring -l app.kubernetes.io/name=opentelemetry-collector` |
 | **Falco** | eBPF runtime threat detection DaemonSet | EKS `falco` namespace | Findings → OTel → Loki | `kubectl get pods -n falco` |
 | **OPA Gatekeeper** | Admission webhook — blocks non-compliant pods | EKS `gatekeeper-system` namespace | ValidatingAdmissionWebhook | `kubectl get constrainttemplate` |
-| **kube-bench** | CIS Kubernetes Benchmark CronJob (daily 03:00 UTC) | EKS `cloudops` namespace | CronJob `kube-bench` | `kubectl get cronjob kube-bench -n cloudops` |
+| **kube-bench** | CIS Amazon EKS Benchmark CronJob (daily 03:00 UTC, one node per run) | EKS `kube-bench` namespace | CronJob `kube-bench` | `kubectl get cronjob kube-bench -n kube-bench` |
 | **SLO tracker Lambda** | Queries Prometheus every 5 min, tracks error budgets | AWS Lambda, us-east-1 | `cloudops-error-budget-tracker` | CloudWatch → Log Groups → `/aws/lambda/cloudops-error-budget-tracker` |
 | **Compliance scanner Lambda** | Scans S3/RDS/EKS/IAM/SGs every 6h, writes to DynamoDB | AWS Lambda, us-east-1 | `cloudops-compliance-scanner` | CloudWatch → `/aws/lambda/cloudops-compliance-scanner` |
 | **Auto-remediation Lambda** | Fixes safe security findings; creates GitHub issues for unsafe ones | AWS Lambda, us-east-1 | `cloudops-auto-remediation` | CloudWatch → `/aws/lambda/cloudops-auto-remediation` |
