@@ -100,8 +100,8 @@ async function fetchMtdCost() {
 }
 
 /**
- * Fetch end-of-month cost forecast.
- * Returns null if today is the last day of the month (no future window).
+ * Forecast of the cost from today to the end of the month: the rest of the
+ * month, not the whole month. Null when it cannot be had.
  */
 async function fetchForecast() {
   const now          = new Date();
@@ -154,7 +154,8 @@ async function getHistoricalCost(service, date) {
       Key:       { service, date },
     }));
     return r.Item?.daily_cost ?? null;
-  } catch (_) {
+  } catch (err) {
+    log('warn', { msg: 'Failed to read historical cost; treated as no data', service, date, error: err.message });
     return null;
   }
 }
@@ -279,9 +280,14 @@ async function publishAlert(serviceAnomalies, projectedMonthly, budgetUtilizatio
   if (!SNS_TOPIC_ARN) return;
 
   const isOverBudget = budgetUtilization >= 100;
-  const subject      = isOverBudget
-    ? `[CRITICAL] CloudOps FinOps: Monthly budget exceeded (${budgetUtilization.toFixed(1)}%)`
-    : `[WARNING] CloudOps FinOps: ${serviceAnomalies.length} cost anomal${serviceAnomalies.length === 1 ? 'y' : 'ies'} detected`;
+  let subject;
+  if (isOverBudget) {
+    subject = `[CRITICAL] CloudOps FinOps: Monthly budget exceeded (${budgetUtilization.toFixed(1)}%)`;
+  } else if (serviceAnomalies.length > 0) {
+    subject = `[WARNING] CloudOps FinOps: ${serviceAnomalies.length} cost anomal${serviceAnomalies.length === 1 ? 'y' : 'ies'} detected`;
+  } else {
+    subject = `[WARNING] CloudOps FinOps: Monthly budget at ${budgetUtilization.toFixed(1)}%`;
+  }
 
   await sns.send(new PublishCommand({
     TopicArn: SNS_TOPIC_ARN,
@@ -311,12 +317,16 @@ exports.handler = async function handler() {
   log('info', { msg: 'Cost ingestion started', environment: ENVIRONMENT, projectName: PROJECT_NAME });
 
   // 1. Fetch all Cost Explorer data in parallel
-  const [yesterdayData, mtdCost, projectedMonthly, ceAnomalies] = await Promise.all([
+  const [yesterdayData, mtdCost, restOfMonth, ceAnomalies] = await Promise.all([
     fetchYesterdayCosts(),
     fetchMtdCost(),
     fetchForecast(),
     fetchCeAnomalies(),
   ]);
+  // The month so far plus the forecast for the rest of it. The forecast alone
+  // was compared to the monthly budget, so the projection ran low by
+  // everything already spent.
+  const projectedMonthly = restOfMonth === null ? null : mtdCost + restOfMonth;
 
   const { date: yesterday, services } = yesterdayData;
   const totalDailyCost = services.reduce((sum, s) => sum + s.daily_cost, 0);
