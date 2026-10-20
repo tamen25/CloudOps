@@ -11,7 +11,11 @@
 #no-root constraint, so the job has a namespace of its own and only that
 #namespace is exempt (gatekeeper_policies.tf). It is not privileged.
 #
-#Each run covers the node the pod lands on, not every node.
+#Each run checks the node the pod lands on, and the finding records it. The
+#cluster has one managed node group, so every node runs the same AMI and
+#launch template and one node's results stand for all of them. With several
+#node groups, run one job per group (nodeSelector on
+#eks.amazonaws.com/nodegroup).
 #
 #Images are pinned by digest. The main container is the AWS CLI; it signs
 #the invoke with the pod's IRSA role. Nothing is installed at run time.
@@ -414,7 +418,7 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
               args = [<<-SH
                 set -eu
                 {
-                  printf '{"clusterName":"%s","kubeBenchOutput":' "$EKS_CLUSTER_NAME"
+                  printf '{"clusterName":"%s","nodeName":"%s","kubeBenchOutput":' "$EKS_CLUSTER_NAME" "$NODE_NAME"
                   cat /results/kube-bench-output.json
                   printf '}'
                 } > /work/payload.json
@@ -437,6 +441,15 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
               env {
                 name  = "AWS_REGION"
                 value = var.region
+              }
+              # The node kube-bench read, so each finding says which one.
+              env {
+                name = "NODE_NAME"
+                value_from {
+                  field_ref {
+                    field_path = "spec.nodeName"
+                  }
+                }
               }
               env {
                 name  = "HOME"
