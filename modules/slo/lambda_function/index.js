@@ -44,12 +44,18 @@ async function getGrafanaApiKey() {
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
+// An instant query for one series answers in well under a kilobyte.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
+
 function httpGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
     const req = lib.get(url, { headers }, (res) => {
       let data = '';
-      res.on('data', (chunk) => { data += chunk; });
+      res.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > MAX_RESPONSE_BYTES) req.destroy(new Error(`response from ${url} over ${MAX_RESPONSE_BYTES} bytes`));
+      });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
@@ -109,29 +115,35 @@ exports.handler = async function handler() {
   }
 
   // ── Query Prometheus recording rules ────────────────────────────────────────
-  let availability5m, availability1h, availability6h, latency5m;
+  let availability5m, availability1h, availability6h, latency5m, budgetRemaining;
 
   try {
-    [availability5m, availability1h, availability6h, latency5m] = await Promise.all([
+    [availability5m, availability1h, availability6h, latency5m, budgetRemaining] = await Promise.all([
       queryPrometheus('job:slo_availability:ratio_rate5m{job="order-api"}',  apiKey),
       queryPrometheus('job:slo_availability:ratio_rate1h{job="order-api"}',  apiKey),
       queryPrometheus('job:slo_availability:ratio_rate6h{job="order-api"}',  apiKey),
       queryPrometheus('job:slo_latency:ratio_rate5m{job="order-api"}',       apiKey),
+      // The budget over the SLO window, as recorded for the Prometheus budget
+      // alerts (modules/observability/slo.tf), so CloudWatch, the deploy gate
+      // and the alerts agree.
+      queryPrometheus('job:slo_error_budget:availability_remaining{service="order-api"}', apiKey),
     ]);
   } catch (err) {
     log('warn', {
-      msg: 'Prometheus unreachable — publishing sentinel and returning',
+      msg: 'Prometheus unreachable — recording the failed collection and returning',
       prometheusUrl: PROMETHEUS_URL,
       error: err.message,
     });
 
-    // Sentinel value (-1) signals to CloudWatch alarms that data collection failed.
+    // A failed collection is its own metric. It used to be written as -1 into
+    // ErrorBudgetRemaining, where it read as "budget exhausted" and would have
+    // blocked deploys whenever Prometheus was down.
     await cwClient.send(new PutMetricDataCommand({
       Namespace: 'CloudOps/SLO',
       MetricData: [{
-        MetricName: 'ErrorBudgetRemaining',
-        Value: -1,
-        Unit: 'Percent',
+        MetricName: 'SLOCollectionFailed',
+        Value: 1,
+        Unit: 'Count',
         Timestamp: new Date(),
         Dimensions: [
           { Name: 'Service',     Value: 'order-api' },
@@ -142,7 +154,7 @@ exports.handler = async function handler() {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ status: 'prometheus_unreachable', sentinel: true, timestamp }),
+      body: JSON.stringify({ status: 'prometheus_unreachable', timestamp }),
     };
   }
 
@@ -150,14 +162,13 @@ exports.handler = async function handler() {
   // Error budget = allowed error fraction = 1 - SLO target
   const availErrorBudget = 1 - SLO_AVAILABILITY_TARGET;
 
-  const errorRate5m = availability5m != null ? 1 - availability5m : null;
   const errorRate1h = availability1h != null ? 1 - availability1h : null;
   const errorRate6h = availability6h != null ? 1 - availability6h : null;
 
-  // errorBudgetRemaining: 1.0 = full budget, 0.0 = exhausted, negative = SLO breached
-  const errorBudgetRemainingFraction = errorRate5m != null
-    ? (availErrorBudget - errorRate5m) / availErrorBudget
-    : null;
+  // 1.0 = full budget, 0.0 = exhausted, negative = SLO breached. It used to be
+  // computed from the 5-minute error rate, so one bad five minutes read as an
+  // exhausted budget and could block deploys.
+  const errorBudgetRemainingFraction = budgetRemaining;
   const errorBudgetRemainingPercent = errorBudgetRemainingFraction != null
     ? errorBudgetRemainingFraction * 100
     : null;

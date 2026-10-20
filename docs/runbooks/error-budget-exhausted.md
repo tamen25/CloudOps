@@ -39,9 +39,11 @@ The error budget remaining is also visible as:
 - **"Error Budget Remaining"** stat panel (top row of SLO dashboard) — red background
 - **"Error Budget Remaining % (CloudWatch)"** time series — line dropped to < 10%
 - **"Error Budget Consumed" bar gauge** — availability bar showing > 90%
-- **CloudWatch metric** `ErrorBudgetRemaining` in `CloudOps/SLO` namespace (published by Lambda)
+- **CloudWatch metric** `ErrorBudgetRemaining` in `CloudOps/SLO` namespace (published by the SLO Lambda from the same recording rule, `job:slo_error_budget:availability_remaining`, so the alert, the metric and the deploy gate agree)
 
-A value of exactly `0` means the 30-day availability equals the SLO target (budget spent but not breached). A **negative value** means the SLO was actually breached — actual availability < 99.9% over the rolling 30 days.
+The recording rule measures the budget over a **3-day** window, as a proxy for the 30-day SLO window (`modules/observability/slo.tf`). A value of exactly `0` means availability over that window equals the SLO target (budget spent but not breached). A **negative value** means availability over the window fell below the target.
+
+When the Lambda cannot reach Prometheus it publishes `SLOCollectionFailed = 1` and no budget. The deploy gate then finds no datapoint and does not block. Check `SLOCollectionFailed` before reading a gap in `ErrorBudgetRemaining` as a healthy budget.
 
 ---
 
