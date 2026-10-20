@@ -17,9 +17,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   (docs/runbooks/image-signature-policy.md). The archived
   cosign-gatekeeper-provider it was going to be checked against is replaced
   by Sigstore policy-controller (#45).
-- [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
-  the storefront ECR repository, IRSA role and certificate, then build,
-  scan and deploy jobs like app.yml's (placeholders removed in #16).
 
 ## P2 — carried over from the old backlog
 
@@ -50,6 +47,11 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **F01** — the storefront pipeline builds, signs, scans and deploys
+  (storefront.yml): image to the foundation stack's ECR repository, values
+  from the stacks' outputs (scripts/storefront-deploy-env.sh), and a
+  shop.<domain> record on the shared ALB (#48).
 
 - [x] **O03** (#138) — response-shape audit checked against the code: one
   row was wrong (traces, now admin-only, F-138-2), mesh endpoints added

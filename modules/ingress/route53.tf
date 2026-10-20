@@ -1,6 +1,7 @@
 #DNS ownership (closes backlog #17):
 #api.<domain>      → cloudops ALB        (alb_dns_name)
 #grafana.<domain>  → cloudops ALB        (alb_dns_name)        — shared with order-api
+#shop.<domain>     → cloudops ALB        (alb_dns_name)        — the storefront joins the same ALB group
 #otel.<domain>     → cloudops-otel ALB   (otel_alb_dns_name)   — separate, gRPC traceport
 #
 #A records are created only after the LBC has provisioned each ALB and the
@@ -45,6 +46,20 @@ resource "aws_route53_record" "otel" {
   alias {
     name                   = var.otel_alb_dns_name
     zone_id                = var.otel_alb_zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "storefront" {
+  count = var.alb_dns_name != "" ? 1 : 0
+
+  zone_id = local.zone_id
+  name    = "${var.storefront_subdomain}.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = var.alb_dns_name
+    zone_id                = var.alb_zone_id
     evaluate_target_health = true
   }
 }
