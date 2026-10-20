@@ -60,8 +60,9 @@ prove. I03 comes first.
 
 - [x] **R02** — review decisions: fraud fails closed, no trust by tenant
   name, projection-worker recovers from throttling, expired iterators and
-  reshards, inventory's stock check documented; storefront SF-7 waits for
-  the checkout page (F01), SF-8 accepted (#44).
+  reshards, inventory's stock check documented; storefront checkout takes
+  a per-attempt Idempotency-Key (SF-7), per-pod limits accepted (SF-8)
+  (#44).
 
 - [x] **Q01** — 185 more generated comments; shellcheck clean on every
   script; the fraud image's OTel agent pinned by checksum (#43).

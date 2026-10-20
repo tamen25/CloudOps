@@ -25,11 +25,36 @@ export interface CheckoutUser {
   sub: string;
   tenant: string;
   email?: string;
+  // The client's key for this checkout attempt (the Idempotency-Key header),
+  // if it sent one; see executionNameFor.
+  attemptKey?: string;
 }
 
 export interface CheckoutResult {
   status: number;
   body: Record<string, unknown>;
+}
+
+const ATTEMPT_KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
+ * The name of this checkout: the order-api idempotency key and the Step
+ * Functions execution name. With a client attempt key it is derived from
+ * that key, so a retried submit is the same checkout and a later purchase of
+ * the same items is a new one. Without one it is derived from the cart, which
+ * still stops a double submit but makes an identical cart bought again
+ * within order-api's 24-hour window replay the first order.
+ */
+export function executionNameFor(
+  user: Pick<CheckoutUser, "sub" | "tenant" | "attemptKey">,
+  items: unknown,
+  total: number,
+): string {
+  const basis = user.attemptKey !== undefined && ATTEMPT_KEY.test(user.attemptKey)
+    ? { tenant: user.tenant, attempt: user.attemptKey }
+    : { tenant: user.tenant, items, total };
+  const hash = createHash("sha256").update(JSON.stringify(basis)).digest("hex").slice(0, 32);
+  return `${user.sub.slice(0, 16)}-${hash}`;
 }
 
 export async function checkout(user: CheckoutUser, deps: CheckoutDeps): Promise<CheckoutResult> {
@@ -49,11 +74,7 @@ export async function checkout(user: CheckoutUser, deps: CheckoutDeps): Promise<
     const total =
       Math.round(cartItems.reduce((sum, it) => sum + it.price_cents * it.qty, 0)) / 100;
 
-    const cartHash = createHash("sha256")
-      .update(JSON.stringify({ tenant: user.tenant, items, total }))
-      .digest("hex")
-      .slice(0, 32);
-    const executionName = `${user.sub.slice(0, 16)}-${cartHash}`;
+    const executionName = executionNameFor(user, items, total);
 
     // Create the order while the user's JWT is still present. The old design
     // let Step Functions call POST /order with only X-Tenant-Id, which meant

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { sessionCookieName, verifySession } from "@/lib/auth";
@@ -22,7 +22,7 @@ const sfn = STATE_MACHINE_ARN ? new SFNClient({ region: AWS_REGION }) : null;
 
 // The session and the cart are resolved here; the order flow is
 // lib/checkout.ts.
-export async function POST() {
+export async function POST(req: NextRequest) {
   if (!sfn || !STATE_MACHINE_ARN || !API_BASE_URL) {
     return NextResponse.json({ error: "checkout_not_configured" }, { status: 503 });
   }
@@ -41,7 +41,13 @@ export async function POST() {
   }
 
   const result = await checkout(
-    { session, sub: claims.sub, tenant, email: claims.email },
+    {
+      session,
+      sub: claims.sub,
+      tenant,
+      email: claims.email,
+      attemptKey: req.headers.get("idempotency-key") ?? undefined,
+    },
     {
       apiBaseUrl: API_BASE_URL,
       fetchImpl: fetch,

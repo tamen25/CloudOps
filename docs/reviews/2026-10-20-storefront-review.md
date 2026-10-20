@@ -36,8 +36,11 @@ without it.
 
 ## Decided (2026-10-20)
 
-- **SF-7** waits for the checkout page: it supplies a per-attempt
-  idempotency key when it is built (BACKLOG F01).
+- **SF-7** fixed: `/api/checkout` accepts an `Idempotency-Key` header (8–64
+  of `[A-Za-z0-9_-]`) and derives the checkout's name from it, so a retried
+  submit is the same checkout and a later purchase of the same cart is a
+  new one. Without the header the cart-derived key still applies; a checkout
+  page should send one per attempt.
 - **SF-8** stays as it is: limits are per pod, and the shared-store option is
   recorded here for when an exact limit is needed.
 
