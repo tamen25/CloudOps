@@ -122,7 +122,7 @@ terraform -chdir=stacks/foundation output -raw github_actions_role_arn  # copy t
 | `AWS_REGION` | `us-east-1` (or your region) |
 | `TF_VARS` | Full contents of `terraform.tfvars` |
 | `INFRACOST_API_KEY` | From [infracost.io](https://www.infracost.io/docs/#2-get-api-key) |
-| `ECR_REPOSITORY_URL` | URI of the order-api ECR repository. Terraform does not create it yet (BACKLOG F02); create it with `aws ecr create-repository --repository-name order-api --image-scanning-configuration scanOnPush=true` |
+| `ECR_REPOSITORY_URL` | `terraform -chdir=stacks/foundation output -json ecr_repository_urls \| jq -r '."order-api"'` |
 | `EKS_CLUSTER_NAME` | `terraform -chdir=stacks/cluster output -raw cluster_name` |
 | `GRAFANA_API_KEY` | Grafana → Administration → Service accounts → New token |
 
@@ -221,6 +221,7 @@ CloudOps/
 ├── terraform.tfvars.example         # Template — copy to terraform.tfvars (all stacks read it)
 ├── infracost.yml                    # Infracost projects: the three stacks
 ├── scripts/terraform-stacks.sh      # Run plan/apply/destroy across the stacks in order
+├── scripts/build-and-push.sh        # Build images, push them to the foundation stack's ECR repositories
 │
 ├── .github/workflows/
 │   ├── app.yml                      # App CI/CD: build → scan → deploy → test → rollback
