@@ -1,18 +1,19 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
 	"time"
 )
 
-// Mirrors order-api's internal HMAC scheme (docs/adr/024): the signature is
-// sha256hex(timestamp.tenant.rawBody.secret), carried in x-cloudops-hmac, with
+// Mirrors order-api's internal HMAC scheme (docs/adr/024, 029): the signature
+// is hex(HMAC-SHA256(secret, timestamp.tenant.rawBody)), carried in
+// x-cloudops-hmac, with
 // x-cloudops-timestamp (5-minute skew window) and x-cloudops-tenant. Supports a
 // PREVIOUS secret for zero-downtime rotation, same as order-api (#96).
 
@@ -21,8 +22,9 @@ var tenantRe = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 const hmacSkewMillis = 5 * 60 * 1000
 
 func computeHMAC(timestamp, tenant, rawBody, secret string) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s.%s.%s.%s", timestamp, tenant, rawBody, secret)))
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp + "." + tenant + "." + rawBody)) // hash.Hash's Write never returns an error
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func tryHMAC(timestamp, tenant, rawBody, given, secret string) bool {

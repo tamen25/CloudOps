@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "crypto";
+import { createHmac } from "crypto";
 import { clampRps, clampDuration, isScenario, startRun, stopRun, triggerChaos, isChaosService } from "../src/lib/loadgen-client";
 
 test("clampRps + clampDuration enforce ceilings/floors", () => {
@@ -43,7 +43,7 @@ test("startRun signs the clamped payload with a valid HMAC", async () => {
 
     // HMAC must verify over exactly the body sent.
     const ts = capturedHeaders["x-cloudops-timestamp"];
-    const expected = createHash("sha256").update(`${ts}.ops.${capturedBody}.topsecret`).digest("hex");
+    const expected = createHmac("sha256", "topsecret").update(`${ts}.ops.${capturedBody}`).digest("hex");
     assert.equal(capturedHeaders["x-cloudops-hmac"], expected);
   } finally {
     globalThis.fetch = orig;
@@ -92,7 +92,7 @@ test("triggerChaos signs the chaos payload with a valid HMAC", async () => {
   try {
     await triggerChaos({ baseUrl: "http://loadgen", secret: "topsecret", tenant: "ops" }, { service: "fraud", dryRun: false });
     const ts = headers["x-cloudops-timestamp"];
-    const expected = createHash("sha256").update(`${ts}.ops.${body}.topsecret`).digest("hex");
+    const expected = createHmac("sha256", "topsecret").update(`${ts}.ops.${body}`).digest("hex");
     assert.equal(headers["x-cloudops-hmac"], expected);
   } finally {
     globalThis.fetch = orig;

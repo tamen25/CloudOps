@@ -1,8 +1,8 @@
 // Verify side of the internal HMAC scheme (mirrors order-api + ledger): the
-// signature is sha256hex(timestamp.tenant.rawBody.secret) in x-cloudops-hmac,
+// signature is hex(HMAC-SHA256(secret, timestamp.tenant.rawBody)) in x-cloudops-hmac,
 // with x-cloudops-timestamp (5-min skew) and x-cloudops-tenant. The loadgen
 // control API is internal-only; the storefront BFF signs requests to it.
-import { createHash, timingSafeEqual } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 const SKEW_MS = 5 * 60 * 1000;
 const TENANT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -15,7 +15,7 @@ export interface VerifyResult {
 }
 
 function compute(timestamp: string, tenant: string, rawBody: string, secret: string): string {
-  return createHash('sha256').update(`${timestamp}.${tenant}.${rawBody}.${secret}`).digest('hex');
+  return createHmac('sha256', secret).update(`${timestamp}.${tenant}.${rawBody}`).digest('hex');
 }
 
 function tryHmac(timestamp: string, tenant: string, rawBody: string, given: string, secret: string): boolean {

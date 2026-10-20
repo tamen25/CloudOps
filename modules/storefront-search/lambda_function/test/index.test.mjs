@@ -3,7 +3,7 @@
 // environment (no SSM parameter), so nothing leaves the process.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 
@@ -35,8 +35,8 @@ test("a search is signed the way order-api verifies it", async () => {
   const { handler, requests } = await load(ok);
   assert.equal((await handler(search("boots"))).statusCode, 200);
   const h = requests[0].init.headers;
-  const expected = createHash("sha256")
-    .update(`${h["x-cloudops-timestamp"]}.t1.${requests[0].init.body}.s3cret`).digest("hex");
+  const expected = createHmac("sha256", "s3cret")
+    .update(`${h["x-cloudops-timestamp"]}.t1.${requests[0].init.body}`).digest("hex");
   assert.equal(h["x-cloudops-hmac"], expected);
   assert.equal(h["x-cloudops-tenant"], "t1");
   assert.equal(requests[0].url, "http://order-api.test/_internal/search");

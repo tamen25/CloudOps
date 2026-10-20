@@ -6,7 +6,7 @@
 // In-memory LRU cache on `tenant#q#cursor`, 60s TTL, max 500 entries.
 // HMAC-signs requests to order-api `_internal/search`.
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 
 const ORDER_API_URL = process.env.ORDER_API_INTERNAL_URL || "";
@@ -89,8 +89,7 @@ async function callExpressSearch(tenantId, query, limit) {
 
   const payload = JSON.stringify({ q: query, limit });
   const timestamp = String(Date.now());
-  const hmac = createHash("sha256")
-    .update(`${timestamp}.${tenantId}.${payload}.${secret}`)
+  const hmac = createHmac("sha256", secret).update(`${timestamp}.${tenantId}.${payload}`)
     .digest("hex");
 
   let res;

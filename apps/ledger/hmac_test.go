@@ -59,3 +59,12 @@ func TestVerifyInternalHMACUnconfigured(t *testing.T) {
 		t.Fatalf("unconfigured = (%d,%s)", code, reason)
 	}
 }
+
+// Computed independently (Python's hmac module) so every service, in either language, agrees on the same bytes: HMAC-SHA256("test-secret", "1760000000000.t1.{"amount_cents":500}").
+// The old secret-suffix hash of the same input was 6e7b29c48fc9a952…
+func TestComputeHMACIsHMACSHA256(t *testing.T) {
+	got := computeHMAC("1760000000000", "t1", `{"amount_cents":500}`, "test-secret")
+	if want := "f9e725dd1768e7e3dc234317ecab1366e857f22c0d060d14cf94c85409ccc11f"; got != want {
+		t.Fatalf("computeHMAC = %s, want %s", got, want)
+	}
+}

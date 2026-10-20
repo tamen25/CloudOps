@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import http from 'http';
 import { createApp } from '../src/app';
 
@@ -38,7 +38,7 @@ function makePool(handlers: Array<(sql: string, params?: unknown[]) => Promise<{
 }
 
 function hmacFor(opts: { secret: string; timestamp: string; tenant: string; body: string }) {
-  return createHash('sha256').update(`${opts.timestamp}.${opts.tenant}.${opts.body}.${opts.secret}`).digest('hex');
+  return createHmac('sha256', opts.secret).update(`${opts.timestamp}.${opts.tenant}.${opts.body}`).digest('hex');
 }
 
 async function request(app: any, method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
@@ -388,5 +388,22 @@ test('POST /_internal/search accepts new secret when previous is unset', async (
     'x-cloudops-tenant': 'acme',
   });
   assert.equal(res.status, 200);
+  delete process.env.INTERNAL_HMAC_SECRET;
+});
+
+// S09: the signature was sha256(ts.tenant.body.secret), a secret-suffix hash.
+// It is HMAC-SHA256 now, and the old form is refused.
+test('POST /_internal/search refuses the old secret-suffix signature', async () => {
+  process.env.INTERNAL_HMAC_SECRET = 'test-secret';
+  const { app } = createApp({ pool: makePool([]) as any, nodeEnv: 'dev' });
+  const body = JSON.stringify({ q: 'widget', limit: 20 });
+  const timestamp = String(Date.now());
+  const legacy = createHash('sha256').update(`${timestamp}.acme.${body}.test-secret`).digest('hex');
+  const res = await request(app, 'POST', '/_internal/search', { q: 'widget', limit: 20 }, {
+    'x-cloudops-hmac': legacy,
+    'x-cloudops-timestamp': timestamp,
+    'x-cloudops-tenant': 'acme',
+  });
+  assert.equal(res.status, 401);
   delete process.env.INTERNAL_HMAC_SECRET;
 });

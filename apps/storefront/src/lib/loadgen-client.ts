@@ -3,7 +3,7 @@
 // verifies, and clamps run params again here (defence in depth — the loadgen
 // hard-clamps too). Runs only in route handlers; the secret never reaches the
 // browser.
-import { createHash } from "crypto";
+import { createHmac } from "crypto";
 
 const MAX_RPS = 200;
 const MAX_DURATION = 600;
@@ -29,7 +29,7 @@ export function isScenario(s: string): s is Scenario {
 
 function signHeaders(rawBody: string, tenant: string, secret: string): Record<string, string> {
   const ts = String(Date.now());
-  const hmac = createHash("sha256").update(`${ts}.${tenant}.${rawBody}.${secret}`).digest("hex");
+  const hmac = createHmac("sha256", secret).update(`${ts}.${tenant}.${rawBody}`).digest("hex");
   return {
     "content-type": "application/json",
     "x-cloudops-timestamp": ts,

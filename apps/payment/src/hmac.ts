@@ -1,10 +1,10 @@
 // Signs internal requests to the ledger using the same scheme order-api +
-// ledger verify: sha256hex(timestamp.tenant.rawBody.secret), carried in
+// ledger verify: hex(HMAC-SHA256(secret, timestamp.tenant.rawBody)), carried in
 // x-cloudops-hmac with x-cloudops-timestamp + x-cloudops-tenant.
-import { createHash } from 'crypto';
+import { createHmac } from 'crypto';
 
 export function computeHmac(timestamp: string, tenant: string, rawBody: string, secret: string): string {
-  return createHash('sha256').update(`${timestamp}.${tenant}.${rawBody}.${secret}`).digest('hex');
+  return createHmac('sha256', secret).update(`${timestamp}.${tenant}.${rawBody}`).digest('hex');
 }
 
 export interface SignedHeaders {
