@@ -1,0 +1,6 @@
+# Infracost projects: the three layered stacks, in apply order.
+version: 0.1
+projects:
+  - path: stacks/foundation
+  - path: stacks/cluster
+  - path: stacks/platform

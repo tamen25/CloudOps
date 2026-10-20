@@ -1,6 +1,6 @@
 #This manifest defines libraries for CloudOps.
 #Required GitHub Actions secrets:
-#AWS_GITHUB_ACTIONS_ROLE_ARN  - IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_GITHUB_ACTIONS_ROLE_ARN  - IAM role ARN from: terraform -chdir=stacks/foundation output -raw github_actions_role_arn
 #AWS_REGION                   - AWS region (e.g. us-east-1)
 #
 #Optional GitHub Actions variables:
