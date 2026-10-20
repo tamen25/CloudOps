@@ -28,11 +28,12 @@ class RiskScorerTest {
         assertEquals("review", risk.decision());
     }
 
+    // A tenant named "synthetic-…" used to be capped below deny. The tenant
+    // comes from the request body, so anyone could name themselves that.
     @Test
-    void syntheticTenantCappedBelowDeny() {
+    void aTenantsNameDoesNotLowerItsRisk() {
         RiskScorer.Risk risk = RiskScorer.score(new RiskScorer.Order(500_000, 25, "synthetic-1"));
-        assertTrue(risk.score() <= 40);
-        assertTrue(!"deny".equals(risk.decision()));
+        assertEquals("deny", risk.decision());
     }
 
     @Test

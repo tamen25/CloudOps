@@ -117,7 +117,14 @@ export function createApp(deps: GatewayDeps): Express {
         tenant_id: tenantId,
       }, timeoutMs);
       hops.fraud = { status: fraud.status, ok: fraud.ok };
-      if (fraud.ok && fraud.body?.decision === 'deny') {
+      // No answer from fraud stops the order (fail closed): an order is
+      // charged only after it has been scored. A fraud outage then shows as
+      // errors on the map, not as orders that skipped the check.
+      if (!fraud.ok) {
+        res.status(503).json({ error: 'fraud_unavailable', hops });
+        return;
+      }
+      if (fraud.body?.decision === 'deny') {
         res.status(403).json({ error: 'fraud_denied', score: fraud.body?.score, hops });
         return;
       }
@@ -139,7 +146,7 @@ export function createApp(deps: GatewayDeps): Express {
         total_cents: totalCents,
         auth_id: payment.body?.auth_id,
         entry_id: payment.body?.entry_id,
-        fraud_decision: fraud.body?.decision ?? 'unknown',
+        fraud_decision: fraud.body?.decision,
         hops,
       });
     } catch (err) {

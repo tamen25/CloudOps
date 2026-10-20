@@ -1,27 +1,20 @@
 """Kinesis poll loop. Reads the order-event stream (the storefront-events
-stream reused as the mesh event backbone), decodes records, and folds them into
-the read model. Boto3 is imported lazily so the unit tests (readmodel) need no
-AWS deps. The loop is intentionally sequential and simple for the dev tier."""
+stream reused as the mesh event backbone) and folds it into the read model.
+The shard handling and its recovery paths are in consumer.py; this module is
+the process wiring. Boto3 is imported lazily so the unit tests need no AWS
+deps."""
 
 from __future__ import annotations
 
 import os
 import time
 
-from projection.readmodel import ReadModel, decode_record
+from projection.consumer import ShardConsumer
+from projection.readmodel import ReadModel
 from projection.server import serve
 
-
-def _shard_iterators(client, stream: str) -> dict[str, str]:
-    shards = client.list_shards(StreamName=stream)["Shards"]
-    iters: dict[str, str] = {}
-    for shard in shards:
-        sid = shard["ShardId"]
-        resp = client.get_shard_iterator(
-            StreamName=stream, ShardId=sid, ShardIteratorType="LATEST"
-        )
-        iters[sid] = resp["ShardIterator"]
-    return iters
+# Waiting longer after a throttled pass lets the shard's read budget refill.
+THROTTLE_BACKOFF_SECONDS = 5.0
 
 
 def run() -> None:
@@ -42,23 +35,13 @@ def run() -> None:
 
     import boto3  # lazy: only needed when a stream is configured
 
-    client = boto3.client("kinesis", region_name=region)
-    iterators = _shard_iterators(client, stream)
-    print(f"projection worker consuming {stream} ({len(iterators)} shards)")
+    consumer = ShardConsumer(boto3.client("kinesis", region_name=region), stream, model)
+    consumer.start()
+    print(f"projection worker consuming {stream} ({len(consumer.iterators)} shards)")
 
     while True:
-        for sid, shard_iter in list(iterators.items()):
-            if not shard_iter:
-                continue
-            resp = client.get_records(ShardIterator=shard_iter, Limit=100)
-            for record in resp.get("Records", []):
-                event = decode_record(record)
-                if event is None:
-                    model.skipped += 1
-                    continue
-                model.apply(event)
-            iterators[sid] = resp.get("NextShardIterator", "")
-        time.sleep(poll_interval)
+        throttled = consumer.poll_once()
+        time.sleep(THROTTLE_BACKOFF_SECONDS if throttled else poll_interval)
 
 
 if __name__ == "__main__":

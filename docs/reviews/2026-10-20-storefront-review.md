@@ -34,7 +34,14 @@ without it.
   `X-Forwarded-For` hop, which a client cannot spoof.
 - **Load generator routes.** Admin-only and signed; the target is fixed.
 
-## Open
+## Decided (2026-10-20)
+
+- **SF-7** waits for the checkout page: it supplies a per-attempt
+  idempotency key when it is built (BACKLOG F01).
+- **SF-8** stays as it is: limits are per pod, and the shared-store option is
+  recorded here for when an exact limit is needed.
+
+## Open (as found)
 
 - **SF-7, repeat purchases within 24 hours.** The idempotency key is
   derived from the cart contents, so buying the identical cart again within

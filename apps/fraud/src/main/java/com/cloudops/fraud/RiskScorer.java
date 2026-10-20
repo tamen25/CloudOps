@@ -37,12 +37,6 @@ public final class RiskScorer {
             score += 10;
         }
 
-        // Synthetic-load tenants are trusted (keeps the happy path green under
-        // traffic generation) but never below the structural amount risk.
-        if (order.tenantId() != null && order.tenantId().startsWith("synthetic-")) {
-            score = Math.min(score, 40);
-        }
-
         score = Math.max(0, Math.min(100, score));
         return new Risk(score, decide(score));
     }
