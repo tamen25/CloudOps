@@ -1,4 +1,3 @@
-#This manifest defines EKS emergency access for CloudOps.
 name: EKS Emergency Public Access
 
 #Backlog #52 — break-glass path for reaching the prod EKS API server when the

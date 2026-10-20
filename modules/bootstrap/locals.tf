@@ -6,7 +6,6 @@ data "aws_s3_bucket" "terraform_state" {
   bucket = local.bucket_name
 }
 
-#Groups local values used by this Terraform file.
 locals {
   common_tags = {
     Project     = var.project_name

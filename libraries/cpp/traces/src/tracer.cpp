@@ -166,7 +166,6 @@ TraceInstrumentation::TraceInstrumentation(std::string name) {
 
 TraceInstrumentation::~TraceInstrumentation() = default;
 
-// Initializes the requested work.
 void TraceInstrumentation::init() {
   std::string backend = exporters_.empty() ? "console" : exporters_.front();
   std::string lowered;

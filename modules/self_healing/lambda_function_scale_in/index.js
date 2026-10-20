@@ -18,7 +18,6 @@ const K8S_NAME        = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/; // DNS-1123 labe
 const eks = new EKSClient({ region: REGION });
 const cw  = new CloudWatchClient({ region: REGION });
 
-// Logs the requested work.
 function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), dryRun: DRY_RUN, ...data }));
 }

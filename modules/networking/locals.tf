@@ -6,7 +6,6 @@ data "aws_availability_zones" "available" {
 #Get current AWS region
 data "aws_region" "current" {}
 
-#Groups local values used by this Terraform file.
 locals {
   #Limit AZ count to minimum of var.az_count, available AZs, or 3 (cost optimization)
   az_count = min(var.az_count, length(data.aws_availability_zones.available.names), 3)

@@ -18,7 +18,6 @@ data "terraform_remote_state" "foundation" {
   }
 }
 
-#Groups local values used by this Terraform file.
 locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
 
@@ -64,7 +63,6 @@ locals {
 #Reads the AWS caller identity data source named current.
 data "aws_caller_identity" "current" {}
 
-#Groups local values used by this Terraform file.
 locals {
   account_id = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.current.account_id
 }

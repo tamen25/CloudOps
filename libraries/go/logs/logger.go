@@ -215,7 +215,6 @@ func (l *CloudOpsLogger) ExportLogs() error {
 	return nil
 }
 
-// Initializes the requested work.
 func (l *CloudOpsLogger) init() {
 	if len(l.Exporters) <= 1 && len(l.Exporters) == 1 && strings.EqualFold(l.Exporters[0], "console") {
 		l.useConsole = true

@@ -231,7 +231,6 @@ func (t *TraceInstrumentation) ActiveSpan() *Span {
 	return t.currentSpan
 }
 
-// Initializes the requested work.
 func (t *TraceInstrumentation) init() {
 	if len(t.Exporters) == 1 && strings.EqualFold(t.Exporters[0], "console") {
 		t.useConsole = true

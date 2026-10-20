@@ -12,7 +12,6 @@ terraform {
   }
 }
 
-#Groups local values used by this Terraform file.
 locals {
   common_tags = merge(
     var.tags,

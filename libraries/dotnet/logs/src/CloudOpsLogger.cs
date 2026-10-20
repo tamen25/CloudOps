@@ -78,7 +78,6 @@ public sealed class CloudOpsLogger
         }
     }
 
-    // Logs the requested work.
     private void Log(LogLevel level, object? message, object?[] optionalParams)
     {
         var currentTraceId = CurrentTraceId();
@@ -116,7 +115,6 @@ public sealed class CloudOpsLogger
         }
     }
 
-    // Initializes the requested work.
     private void Init()
     {
         if (exportersList.Count <= 1 && exportersList.Contains("console", StringComparer.OrdinalIgnoreCase))

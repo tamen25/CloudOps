@@ -96,7 +96,6 @@ resource "terraform_data" "toggle_guard" {
   }
 }
 
-#Groups local values used by this Terraform file.
 locals {
   foundation = var.use_remote_state_foundation ? data.terraform_remote_state.foundation[0].outputs : null
   cluster    = var.use_remote_state_cluster ? data.terraform_remote_state.cluster[0].outputs : null
@@ -191,7 +190,6 @@ locals {
   mesh_otel_endpoint = var.enable_observability ? "https://otel.${var.domain_name}" : ""
 }
 
-#Wires the ingress module into this stack.
 module "ingress" {
   count  = var.enable_ingress ? 1 : 0
   source = "../../modules/ingress"
@@ -225,7 +223,6 @@ module "ingress" {
   tags = local.common_tags
 }
 
-#Wires the observability module into this stack.
 module "observability" {
   count  = var.enable_observability ? 1 : 0
   source = "../../modules/observability"
@@ -283,7 +280,6 @@ module "observability" {
   tags = local.common_tags
 }
 
-#Wires the SLO module into this stack.
 module "slo" {
   count  = var.enable_slo ? 1 : 0
   source = "../../modules/slo"
@@ -301,7 +297,6 @@ module "slo" {
   tags = local.common_tags
 }
 
-#Wires the security module into this stack.
 module "security" {
   count  = var.enable_security ? 1 : 0
   source = "../../modules/security"
@@ -346,7 +341,6 @@ module "security" {
   depends_on = [module.observability]
 }
 
-#Wires the finops module into this stack.
 module "finops" {
   count  = var.enable_finops ? 1 : 0
   source = "../../modules/finops"
@@ -373,7 +367,6 @@ module "finops" {
   depends_on = [module.observability]
 }
 
-#Wires the self healing module into this stack.
 module "self_healing" {
   count  = var.enable_self_healing ? 1 : 0
   source = "../../modules/self_healing"

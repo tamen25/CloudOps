@@ -1,4 +1,3 @@
-#This manifest defines drift detection for CloudOps.
 #Drift detection — runs `terraform plan` against each layered stack of
 #each active environment, separately. Backlog #59 — replaces the previous
 #single-env / legacy-root pass.

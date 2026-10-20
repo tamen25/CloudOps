@@ -156,7 +156,6 @@ class CloudOpsLoggerTests(unittest.TestCase):
 
     def test_sampler_processes_directly_when_sampling_is_zero(self):
         class FakeLogger:
-            #Initializes the requested work.
             def __init__(self):
                 self.processed = []
 

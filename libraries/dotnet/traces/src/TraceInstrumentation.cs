@@ -45,7 +45,6 @@ public sealed class TraceInstrumentation : IDisposable
         return Instance.Value;
     }
 
-    // Initializes the requested work.
     private void Init()
     {
         var builder = Sdk.CreateTracerProviderBuilder()

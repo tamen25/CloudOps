@@ -98,7 +98,6 @@ public final class CloudOpsLogger {
     }
   }
 
-  // Logs the requested work.
   private void log(LogLevel level, Object message, Object... optionalParams) {
     String currentTraceId = currentTraceId();
     if (!currentTraceId.equals(previousTraceId)) {
@@ -129,7 +128,6 @@ public final class CloudOpsLogger {
     }
   }
 
-  // Initializes the requested work.
   private void init() {
     if (exportersList.length <= 1 && containsExporter("console")) {
       useConsole = true;
