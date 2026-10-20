@@ -12,7 +12,7 @@
 #./scripts/validate-k8s-manifests.sh
 #
 #Override the kubeconform version with KUBECONFORM_VERSION=…
-#Override the K8s API version with KUBE_VERSION=v1.32.0 (default).
+#Override the K8s API version with KUBE_VERSION=1.35.0 (default; the cluster default, stacks/cluster kubernetes_version).
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ cd "$REPO_ROOT"
 
 TOOLS_DIR="$REPO_ROOT/.tools"
 KUBECONFORM_VERSION="${KUBECONFORM_VERSION:-0.6.7}"
-KUBE_VERSION="${KUBE_VERSION:-1.32.0}"
+KUBE_VERSION="${KUBE_VERSION:-1.35.0}"
 
 mkdir -p "$TOOLS_DIR"
 

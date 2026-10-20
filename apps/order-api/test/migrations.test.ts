@@ -68,8 +68,9 @@ test('runMigrations releases the client when no migrations are pending', async (
             { name: '005_audit_events.sql' },
             { name: '006_products.sql' },
             { name: '007_order_ownership.sql' },
+            { name: '008_integration_test_fixture.sql' },
           ],
-          rowCount: 7,
+          rowCount: 8,
         };
       }
       return { rows: [], rowCount: 0 };

@@ -122,9 +122,12 @@ terraform -chdir=stacks/foundation output -raw github_actions_role_arn  # copy t
 | `AWS_REGION` | `us-east-1` (or your region) |
 | `TF_VARS` | Full contents of `terraform.tfvars` |
 | `INFRACOST_API_KEY` | From [infracost.io](https://www.infracost.io/docs/#2-get-api-key) |
-| `ECR_REPOSITORY_URL` | `terraform -chdir=stacks/foundation output -json ecr_repository_urls \| jq -r '."order-api"'` |
-| `EKS_CLUSTER_NAME` | `terraform -chdir=stacks/cluster output -raw cluster_name` |
+| `EKS_CLUSTER_NAME` | `terraform -chdir=stacks/cluster output -raw cluster_name` (EKS Emergency Access only) |
 | `GRAFANA_API_KEY` | Grafana → Administration → Service accounts → New token |
+| `ORDER_API_KEY_SECRET_ARN` | The order-api API key secret the integration tests sign in with |
+
+The pipelines read the ECR repositories and the cluster name from the stacks'
+outputs, so there is no secret to keep in step with them.
 
 ### Step 3 — `production` GitHub Environment
 
