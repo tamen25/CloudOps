@@ -44,7 +44,9 @@ prove. I03 comes first.
   the chaos daemon (docs/runbooks/chaos-mesh.md).
 - [ ] **V02** — Run the Destroy workflow once at the end of the first AWS
   session and confirm nothing is left: `plan -destroy` empty per stack,
-  no `<project>-*` buckets, no load balancers for the cluster.
+  no `<project>-*` buckets, no load balancers for the cluster, no
+  `available` EBS volumes tagged `ebs.csi.aws.com/cluster=true`, no
+  `/aws/eks/<cluster>` log group.
 - [ ] **V03** — In-VPC runners (docs/runbooks/ci-runner.md): set the fork-PR
   approval setting, register the GitHub App, build the runner image, turn
   on `enable_ci_runner`, run the App Pipeline's deploy on `cloudops-vpc`,
@@ -53,8 +55,8 @@ prove. I03 comes first.
 
 ## Done
 
-- [x] **C01** — CI/CD review (docs/reviews/2026-10-20-cicd-review.md): 16
-  findings in the AWS paths of the workflows, fixed across #52–#54; a
+- [x] **C01** — CI/CD review (docs/reviews/2026-10-20-cicd-review.md): 19
+  findings in the AWS paths of the workflows, fixed across #52–#55; a
   workflow checker and a real-Postgres migration test keep them fixed.
 
 - [x] **O02** (#76) — in-VPC runners: `modules/ci-runner` (ARC 0.14.2, off

@@ -1,9 +1,15 @@
 #gp3 StorageClass — requires the EBS CSI driver addon (installed by the eks module)
+#
+#It is the cluster's default class. EKS clusters created on Kubernetes 1.30 or
+#later have no default class, and several charts here create claims without
+#naming one (Loki's write and backend pods, Mimir's alertmanager). Without a
+#default those claims stay Pending, the pods never schedule, and the Helm
+#release times out.
 resource "kubernetes_storage_class" "gp3" {
   metadata {
     name = "gp3"
     annotations = {
-      "storageclass.kubernetes.io/is-default-class" = "false"
+      "storageclass.kubernetes.io/is-default-class" = "true"
     }
   }
 

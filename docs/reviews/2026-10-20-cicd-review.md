@@ -25,6 +25,15 @@ verified by tests, the workflow checker and reading, as each PR says.
 | C14 | mesh.yml | The npm audit the quality-gate doc lists as a gate ran with `continue-on-error` | #54 |
 | C15 | app.yml | The quality-gate doc lists `tsc` in the test job; the job never built | #54 |
 | C16 | app.yml, validate-k8s-manifests.sh | kubeconform validated against Kubernetes 1.32; the cluster default is 1.35 | #52 |
+| C17 | observability module | No default StorageClass: EKS 1.30+ creates clusters without one, and Loki's write/backend and Mimir's alertmanager claims name none, so they stay Pending and the platform apply times out. `gp3` is now the default | #55 |
+| C18 | destroy.yml | Claims in the Helm-created namespaces (mimir, loki, tempo) survived the platform destroy; their EBS volumes would outlive the cluster. Destroy now deletes the claims while the CSI driver runs and waits for the volumes | #55 |
+| C19 | destroy.yml | EKS's control-plane log group (created by EKS, never expiring) stayed after the cluster; destroy now deletes it | #55 |
+
+Open, not fixed: destroy empties the data buckets before the platform
+stack is destroyed, while Loki and Mimir still write. With
+`buckets_force_destroy = true` (the dev default) Terraform deletes the
+objects anyway. With `false`, as prod sets it, a bucket refilled in that
+window refuses deletion and the destroy stops there.
 
 ## What keeps them fixed
 
