@@ -34,6 +34,10 @@ metrics_long_term_storage  = "mimir"
 enable_mesh                = true
 enable_loadgen             = true
 enable_chaos_mesh          = true
+# The API endpoint is public for the run (it is applied from your machine);
+# only your address may reach it. Find it with: curl -s https://checkip.amazonaws.com
+eks_endpoint_public_access_cidrs = ["<your ip>/32"]
+# kubernetes_version stays at its default, 1.35 (see the control-plane line)
 # everything else at its default (off)
 ```
 
@@ -49,13 +53,18 @@ enable_chaos_mesh          = true
 | EBS gp3 (node roots + Mimir/Loki/Tempo volumes), ~80 GB | — | $0.08/GB-month | $0.01 |
 | **Total** | | | **≈ $0.62/hr** |
 
+The control-plane price holds only while the cluster's Kubernetes version
+is in EKS standard support. 1.35, the default, is until 2027-03-27. A
+version in extended support (1.32 and older on this date) bills $0.60/hr,
+which would raise the total to ≈ $1.12/hr.
+
 Small and usage-based, expected under $1 for a session: S3 requests and
 storage for Mimir/Loki/Tempo, NAT data processing ($0.045/GB, mostly image
 pulls from public registries, ~10 GB → ~$0.45), interface-endpoint data
 ($0.01/GB), CloudWatch Logs for the EKS control plane, and data transfer out
 through the port-forwards (Argus queries, well under 1 GB → < $0.10).
 
-Images: about 2 GB across ten ECR repositories, $0.10/GB-month, deleted with
+Images: about 2 GB across the ECR repositories, $0.10/GB-month, deleted with
 the foundation stack. Not hourly but worth knowing: the Route 53 hosted zone the foundation stack
 creates costs $0.50 for the month unless it is deleted within 12 hours; KMS
 keys cost $1/month each, prorated.

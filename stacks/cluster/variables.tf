@@ -97,8 +97,12 @@ variable "existing_node_sg_id" {
 #── EKS knobs ────────────────────────────────────────────────────────────────
 
 variable "eks_kubernetes_version" {
-  type    = string
-  default = "1.32"
+  # A version past EKS standard support (14 months after its EKS release)
+  # bills extended support: $0.60 instead of $0.10 per cluster hour. 1.35 is
+  # in standard support until 2027-03-27; move on before then.
+  description = "Kubernetes version for the EKS control plane and node group"
+  type        = string
+  default     = "1.35"
 }
 
 variable "eks_node_instance_types" {

@@ -119,6 +119,10 @@ jobs:
       - name: Permissions boundary on every role
         run: bash scripts/check-permissions-boundary.sh
 
+      # Terraform only finds an unpublished chart version at apply time.
+      - name: Every pinned Helm chart version is published
+        run: python3 scripts/check-helm-charts.py
+
       - name: Terraform module tests
         run: |
           for dir in $(git ls-files 'modules/*/tests/*.tftest.hcl' | cut -d/ -f1-2 | sort -u); do

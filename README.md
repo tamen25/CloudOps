@@ -40,7 +40,7 @@ The platform runs across two availability zones (`us-east-1a`, `us-east-1b`) beh
 |---|-------|---------------|-----------------|
 | 1 | **Bootstrap** | S3 remote state, KMS encryption, GitHub Actions OIDC provider, IAM deployer role | Terraform S3 backend, AWS KMS, OIDC federation |
 | 2 | **Networking** | VPC (10.0.0.0/16), public/private/database subnets across 2 AZs, NAT Gateways, VPC Flow Logs, security groups | AWS VPC, EC2 Security Groups |
-| 3 | **EKS** | Kubernetes 1.32 cluster, 2× t3.large managed node group, IRSA service accounts, aws-node CNI | AWS EKS, IRSA, Kubernetes RBAC |
+| 3 | **EKS** | Kubernetes 1.35 cluster, 2× t3.large managed node group, IRSA service accounts, aws-node CNI | AWS EKS, IRSA, Kubernetes RBAC |
 | 4 | **Ingress** | AWS Load Balancer Controller, ACM TLS certificate, Route 53 alias records | AWS ALB, ACM, Route 53, Helm |
 | 5 | **Observability** | Grafana, Loki (S3 backend), Tempo (S3 backend), Prometheus, OTel Collector gateway | LGTM stack, kube-prometheus-stack, OpenTelemetry |
 | 6 | **App Deploy** | order-api (Node.js/Express/PostgreSQL) — Docker build, ECR push, EKS deploy, integration tests | GitHub Actions, ECR, kubectl rollout, Trivy |
@@ -203,7 +203,7 @@ All decisions are documented as Architecture Decision Records:
 | Category | Technologies |
 |----------|-------------|
 | **Infrastructure** | Terraform 1.11+, AWS (EKS, RDS PostgreSQL, ALB, Lambda, DynamoDB, SNS, S3, ECR, KMS, Secrets Manager, Route 53, ACM, Cost Explorer, AWS Budgets) |
-| **Container / Kubernetes** | Kubernetes 1.32, Docker, EKS managed node groups, IRSA, Helm, AWS Load Balancer Controller |
+| **Container / Kubernetes** | Kubernetes 1.35, Docker, EKS managed node groups, IRSA, Helm, AWS Load Balancer Controller |
 | **Security** | Falco (eBPF runtime), OPA Gatekeeper (admission), kube-bench (CIS), Trivy (image scan), Cosign (image signing), NetworkPolicy, tfsec |
 | **Observability** | Grafana, Loki, Tempo, Prometheus, kube-prometheus-stack, OpenTelemetry Collector, CloudWatch |
 | **SLO / Alerting** | Prometheus recording rules (multi-window burn rate), PrometheusRule CRDs, Grafana alerting, SNS |
