@@ -177,3 +177,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "chaos_mesh_namespace" {
+  description = "Namespace of the Chaos Mesh install, exempted from the cluster-wide no-root and no-privileged constraints; empty when Chaos Mesh is not installed"
+  type        = string
+  default     = ""
+}

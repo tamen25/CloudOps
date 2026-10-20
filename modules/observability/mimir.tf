@@ -247,6 +247,10 @@ resource "helm_release" "mimir" {
         limits = {
           ingestion_rate             = 100000
           max_global_series_per_user = 1000000
+          # Serves /api/v1/cardinality/*: series counts per label value,
+          # read by Argus (its MET-001 check and cost attribution) and by
+          # anyone chasing a cardinality spike. Read-only, on demand.
+          cardinality_analysis_enabled = true
         }
       }
     }

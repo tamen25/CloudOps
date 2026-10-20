@@ -80,6 +80,13 @@ resource "kubernetes_manifest" "ct_no_root_containers" {
   depends_on = [helm_release.gatekeeper]
 }
 
+# The Chaos Mesh daemon runs as root and privileged on every node. Its
+# namespace is exempt from the two cluster-wide constraints while Chaos Mesh
+# is installed (chaos_mesh_namespace set), and only then.
+locals {
+  chaos_mesh_exempt = var.chaos_mesh_namespace == "" ? [] : [var.chaos_mesh_namespace]
+}
+
 #Creates the kubernetes manifest resource named c no root containers.
 resource "kubernetes_manifest" "c_no_root_containers" {
   manifest = {
@@ -90,7 +97,7 @@ resource "kubernetes_manifest" "c_no_root_containers" {
       enforcementAction = "deny"
       match = {
         kinds              = [{ apiGroups = [""], kinds = ["Pod"] }]
-        excludedNamespaces = ["kube-system", "gatekeeper-system", "falco"]
+        excludedNamespaces = concat(["kube-system", "gatekeeper-system", "falco"], local.chaos_mesh_exempt)
       }
     }
   }
@@ -237,7 +244,7 @@ resource "kubernetes_manifest" "c_no_privileged" {
       match = {
         kinds = [{ apiGroups = [""], kinds = ["Pod"] }]
         #Falco's eBPF driver pod runs privileged — exempt its namespace
-        excludedNamespaces = ["falco"]
+        excludedNamespaces = concat(["falco"], local.chaos_mesh_exempt)
       }
     }
   }
