@@ -188,6 +188,8 @@ resource "aws_lambda_event_source_mapping" "kinesis_to_fanout" {
   parallelization_factor             = 2
   bisect_batch_on_function_error     = true
   maximum_retry_attempts             = 3
+  # The handler reports the record it failed on; Lambda retries from there.
+  function_response_types = ["ReportBatchItemFailures"]
 }
 
 #─── Custom domain (optional) ──────────────────────────────────────────────

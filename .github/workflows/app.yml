@@ -580,7 +580,7 @@ jobs:
           RAW=$(aws cloudwatch get-metric-statistics \
             --namespace CloudOps/SLO \
             --metric-name ErrorBudgetRemaining \
-            --dimensions Name=Service,Value=order-api \
+            --dimensions Name=Service,Value=order-api Name=Environment,Value="${TARGET_ENVIRONMENT}" \
             --start-time "$START_TIME" \
             --end-time "$END_TIME" \
             --period 300 \
