@@ -191,3 +191,18 @@ output "mesh_event_bus_name" {
   description = "EventBridge bus carrying enriched mesh order events."
   value       = var.enable_mesh ? module.mesh_events[0].event_bus_name : null
 }
+
+output "tempo_url" {
+  description = "In-cluster Tempo HTTP API, for the storefront console"
+  value       = var.enable_observability ? module.observability[0].tempo_url : ""
+}
+
+output "loki_url" {
+  description = "In-cluster Loki gateway, for the storefront console"
+  value       = var.enable_observability ? module.observability[0].loki_url : ""
+}
+
+output "mimir_url" {
+  description = "In-cluster Mimir gateway, for the storefront console; empty without Mimir"
+  value       = var.enable_observability ? module.observability[0].mimir_url : ""
+}

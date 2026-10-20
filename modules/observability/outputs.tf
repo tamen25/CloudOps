@@ -71,3 +71,8 @@ output "grafana_api_key_secret_arn" {
   description = "Secrets Manager ARN containing the Grafana Viewer service account token — passed to the SLO Lambda so it can query Prometheus via the Grafana datasource proxy"
   value       = aws_secretsmanager_secret.grafana_api_key.arn
 }
+
+output "mimir_url" {
+  description = "In-cluster Mimir gateway (Prometheus API under /prometheus); empty unless metrics_long_term_storage is mimir"
+  value       = var.metrics_long_term_storage == "mimir" ? "http://mimir-gateway.mimir.svc" : ""
+}

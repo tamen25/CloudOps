@@ -843,3 +843,9 @@ variable "image_signature_policy_mode" {
   type        = string
   default     = "warn"
 }
+
+variable "storefront_subdomain" {
+  description = "The storefront's host is <storefront_subdomain>.<domain_name>"
+  type        = string
+  default     = "shop"
+}

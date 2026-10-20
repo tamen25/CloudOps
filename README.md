@@ -142,8 +142,9 @@ Required status checks: `quality`, `plan` — blocks merges if Terraform fmt/val
 |----------|---------|-------------|
 | **App Pipeline** (`app.yml`) | Push to `main` on `apps/order-api/**` (gated) · PR · `workflow_dispatch` | Unit tests → Docker build+push to ECR → Trivy image scan → EKS rollout → integration tests (health, orders, metrics, traces) → auto-rollback on failure |
 | **Infra Pipeline** (`infra.yml`) | Push to `main` on `*.tf`, `modules/**` (gated) · PR · `workflow_dispatch` | fmt/validate/lint/tfsec, Trivy and Checkov → Infracost cost diff (PR, when `INFRACOST_ENABLED`) → on `main` with `AWS_DEPLOY_ENABLED`: `terraform plan` → manual approval → staged `terraform apply` |
+| **Storefront Pipeline** (`storefront.yml`) | Push to `main` on `apps/storefront/**` (gated) · PR · `workflow_dispatch` | lint, contract check, tests with coverage, audit, build, manifest validation → with `AWS_DEPLOY_ENABLED`: build, sign and push to ECR → Trivy image scan → render from Terraform outputs → EKS rollout |
 | **Library Pipeline** (`libraries.yml`) | Push to `main` on `libraries/**` (gated) · PR · `workflow_dispatch` | per-language tests + coverage gates → optional publish to CodeArtifact |
-| **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → teardown in dependency order |
+| **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → empty the project's buckets → destroy platform, the cluster's load balancers, cluster, foundation → state bucket |
 | **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC | `terraform plan -detailed-exitcode` → opens GitHub issue on drift, closes it when resolved |
 | **EKS Emergency Access** (`eks-emergency-access.yml`) | `workflow_dispatch` only | Break-glass: widens private EKS endpoint to a single CIDR via AWS API (state stays private) |
 

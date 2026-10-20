@@ -221,6 +221,8 @@ module "ingress" {
   waf_log_retention_days  = var.waf_log_retention_days
 
   tags = local.common_tags
+
+  storefront_subdomain = var.storefront_subdomain
 }
 
 module "observability" {

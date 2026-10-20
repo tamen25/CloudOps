@@ -141,3 +141,9 @@ variable "permissions_boundary_arn" {
   type        = string
   default     = null
 }
+
+variable "storefront_subdomain" {
+  description = "Subdomain the storefront is served on (<subdomain>.<domain_name>), on the shared ALB"
+  type        = string
+  default     = "shop"
+}

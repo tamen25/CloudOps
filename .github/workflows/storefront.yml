@@ -1,10 +1,12 @@
-# Storefront pipeline (Next.js on EKS): tests and manifest validation. It
-# builds and deploys nothing yet; that needs the storefront's ECR repository,
-# IRSA role and certificate first (BACKLOG F01), and will follow app.yml's
-# build-and-push and deploy jobs.
+# Storefront pipeline (Next.js on EKS): tests and manifest validation on every
+# PR; on main or a manual run, build, sign, scan and deploy, like app.yml.
+# The image goes to the foundation stack's ECR repository
+# (<project>/storefront), the IRSA role and the certificate come from the
+# platform stack's outputs.
 #
 # Pushes to main run only when the AUTO_RUN_ON_MERGE repository variable is
-# true. PRs and manual runs always do.
+# true. PRs and manual runs always do. Build and deploy also need the deploy
+# kill switch on (vars.AWS_DEPLOY_ENABLED).
 
 name: Storefront Pipeline
 
@@ -25,9 +27,16 @@ on:
       - 'scripts/validate-k8s-manifests.sh'
       - '.github/workflows/storefront.yml'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
 
 jobs:
   test:
@@ -95,9 +104,166 @@ jobs:
       - name: Render + validate k8s manifests
         run: bash scripts/validate-k8s-manifests.sh
 
+  build-and-push:
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: test
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write   # AWS credentials and keyless signing
+      contents: read
+    outputs:
+      image_ref: ${{ steps.ref.outputs.image_ref }}
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-storefront
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+
+      - name: Find the ECR repository
+        run: |
+          bash scripts/write-ci-tfvars.sh
+          STACKS=foundation bash scripts/terraform-stacks.sh init
+          REPO=$(terraform -chdir=stacks/foundation output -json ecr_repository_urls | jq -r '.storefront // empty')
+          if [ -z "$REPO" ]; then
+            echo "::error::no storefront repository in the foundation stack's ecr_repository_urls"
+            exit 1
+          fi
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Only the commit tag is pushed (tags are immutable in the repository);
+      # the deploy pins the digest.
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: apps/storefront
+          push: true
+          tags: ${{ env.REPO }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image reference
+        id: ref
+        run: echo "image_ref=${REPO}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # Same pin as app.yml (BACKLOG D02).
+          cosign-release: v2.6.5
+
+      - name: Sign image (keyless)
+        run: cosign sign --yes "${{ steps.ref.outputs.image_ref }}"
+
+      - name: Scan image (CRITICAL fails the job)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.ref.outputs.image_ref }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+  deploy:
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [build-and-push, manifest-validation]
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+      STOREFRONT_IMAGE: ${{ needs.build-and-push.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/storefront/package-lock.json
+
+      - name: Install storefront deps (for the renderer)
+        run: npm ci
+        working-directory: apps/storefront
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-storefront
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+
+      - name: Load deployment configuration from Terraform state
+        run: bash scripts/storefront-deploy-env.sh >> "$GITHUB_ENV"
+
+      - name: Render manifests
+        run: apps/storefront/node_modules/.bin/tsx apps/storefront/scripts/render-k8s.ts apps/storefront/k8s /tmp/storefront-k8s
+
+      - name: Apply and wait for the rollout
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          kubectl apply -f /tmp/storefront-k8s/namespace.yaml
+          # The ServiceMonitor needs the Prometheus Operator's CRD, which only
+          # the observability module installs.
+          if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+            rm -f /tmp/storefront-k8s/servicemonitor.yaml
+          fi
+          kubectl apply -f /tmp/storefront-k8s/
+          kubectl -n "$STOREFRONT_NAMESPACE" rollout status deployment/storefront --timeout=5m
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Storefront deploy — ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Environment** | \`${TARGET_ENVIRONMENT}\` |"
+            echo "| **Image** | \`${STOREFRONT_IMAGE}\` |"
+            echo "| **Host** | \`${STOREFRONT_HOST:-unknown}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   notify:
     runs-on: ubuntu-latest
-    needs: [test, manifest-validation]
+    needs: [test, manifest-validation, build-and-push, deploy]
     if: always()
     steps:
       - name: PR summary
