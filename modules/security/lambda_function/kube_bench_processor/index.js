@@ -93,6 +93,21 @@ function extractFindings(kubeBenchOutput, clusterName) {
   return findings;
 }
 
+// passedChecks returns the check IDs kube-bench reported as PASS. Only those
+// resolve an open finding: a check reported INFO or NOT_CHECKED this run was
+// not evaluated, which is not a pass.
+function passedChecks(kubeBenchOutput) {
+  const passed = new Set();
+  for (const control of (kubeBenchOutput.Controls || [])) {
+    for (const test of (control.tests || [])) {
+      for (const result of (test.results || [])) {
+        if (result.status === 'PASS') passed.add(result.test_number);
+      }
+    }
+  }
+  return passed;
+}
+
 // ── DynamoDB deduplication ────────────────────────────────────────────────────
 //
 // Queries status-index GSI for all OPEN kube_bench findings for this cluster.
@@ -160,6 +175,19 @@ async function persistFinding(finding, isNew, existing) {
   }
 }
 
+// resolveFinding closes an open finding whose check now passes. The
+// condition keeps it from overwriting a finding closed in the meantime.
+async function resolveFinding(item) {
+  await ddb.send(new UpdateCommand({
+    TableName:                 FINDINGS_TABLE,
+    Key:                       { finding_id: item.finding_id, timestamp: item.timestamp },
+    UpdateExpression:          'SET #s = :resolved, resolved_at = :ts, resolved_by = :by',
+    ConditionExpression:       '#s = :open',
+    ExpressionAttributeNames:  { '#s': 'status' },
+    ExpressionAttributeValues: { ':resolved': 'RESOLVED', ':open': 'OPEN', ':ts': new Date().toISOString(), ':by': 'kube-bench-processor' },
+  }));
+}
+
 // ── CloudWatch metrics ────────────────────────────────────────────────────────
 
 async function publishMetrics({ failures, warnings, clusterName }) {
@@ -209,8 +237,10 @@ exports.handler = async function handler(event) {
 
   // 2. Load existing open findings for this cluster to deduplicate.
   let openFindings;
+  let openFindingsLoaded = false;
   try {
     openFindings = await loadOpenKubeBenchFindings(clusterName);
+    openFindingsLoaded = true;
     log('info', { msg: `Loaded ${openFindings.size} existing open kube-bench findings`, clusterName });
   } catch (err) {
     log('error', { msg: 'Failed to load existing findings — proceeding without dedup', error: err.message });
@@ -234,7 +264,24 @@ exports.handler = async function handler(event) {
     }
   }
 
-  // 4. Publish CW metrics using the kube-bench Totals field for accurate counts
+  // 4. Resolve open findings whose check passed this run.
+  let resolvedCount = 0;
+  if (openFindingsLoaded) {
+    const passed = passedChecks(kubeBenchOutput);
+    for (const item of openFindings.values()) {
+      if (!passed.has(item.check_id)) continue;
+      try {
+        await resolveFinding(item);
+        resolvedCount++;
+      } catch (err) {
+        if (err.name !== 'ConditionalCheckFailedException') {
+          log('error', { msg: 'Failed to resolve finding', checkId: item.check_id, error: err.message });
+        }
+      }
+    }
+  }
+
+  // 5. Publish CW metrics using the kube-bench Totals field for accurate counts
   //    (includes controls that were NOT_CHECKED, which extractFindings skips).
   const totals = kubeBenchOutput.Totals || {};
   try {
@@ -247,7 +294,7 @@ exports.handler = async function handler(event) {
     log('warn', { msg: 'Failed to publish CloudWatch metrics', error: err.message });
   }
 
-  // 5. Structured summary log.
+  // 6. Structured summary log.
   const bySeverity = {};
   for (const f of findings) {
     bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
@@ -259,6 +306,7 @@ exports.handler = async function handler(event) {
     totalFindings:    findings.length,
     newFindings:      newCount,
     existingFindings: existingCount,
+    resolvedFindings: resolvedCount,
     bySeverity,
     kubeBenchTotals: {
       pass:       totals.total_pass    || 0,

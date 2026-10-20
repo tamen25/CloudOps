@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "CloudOps kube-bench processor Lambda — maps CIS benchmark findings into DynamoDB and CloudWatch",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
   "license": "UNLICENSED",
   "private": true,
   "engines": {
