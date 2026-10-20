@@ -265,7 +265,32 @@ jobs:
       - name: Destroy the platform stack
         run: STACKS=platform bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      #── 10. Load balancers the cluster made ─────────────────────────────────
+      #── 10. Volumes the charts left ────────────────────────────────────────
+      #Uninstalling a chart leaves its StatefulSets' claims, and Helm never
+      #deletes the namespaces it created (mimir, loki, tempo). Their EBS
+      #volumes would outlive the cluster, unmanaged and billed. Deleting the
+      #claims while the EBS CSI driver still runs (it goes with the cluster
+      #stack) deletes the volumes; the gp3 class reclaims with Delete.
+      - name: Delete the volumes the platform's charts left
+        run: |
+          if ! aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1; then
+            echo "Cluster $CLUSTER not found; no claims to delete."
+            exit 0
+          fi
+          aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+          kubectl get pvc --all-namespaces --no-headers 2>/dev/null || true
+          kubectl delete pvc --all --all-namespaces --wait=false
+          for _ in $(seq 1 40); do
+            LEFT=$(kubectl get pv --no-headers 2>/dev/null | wc -l)
+            [ "$LEFT" -eq 0 ] && { echo "All volumes deleted."; exit 0; }
+            echo "$LEFT volume(s) still deleting"
+            sleep 15
+          done
+          kubectl get pv
+          echo "::error::volumes still present after 10 minutes; their EBS volumes would outlive the cluster"
+          exit 1
+
+      #── 11. Load balancers the cluster made ─────────────────────────────────
       #The AWS Load Balancer Controller creates load balancers and target
       #groups for Ingresses and Services, outside Terraform. Left behind they
       #hold ENIs and security groups, and the VPC cannot be deleted.
@@ -294,13 +319,26 @@ jobs:
             fi
           done
 
-      #── 11. Cluster and foundation stacks ───────────────────────────────────
+      #── 12. Cluster and foundation stacks ───────────────────────────────────
       #Foundation includes bootstrap: the OIDC provider and the role this run
       #holds. Its session stays valid until it expires.
       - name: Destroy the cluster and foundation stacks
         run: STACKS="cluster foundation" bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      #── 12. Delete the Terraform state bucket ───────────────────────────────
+      #EKS creates its control-plane log group itself, outside Terraform, with
+      #no expiry; it would stay after the cluster.
+      - name: Delete the cluster's log group
+        run: |
+          GROUP="/aws/eks/$CLUSTER/cluster"
+          if aws logs describe-log-groups --log-group-name-prefix "$GROUP" \
+              --query "logGroups[?logGroupName=='$GROUP'] | length(@)" --output text | grep -qx 1; then
+            aws logs delete-log-group --log-group-name "$GROUP"
+            echo "Deleted $GROUP"
+          else
+            echo "$GROUP not found"
+          fi
+
+      #── 13. Delete the Terraform state bucket ───────────────────────────────
       #State bucket was created by create-s3-bucket.sh (outside Terraform), so
       #Terraform destroy does not remove it — we must do so explicitly.
       - name: Empty Terraform state bucket
@@ -315,7 +353,7 @@ jobs:
             echo "State bucket $STATE_BUCKET not found — already deleted or never created"
           fi
 
-      #── 13. Summary ─────────────────────────────────────────────────────────
+      #── 14. Summary ─────────────────────────────────────────────────────────
       - name: Write destroy summary
         if: always()
         run: |
@@ -342,9 +380,9 @@ jobs:
           | Step | What |
           |------|------|
           | 1 | Every \`${PROJECT}-*\` bucket except the state bucket emptied |
-          | 2 | Cluster API opened to this runner, \`stacks/platform\` destroyed |
+          | 2 | Cluster API opened to this runner, \`stacks/platform\` destroyed, leftover volume claims (and their EBS volumes) deleted |
           | 3 | Load balancers and target groups of \`${CLUSTER}\` deleted |
-          | 4 | \`stacks/cluster\`, then \`stacks/foundation\` (bootstrap included) destroyed |
+          | 4 | \`stacks/cluster\`, then \`stacks/foundation\` (bootstrap included) destroyed; the cluster's log group deleted |
           | 5 | TF state bucket emptied and deleted: \`$STATE_BUCKET\` |
 
           $([ "$STATUS" != "success" ] && echo "> ⚠️ Teardown may be incomplete. Run \`STACKS=<stack> scripts/terraform-stacks.sh plan -destroy\` per stack to see what remains, before the state bucket is gone.")
