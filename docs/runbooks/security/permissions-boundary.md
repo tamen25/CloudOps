@@ -50,9 +50,6 @@ can no longer change the bootstrap roles or the boundary policy.
 With `use_remote_state_foundation = false`, pass `permissions_boundary_arn`
 to the cluster and platform stacks yourself.
 
-**Root layout** (`main.tf`): set `bootstrap_enable_permissions_boundary = true`
-and apply as an administrator. Every role takes the boundary in one apply.
-
 ## Verify
 
 ```bash

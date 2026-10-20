@@ -3,17 +3,15 @@
 #repo-root terraform.tfvars and passes it as backend config.
 #
 #Usage:
-#scripts/tf-init.sh                         # legacy root stack
 #STACK=foundation scripts/tf-init.sh        # stacks/foundation
 #STACK=cluster scripts/tf-init.sh           # stacks/cluster
 #STACK=platform scripts/tf-init.sh          # stacks/platform
-#scripts/tf-init.sh -upgrade                # passes through init flags
-#BOOTSTRAP_BUCKET=foo scripts/tf-init.sh    # explicit bucket override
-#STATE_KEY=dev/terraform.tfstate scripts/tf-init.sh
-#SKIP_BUCKET_CHECK=1 scripts/tf-init.sh     # skip bucket preflight
+#STACK=platform scripts/tf-init.sh -upgrade # passes through init flags
+#BOOTSTRAP_BUCKET=foo STACK=… scripts/tf-init.sh   # explicit bucket override
+#STATE_KEY=dev/cluster/terraform.tfstate STACK=cluster scripts/tf-init.sh
+#SKIP_BUCKET_CHECK=1 STACK=… scripts/tf-init.sh    # skip bucket preflight
 #
 #State-key layout:
-#legacy root:   <env>/terraform.tfstate
 #stack:         <env>/<stack>/terraform.tfstate
 set -euo pipefail
 
@@ -22,14 +20,15 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 TFVARS_FILE="${TFVARS_FILE:-$REPO_ROOT/terraform.tfvars}"
 STACK="${STACK:-}"
 
-if [ -n "$STACK" ]; then
-  TF_DIR="$REPO_ROOT/stacks/$STACK"
-  if [ ! -d "$TF_DIR" ]; then
-    echo "Error: STACK=$STACK but $TF_DIR does not exist." >&2
-    exit 1
-  fi
-else
-  TF_DIR="$REPO_ROOT"
+# The root layout was retired (ADR 028); every state belongs to a stack.
+if [ -z "$STACK" ]; then
+  echo "Error: set STACK to foundation, cluster or platform." >&2
+  exit 1
+fi
+TF_DIR="$REPO_ROOT/stacks/$STACK"
+if [ ! -d "$TF_DIR" ]; then
+  echo "Error: STACK=$STACK but $TF_DIR does not exist." >&2
+  exit 1
 fi
 
 read_tfvar_string() {
@@ -81,11 +80,7 @@ if [ -z "${STATE_KEY:-}" ]; then
     exit 1
   fi
 
-  if [ -n "$STACK" ]; then
-    STATE_KEY="${ENV_NAME}/${STACK}/terraform.tfstate"
-  else
-    STATE_KEY="${ENV_NAME}/terraform.tfstate"
-  fi
+  STATE_KEY="${ENV_NAME}/${STACK}/terraform.tfstate"
 fi
 
 #Closes backlog #6. Without this, a typo in bootstrap_bucket_name silently

@@ -8,9 +8,8 @@ approval and the typed confirmation) runs every stage below in order. Use
 the stages by hand only when the workflow cannot run, or to finish a
 teardown it stopped part-way through.
 
-Every stage works on the layered stacks (`stacks/`), the layout CI deploys.
-`scripts/destroy.sh` drives the old root layout and refuses to run unless
-`LEGACY_ROOT=1` is set.
+Every stage works on the layered stacks (`stacks/`), the only Terraform
+layout (ADR 028).
 
 ---
 

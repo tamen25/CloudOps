@@ -1,17 +1,9 @@
-<!-- This document is the local-execution runbook for backlog #16 layered-stack rollout. -->
-# Layered Stack Bringup & Migration (backlog #16)
+# Layered Stack Bring-up
 
-Local-laptop runbook for proving `stacks/foundation` → `stacks/cluster` →
-`stacks/platform` works end-to-end against a real AWS environment. Two paths
-covered:
-
-- **Path A — fresh bringup** (no AWS resources exist; legacy state empty or stale).
-- **Path B — migration from live legacy state** (resources already provisioned via root `main.tf`).
-
-Path A is what dev runs today (2026-05-15 — account 278522729728 has zero
-resources, only a stale `main/terraform.tfstate` blob in
-`s3://cloudops-tfstate-tamen25/`). Path B is preserved for staging/prod once
-those environments are stood up.
+Local runbook for bringing up `stacks/foundation` → `stacks/cluster` →
+`stacks/platform` in an AWS account. The single root module these replaced
+was retired before any environment was built from it (ADR 028), so there is
+no state to migrate.
 
 ---
 
@@ -68,28 +60,14 @@ owner                 = "<your name/email>"
 aws s3 ls "s3://$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/')/"
 ```
 
-If the bucket does not exist yet, run `scripts/bootstrap.sh` (or set
-`SKIP_BUCKET_CHECK=1` and let foundation create it on first apply).
+If the bucket does not exist yet, create it with
+`bash modules/bootstrap/create-s3-bucket.sh`.
 
 ---
 
-## Path A — Fresh Bringup (no resources exist)
+## Bring-up
 
-Use when starting in a torn-down account. Skip the state-mv dance entirely.
-
-### A1. Wipe any stale state (optional)
-
-If `<env>/terraform.tfstate` from a previous root-layout run exists and you
-are certain no live resources reference it, archive it:
-
-```bash
-aws s3 cp "s3://${BUCKET}/main/terraform.tfstate" "./archive/main-$(date +%Y%m%d).tfstate"
-aws s3 rm  "s3://${BUCKET}/main/terraform.tfstate"
-```
-
-Do NOT delete state for an environment that still has live resources.
-
-### A2. Apply foundation
+### 1. Apply foundation
 
 ```bash
 STACK=foundation ./scripts/tf-init.sh
@@ -104,7 +82,7 @@ Acceptance:
 - Outputs include `vpc_id`, `private_subnet_ids`, `route53_zone_id`,
   `rds_instance_id`, `bootstrap_bucket_name`, `name_prefix`, `account_id`.
 
-### A3. Apply cluster
+### 2. Apply cluster
 
 ```bash
 STACK=cluster ./scripts/tf-init.sh
@@ -120,7 +98,7 @@ Acceptance:
 - Outputs include `cluster_name`, `cluster_endpoint`, `cluster_ca_certificate`,
   `oidc_provider_arn`, `oidc_provider_url`.
 
-### A4. Apply platform
+### 3. Apply platform
 
 ```bash
 STACK=platform ./scripts/tf-init.sh
@@ -136,7 +114,7 @@ Acceptance:
 - `kubectl get pods -A` shows ingress-nginx, monitoring/observability,
   gatekeeper, etc. depending on toggles.
 
-### A5. Smoke test
+### 4. Smoke test
 
 ```bash
 kubectl get nodes
@@ -144,7 +122,7 @@ kubectl get pods -A | grep -E 'ingress|observability|gatekeeper|monitoring'
 curl -sf "https://otel.${DOMAIN}/v1/metrics" -H "Authorization: Bearer ${TOKEN}" -X POST -d '{}' | jq .
 ```
 
-### A6. Re-plan sanity check
+### 5. Re-plan sanity check
 
 Re-run plan for each stack. All three must report **no changes**.
 
@@ -157,110 +135,7 @@ Exit 0 = clean. Exit 2 = drift detected; investigate before declaring success.
 
 ---
 
-## Path B — Migration From Live Legacy State
-
-Use when an environment already has resources provisioned via the legacy
-root `main.tf` and `<env>/terraform.tfstate`. Goal: move resource addresses
-from legacy state into per-stack states without destroying or recreating
-any live resource.
-
-### B1. Backup legacy state
-
-```bash
-mkdir -p ./migration-backups
-LEGACY_KEY="${ENV}/terraform.tfstate"
-aws s3 cp "s3://${BUCKET}/${LEGACY_KEY}" "./migration-backups/legacy-$(date +%Y%m%d-%H%M%S).tfstate"
-```
-
-Verify the backup is non-empty (>1KB) before proceeding.
-
-### B2. Pull legacy state to local working file
-
-```bash
-./scripts/tf-init.sh                    # init legacy root
-terraform state pull > ./migration-backups/legacy.tfstate
-terraform state list > ./migration-backups/legacy-addresses.txt
-wc -l ./migration-backups/legacy-addresses.txt
-```
-
-### B3. Per-stack `state mv` from local file
-
-Foundation, then cluster, then platform. For each stack:
-
-```bash
-# 3a. init the stack so it has a local backend pointer
-STACK=foundation ./scripts/tf-init.sh
-
-# 3b. work from a writable local copy of legacy state
-cp ./migration-backups/legacy.tfstate ./stacks/foundation/legacy-source.tfstate
-
-# 3c. move each address that belongs to this stack
-terraform -chdir=stacks/foundation state mv \
-  -state=legacy-source.tfstate \
-  -state-out=terraform.tfstate \
-  'module.bootstrap' \
-  'module.bootstrap'
-# repeat for: module.dns, module.networking, module.database,
-# module.compliance, module.backup, module.codeartifact (whichever enabled)
-```
-
-Note: `terraform state mv` preserves count/for_each index suffixes (`[0]`,
-`["us-east-1a"]`). Copy the address verbatim from `legacy-addresses.txt`.
-
-### B4. Push the per-stack state to its S3 key
-
-```bash
-terraform -chdir=stacks/foundation state push terraform.tfstate
-rm stacks/foundation/legacy-source.tfstate stacks/foundation/terraform.tfstate
-```
-
-### B5. Plan must report no changes
-
-```bash
-terraform -chdir=stacks/foundation plan -var-file=../../terraform.tfvars
-# expected: "No changes. Your infrastructure matches the configuration."
-```
-
-If the plan wants to **add** resources → an address was missed in B3; check
-`legacy-addresses.txt`.
-If the plan wants to **destroy** resources → the legacy state still owns
-them; the move did not land in foundation's state.
-If the plan wants to **replace** a resource → resource address shape differs
-between legacy and stack (e.g. nested module path changed). Use `terraform
-state mv` again with the corrected new address.
-
-### B6. Repeat B3-B5 for cluster, then platform
-
-Cluster owns: `module.eks` (entire submodule tree).
-Platform owns: `module.ingress`, `module.observability`, `module.security`,
-`module.slo`, `module.finops`, `module.self_healing`, `module.auth`,
-storefront-* modules.
-
-### B7. Archive legacy state
-
-After all three per-stack plans report zero changes:
-
-```bash
-aws s3 mv "s3://${BUCKET}/${LEGACY_KEY}" "s3://${BUCKET}/archive/legacy-${ENV}-$(date +%Y%m%d).tfstate"
-```
-
-Keep the archived state for at least 30 days as rollback safety.
-
-### B8. Retire legacy break-glass
-
-Remove `LEGACY_ROOT_APPLY=1` gated steps from `.github/workflows/infra.yml`:
-
-```bash
-grep -n "LEGACY_ROOT_APPLY" .github/workflows/infra.yml
-```
-
-Delete those job steps and the env-var guards. Open a PR; require approval.
-
----
-
 ## Rollback
-
-### During Path A
 
 `terraform destroy` per stack in reverse order: platform → cluster →
 foundation. Cheap because resources are recent and no data was persisted yet.
@@ -271,37 +146,14 @@ terraform -chdir=stacks/cluster    destroy -var-file=../../terraform.tfvars
 terraform -chdir=stacks/foundation destroy -var-file=../../terraform.tfvars
 ```
 
-### During Path B (live env)
+## Acceptance criteria
 
-If a `state mv` corrupts state or a plan wants to destroy something live:
-
-1. Do NOT apply.
-2. Restore the legacy state file:
-   ```bash
-   aws s3 cp ./migration-backups/legacy-<timestamp>.tfstate "s3://${BUCKET}/${LEGACY_KEY}"
-   ```
-3. Delete the partial per-stack states:
-   ```bash
-   aws s3 rm "s3://${BUCKET}/${ENV}/foundation/terraform.tfstate"
-   aws s3 rm "s3://${BUCKET}/${ENV}/cluster/terraform.tfstate"
-   aws s3 rm "s3://${BUCKET}/${ENV}/platform/terraform.tfstate"
-   ```
-4. Re-init the legacy root and confirm `terraform plan` reports zero changes.
-5. Investigate which address was wrong before retrying.
-
----
-
-## Acceptance Criteria (closes #16)
-
-- [ ] All three stacks apply cleanly from zero in dev (Path A).
+- [ ] All three stacks apply cleanly from zero in dev.
 - [ ] Re-plan after apply reports no changes across all three stacks.
 - [ ] EKS reachable, ingress serves traffic, observability collects metrics,
       order-api can deploy via existing `app.yml`.
-- [ ] (Optional, when staging is reborn) Path B validated against a real
-      pre-existing legacy-state environment.
-- [ ] `LEGACY_ROOT_APPLY=1` gated steps removed from `.github/workflows/infra.yml`.
-- [ ] `stacks/README.md` "Migration runbook validated" checkbox flipped to `[x]`.
-- [ ] `BACKLOG.md` updated: the layered-stack migration (A01) moved to Done.
+- [ ] The Destroy workflow then removes everything (BACKLOG V02).
+- [ ] `stacks/README.md` "First full bring-up" checkbox flipped to `[x]`.
 
 ---
 

@@ -91,7 +91,7 @@ database_publicly_accessible = false
 ```
 
 ```bash
-terraform apply -target=module.database
+STACKS=foundation bash scripts/terraform-stacks.sh apply
 ```
 
 ### IAM — wildcard inline policy

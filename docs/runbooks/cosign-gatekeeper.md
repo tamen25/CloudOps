@@ -48,9 +48,8 @@ enable_image_signature_constraint   = false   # leave OFF for this step
 ```
 
 ```bash
-./scripts/tf-init.sh
-terraform plan
-terraform apply
+STACKS=platform bash scripts/terraform-stacks.sh plan
+STACKS=platform bash scripts/terraform-stacks.sh apply
 ```
 
 Verify:
@@ -98,8 +97,8 @@ enable_image_signature_constraint   = true   # NOW enforced
 ```
 
 ```bash
-terraform plan    # plan-time guard verifies both flags align
-terraform apply
+STACKS=platform bash scripts/terraform-stacks.sh plan    # plan-time guard verifies both flags align
+STACKS=platform bash scripts/terraform-stacks.sh apply
 ```
 
 Verify:

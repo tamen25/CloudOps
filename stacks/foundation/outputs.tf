@@ -11,6 +11,16 @@ output "bootstrap_kms_key_arn" {
   value = var.destroy_all ? null : (var.bootstrap_create_kms ? module.bootstrap[0].kms_key_arn : null)
 }
 
+output "github_actions_role_arn" {
+  description = "Role GitHub Actions assumes through OIDC; the AWS_GITHUB_ACTIONS_ROLE_ARN secret"
+  value       = var.destroy_all ? null : module.bootstrap[0].github_actions_role_arn
+}
+
+output "deployer_role_arn" {
+  description = "Role a person assumes (with MFA) to run Terraform"
+  value       = var.destroy_all ? null : module.bootstrap[0].deployer_role_arn
+}
+
 #Exposes the github token secret arn output value.
 output "github_token_secret_arn" {
   description = "Secrets Manager ARN of the bootstrap-managed GitHub PAT (empty when github_token is unset)."
@@ -101,6 +111,11 @@ output "rds_arn" {
 #Exposes the database secret arn output value.
 output "database_secret_arn" {
   value = var.enable_database ? module.database[0].rds_secret_arn : ""
+}
+
+output "database_endpoint" {
+  description = "Primary RDS endpoint (host:port)"
+  value       = var.enable_database ? module.database[0].rds_endpoint : ""
 }
 
 #── EKS-name passthrough — needed by cluster + platform for tag/IAM scoping ──

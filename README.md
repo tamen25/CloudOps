@@ -69,33 +69,31 @@ curl -s https://grafana.example.com/api/health
 
 ## Quick Start
 
-Deploy the full stack from scratch in under 10 commands:
+Terraform is split into three stacks with their own state, applied in order
+(ADR 011, ADR 028): `stacks/foundation` (bootstrap, DNS, networking, database,
+compliance), `stacks/cluster` (EKS) and `stacks/platform` (everything on the
+cluster). `scripts/terraform-stacks.sh` runs a command across them; the full
+walk-through is `docs/runbooks/layered-stack-bringup.md`.
 
 ```bash
 # 1. Clone and configure
 git clone https://github.com/your-org/your-repo.git && cd CloudOps
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set project_name, environment, owner, aws_account_id
+# Edit terraform.tfvars: set project_name, environment, owner, aws_account_id,
+# bootstrap_bucket_name
 
-# 2. Bootstrap remote state + OIDC (run locally once)
-terraform init && terraform apply -target=module.bootstrap
+# 2. Create the state bucket (once)
+bash modules/bootstrap/create-s3-bucket.sh
 
-# 3. Deploy networking + EKS
-terraform apply -target=module.networking -target=module.eks
+# 3. Apply the three stacks: foundation, cluster, platform
+bash scripts/terraform-stacks.sh apply
 
-# 4. Deploy ingress (ALB controller + TLS + DNS)
-terraform apply -target=module.ingress
-# Then: set alb_dns_name and alb_zone_id in terraform.tfvars from outputs
-
-# 5. Deploy observability (LGTM stack + dashboards)
-terraform apply -target=module.observability
-
-# 6. Deploy remaining modules
-terraform apply  # enables SLO, security, self-healing, FinOps, database
-
-# 7. Configure GitHub secrets (see CI/CD Setup below), then push to trigger pipelines
-# App pipeline builds + deploys order-api automatically on push to main
+# 4. Configure GitHub secrets (see CI/CD Setup below), then push to trigger
+#    pipelines; the app pipeline builds and deploys order-api on push to main
 ```
+
+Tear down with the Destroy workflow, or `scripts/terraform-stacks.sh destroy`
+(`docs/runbooks/demo-teardown.md`).
 
 > **RDS creation takes 5–10 minutes.** This is normal — do not interrupt.
 
@@ -108,8 +106,10 @@ All four workflows authenticate to AWS via **GitHub Actions OIDC** — no long-l
 ### Step 1 — Bootstrap (run locally once)
 
 ```bash
-terraform apply -target=module.bootstrap
-terraform output -raw bootstrap_github_actions_role_arn  # copy this value
+bash modules/bootstrap/create-s3-bucket.sh
+STACK=foundation bash scripts/tf-init.sh
+terraform -chdir=stacks/foundation apply -var-file=../../terraform.tfvars -target=module.bootstrap
+terraform -chdir=stacks/foundation output -raw github_actions_role_arn  # copy this value
 ```
 
 ### Step 2 — GitHub Secrets
@@ -118,14 +118,13 @@ terraform output -raw bootstrap_github_actions_role_arn  # copy this value
 
 | Secret | Value |
 |--------|-------|
-| `AWS_GITHUB_ACTIONS_ROLE_ARN` | `terraform output -raw bootstrap_github_actions_role_arn` |
+| `AWS_GITHUB_ACTIONS_ROLE_ARN` | `terraform -chdir=stacks/foundation output -raw github_actions_role_arn` |
 | `AWS_REGION` | `us-east-1` (or your region) |
 | `TF_VARS` | Full contents of `terraform.tfvars` |
 | `INFRACOST_API_KEY` | From [infracost.io](https://www.infracost.io/docs/#2-get-api-key) |
-| `ECR_REPOSITORY_URL` | `terraform output -raw ecr_repository_url` |
-| `EKS_CLUSTER_NAME` | `terraform output -raw eks_cluster_name` |
+| `ECR_REPOSITORY_URL` | URI of the order-api ECR repository. Terraform does not create it yet (BACKLOG F02); create it with `aws ecr create-repository --repository-name order-api --image-scanning-configuration scanOnPush=true` |
+| `EKS_CLUSTER_NAME` | `terraform -chdir=stacks/cluster output -raw cluster_name` |
 | `GRAFANA_API_KEY` | Grafana → Administration → Service accounts → New token |
-| `PLURALITH_API_KEY` | From [app.pluralith.com](https://app.pluralith.com) (free account) |
 
 ### Step 3 — `production` GitHub Environment
 
@@ -218,12 +217,10 @@ All decisions are documented as Architecture Decision Records:
 
 ```
 CloudOps/
-├── main.tf                          # Root module wiring — all module instantiations
-├── provider.tf                      # AWS provider + S3 backend configuration
-├── variables.tf                     # All variable definitions with validation
-├── outputs.tf                       # Root outputs (cluster name, ALB DNS, ECR URL, etc.)
-├── terraform.tfvars.example         # Template — copy to terraform.tfvars
-├── scripts/deploy.sh                # Staged deployment script
+├── stacks/                          # foundation, cluster, platform: one state each
+├── terraform.tfvars.example         # Template — copy to terraform.tfvars (all stacks read it)
+├── infracost.yml                    # Infracost projects: the three stacks
+├── scripts/terraform-stacks.sh      # Run plan/apply/destroy across the stacks in order
 │
 ├── .github/workflows/
 │   ├── app.yml                      # App CI/CD: build → scan → deploy → test → rollback

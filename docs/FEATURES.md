@@ -429,8 +429,8 @@ OTel endpoints published to SSM for external producers (see
   security, self_healing, slo, finops, storefront-*, auth.
 - Apply order driven by `scripts/terraform-stacks.sh`.
 - CI normal path: foundation → cluster → platform.
-- Legacy root `-target` apply gated by `LEGACY_ROOT_APPLY=1` (break-glass
-  during migration).
+- The single root module was retired (ADR 028); teardown runs the stacks in
+  reverse.
 
 ### 10.2 What stays up overnight
 

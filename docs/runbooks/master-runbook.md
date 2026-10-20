@@ -88,7 +88,7 @@ kubectl get pods -n monitoring
 
 ```bash
 # Get the admin password from Terraform outputs
-terraform output -raw grafana_admin_password
+terraform -chdir=stacks/platform output -raw grafana_admin_password
 ```
 
 Username: `admin`
@@ -110,7 +110,7 @@ kubectl get secret grafana -n monitoring -o jsonpath='{.data.admin-password}' | 
 
 ```bash
 # Bearer token for OTLP ingestion
-terraform output -raw otel_api_key
+terraform -chdir=stacks/platform output -raw otel_api_key
 
 # Or from the Kubernetes secret directly
 kubectl get secret otel-auth -n monitoring -o jsonpath='{.data.api-key}' | base64 --decode
@@ -153,7 +153,7 @@ The RDS instance is in a private subnet. To connect:
 **Step 1 — Get credentials from Secrets Manager:**
 ```bash
 # Get the secret ARN
-terraform output -raw database_secret_arn
+terraform -chdir=stacks/foundation output -raw database_secret_arn
 
 # Retrieve credentials
 aws secretsmanager get-secret-value \
@@ -705,7 +705,7 @@ Budget freeze required: YES / NO
 | Component | RPO (data loss) | RTO (recovery time) | Notes |
 |-----------|----------------|--------------------|----|
 | order-api | N/A (stateless) | ~3 min (pod restart / rollback) | `kubectl rollout undo` or new deploy |
-| EKS cluster | N/A (no state on nodes) | ~15 min (terraform apply -target=module.eks) | Node configs are in Terraform; no data on nodes |
+| EKS cluster | N/A (no state on nodes) | ~15 min (`STACKS=cluster scripts/terraform-stacks.sh apply`) | Node configs are in Terraform; no data on nodes |
 | RDS PostgreSQL | ~24h (daily automated snapshot) | ~30-60 min (point-in-time restore) | `database_backup_retention_period = 7` days in tfvars; PITR available within that window |
 | S3 Loki chunks | ~0 (S3 11-nines durability) | Immediate | No RPO concern; S3 is the storage layer |
 | S3 Tempo traces | ~0 (S3 11-nines durability) | Immediate | No RPO concern |
@@ -756,15 +756,16 @@ aws rds restore-db-instance-from-db-snapshot \
 
 ### 8.3 Full Environment Rebuild
 
-In a complete infrastructure loss scenario (accidental `destroy_all=true` or account compromise), rebuild using `scripts/deploy.sh`:
+In a complete infrastructure loss scenario (accidental `destroy_all=true` or account compromise), rebuild the three stacks in order:
 
 ```bash
-# 1. Ensure terraform.tfvars is present (check git history or CI secrets)
+# 1. Ensure terraform.tfvars is present (CI secrets hold the per-env copy)
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with correct values
 
-# 2. Run the deployment script
-./scripts/deploy.sh
+# 2. State bucket (if it went too), then the stacks: foundation, cluster, platform
+bash modules/bootstrap/create-s3-bucket.sh
+bash scripts/terraform-stacks.sh apply
 ```
 
 **Estimated rebuild time by stage:**
@@ -773,16 +774,12 @@ cp terraform.tfvars.example terraform.tfvars
 |-------|-----------|---------------|
 | 1 | S3 state bucket creation | < 1 min |
 | 2 | Terraform init | < 1 min |
-| 3 | Bootstrap + Networking | ~2 min |
-| 4 | EKS cluster | ~15 min |
-| 5 | Ingress (ACM + LBC) | ~3 min |
-| 6 | Observability (LGTM stack Helm releases) | ~10 min |
-| 7 | Security (Falco DaemonSet + Lambda) | ~5 min |
-| 8 | Database (RDS) | ~8 min |
-| 9 | Final sync + SLO/FinOps | ~3 min |
+| 3 | Foundation stack (bootstrap, networking, database) | ~10 min |
+| 4 | Cluster stack (EKS) | ~15 min |
+| 5 | Platform stack (ingress, observability, security, SLO, FinOps) | ~20 min |
 | **Total** | | **~50 min** |
 
-> After `scripts/deploy.sh`, set `alb_dns_name` and `alb_zone_id` from the provisioned ALB, then re-run `terraform apply` for Route 53 records. Application images will need to be redeployed from ECR.
+> After the platform stack, set `alb_dns_name` and `alb_zone_id` from the provisioned ALB, then re-apply the platform stack for the Route 53 records. Application images will need to be redeployed from ECR.
 
 ### 8.4 Data Recovery Priority Order
 

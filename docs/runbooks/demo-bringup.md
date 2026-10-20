@@ -18,10 +18,11 @@ minutes**.
 ## Stage 1 — Bootstrap (5 min)
 
 ```bash
-# Creates the OIDC role + S3 state bucket + ECR pull-through cache.
-bash scripts/oidc.sh                            # one-time prep
-bash scripts/tf-init.sh                         # init with state bucket
-terraform apply -target=module.bootstrap        # state bucket + OIDC
+# State bucket, then the bootstrap module (OIDC provider, roles, ECR
+# pull-through cache) out of the foundation stack.
+bash modules/bootstrap/create-s3-bucket.sh
+STACK=foundation bash scripts/tf-init.sh
+terraform -chdir=stacks/foundation apply -var-file=../../terraform.tfvars -target=module.bootstrap
 ```
 
 Verify:
@@ -36,7 +37,7 @@ aws iam list-open-id-connect-providers | grep token.actions.githubusercontent.co
 ## Stage 2 — Foundation (10 min)
 
 ```bash
-bash scripts/terraform-stacks.sh apply foundation
+STACKS=foundation bash scripts/terraform-stacks.sh apply
 ```
 
 Provisions: VPC, subnets, route tables, NAT, Route 53 zone link, RDS
@@ -47,7 +48,7 @@ Postgres `db.t4g.micro`, secrets, KMS.
 ## Stage 3 — Cluster (20 min — EKS provision is slow)
 
 ```bash
-bash scripts/terraform-stacks.sh apply cluster
+STACKS=cluster bash scripts/terraform-stacks.sh apply
 ```
 
 Provisions: EKS control plane, node group, OIDC provider, addon config.
@@ -76,7 +77,7 @@ Then:
 
 ```bash
 bash scripts/build-lambdas.sh                   # installs Lambda deps
-bash scripts/terraform-stacks.sh apply platform
+STACKS=platform bash scripts/terraform-stacks.sh apply
 ```
 
 Provisions: ingress controller, observability (Prom + Loki + Tempo +

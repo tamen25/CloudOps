@@ -1,9 +1,8 @@
 #This manifest defines infra for CloudOps.
 #Required GitHub Actions secrets:
-#AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
+#AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform -chdir=stacks/foundation output -raw github_actions_role_arn
 #AWS_REGION                   — AWS region (e.g. us-east-1)
 #INFRACOST_API_KEY            — From https://www.infracost.io/docs/#2-get-api-key
-#PLURALITH_API_KEY            — From https://app.pluralith.com (free account)
 #TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
 #— Full contents of each environment's terraform.tfvars
 #TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
@@ -55,7 +54,6 @@ env:
   TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
   TF_VERSION: 1.11.0
-  LEGACY_ROOT_APPLY: "0"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -106,12 +104,6 @@ jobs:
 
       - name: Check formatting
         run: terraform fmt -check -recursive
-
-      - name: Init (no backend — providers needed for validate)
-        run: terraform init -backend=false
-
-      - name: Validate
-        run: terraform validate
 
       - name: Init layered stacks (no backend)
         run: |
@@ -207,17 +199,17 @@ jobs:
       - name: Breakdown — base branch
         run: |
           git checkout ${{ github.event.pull_request.base.sha }}
-          infracost breakdown --path . --format json --out-file /tmp/infracost-base.json
+          infracost breakdown --config-file infracost.yml --format json --out-file /tmp/infracost-base.json
 
       - name: Breakdown — PR branch
         run: |
           git checkout ${{ github.event.pull_request.head.sha }}
-          infracost breakdown --path . --format json --out-file /tmp/infracost-pr.json
+          infracost breakdown --config-file infracost.yml --format json --out-file /tmp/infracost-pr.json
 
       - name: Generate diff
         run: |
           infracost diff \
-            --path . \
+            --config-file infracost.yml \
             --compare-to /tmp/infracost-base.json \
             --format json \
             --out-file /tmp/infracost-diff.json
@@ -410,9 +402,8 @@ jobs:
         run: echo "Waiting for ${{ env.TARGET_ENVIRONMENT }} approval via GitHub environment protection"
 
   #─────────────────────────────────────────────────────────────────────────────
-  #Job 8: Terraform apply — staged to match scripts/deploy.sh order
-  #Runs fresh targeted applies (saved plan files are incompatible with -target).
-  #After final apply, key outputs are posted to the step summary.
+  #Job 8: Terraform apply — the layered stacks in order (foundation, cluster,
+  #platform). After the apply, key outputs are posted to the step summary.
   #─────────────────────────────────────────────────────────────────────────────
   apply:
     runs-on: ubuntu-latest
@@ -454,160 +445,6 @@ jobs:
 
       - name: Apply layered Terraform stacks
         run: bash scripts/terraform-stacks.sh apply -auto-approve
-
-      #Legacy root recovery/import path. Kept gated off so normal applies use
-      #layered states only; enable by editing LEGACY_ROOT_APPLY for a one-off
-      #migration recovery run.
-      - name: Release stale state lock
-        if: env.LEGACY_ROOT_APPLY == '1'
-        #Terraform 1.11 S3 native locking stores the lock as <key>.tflock.
-        #A cancelled plan or apply leaves this file behind and blocks the next run.
-        #Safe to delete here because apply steps are sequential within this job.
-        run: |
-          BOOTSTRAP_BUCKET=$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
-          if [ -z "$BOOTSTRAP_BUCKET" ]; then
-            echo "bootstrap_bucket_name missing from terraform.tfvars — skipping stale lock check"
-            exit 0
-          fi
-          if aws s3api head-object \
-               --bucket "$BOOTSTRAP_BUCKET" \
-               --key main/terraform.tfstate.tflock 2>/dev/null; then
-            echo "Stale lock found — releasing..."
-            aws s3 rm "s3://$BOOTSTRAP_BUCKET/main/terraform.tfstate.tflock"
-            echo "Lock released"
-          else
-            echo "No stale lock present"
-          fi
-
-      #Import OIDC provider and GitHub Actions IAM role if they were pre-created
-      #by scripts/oidc.sh. Uses -var overrides so the Kubernetes provider (which requires
-      #a live EKS cluster) stays unconfigured during import of IAM resources.
-      #Checks state first — skips import if resource is already tracked.
-      - name: Import pre-existing OIDC bootstrap resources
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: |
-          OIDC_ARN=$(aws iam list-open-id-connect-providers \
-            --query "OpenIDConnectProviderList[?ends_with(Arn,'token.actions.githubusercontent.com')].Arn" \
-            --output text 2>/dev/null || echo "")
-
-          if [ -n "$OIDC_ARN" ] && [ "$OIDC_ARN" != "None" ]; then
-            OIDC_ADDR="module.bootstrap[0].aws_iam_openid_connect_provider.github"
-            if terraform state list 2>/dev/null | grep -qF "$OIDC_ADDR"; then
-              echo "OIDC provider already in Terraform state — skipping import"
-            else
-              echo "Importing OIDC provider: $OIDC_ARN"
-              terraform import \
-                -var 'enable_ingress=false' \
-                -var 'enable_observability=false' \
-                -var 'enable_security=false' \
-                "$OIDC_ADDR" "$OIDC_ARN" \
-                || echo "Warning: OIDC import failed (may already be managed elsewhere)"
-            fi
-          fi
-
-          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
-          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
-          ROLE_NAME="${PROJECT_NAME}-github-actions"
-          ROLE_ADDR="module.bootstrap[0].aws_iam_role.github_actions"
-
-          if aws iam get-role --role-name "$ROLE_NAME" --output text >/dev/null 2>&1; then
-            if terraform state list 2>/dev/null | grep -qF "$ROLE_ADDR"; then
-              echo "GitHub Actions role already in Terraform state — skipping import"
-            else
-              echo "Importing GitHub Actions role: $ROLE_NAME"
-              terraform import \
-                -var 'enable_ingress=false' \
-                -var 'enable_observability=false' \
-                -var 'enable_security=false' \
-                "$ROLE_ADDR" "$ROLE_NAME" \
-                || echo "Warning: role import failed (may already be managed elsewhere)"
-            fi
-          fi
-
-      - name: Import pre-existing networking resources
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: |
-          PROJECT_NAME=$(grep '^project_name' terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || echo "cloudops")
-          PROJECT_NAME="${PROJECT_NAME:-cloudops}"
-          SUBNET_GROUP_NAME="${PROJECT_NAME}-db-subnet-group"
-          SUBNET_GROUP_ADDR="module.networking[0].aws_db_subnet_group.main"
-
-          if aws rds describe-db-subnet-groups \
-               --db-subnet-group-name "$SUBNET_GROUP_NAME" \
-               --output text >/dev/null 2>&1; then
-            if terraform state list 2>/dev/null | grep -qF "$SUBNET_GROUP_ADDR"; then
-              echo "DB subnet group already in Terraform state — skipping import"
-            else
-              echo "Importing DB subnet group: $SUBNET_GROUP_NAME"
-              terraform import \
-                -var 'enable_ingress=false' \
-                -var 'enable_observability=false' \
-                -var 'enable_security=false' \
-                "$SUBNET_GROUP_ADDR" "$SUBNET_GROUP_NAME" \
-                || echo "Warning: DB subnet group import failed"
-            fi
-          else
-            echo "DB subnet group does not exist in AWS — skipping import"
-          fi
-
-      #Staged applies match scripts/deploy.sh ordering.
-      #Each stage runs a fresh plan+apply for the targeted modules.
-      #terraform apply -target cannot be combined with a saved plan file.
-      - name: Apply bootstrap + networking + dns
-        if: env.LEGACY_ROOT_APPLY == '1'
-        #Disable ingress/observability vars so the EKS data source (count guard)
-        #stays at 0 — EKS cluster doesn't exist yet at this stage.
-        #module.dns is included here so the Route53 zone exists before module.ingress
-        #references module.dns[0].zone_id in the ingress apply step.
-        run: |
-          terraform apply \
-            -target=module.bootstrap -target=module.networking -target=module.dns \
-            -var 'enable_ingress=false' -var 'enable_observability=false' \
-            -auto-approve
-
-      - name: Apply EKS
-        if: env.LEGACY_ROOT_APPLY == '1'
-        #Same guard — EKS cluster is being created here, not yet queryable.
-        run: |
-          terraform apply \
-            -target=module.eks \
-            -var 'enable_ingress=false' -var 'enable_observability=false' \
-            -auto-approve
-
-      - name: Apply ingress
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: terraform apply -target=module.ingress -auto-approve
-
-      - name: Debug LBC pods (on ingress failure)
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: |
-          CLUSTER=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "")
-          if [ -n "$CLUSTER" ]; then
-            aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
-            echo "=== LBC pod describe ==="
-            kubectl -n kube-system describe pods \
-              -l app.kubernetes.io/name=aws-load-balancer-controller || true
-            echo "=== LBC pod logs ==="
-            kubectl -n kube-system logs \
-              -l app.kubernetes.io/name=aws-load-balancer-controller \
-              --tail=100 || true
-          fi
-
-      - name: Apply observability
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: terraform apply -target=module.observability -auto-approve
-
-      - name: Apply security
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: terraform apply -target=module.security -auto-approve
-
-      - name: Apply database
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: terraform apply -target=module.database -auto-approve
-
-      - name: Final sync
-        if: env.LEGACY_ROOT_APPLY == '1'
-        run: terraform apply -auto-approve
 
       #NOTE: order-api is deployed by .github/workflows/app.yml — that
       #workflow owns build, sign, scan, render, apply, rollout, integration
