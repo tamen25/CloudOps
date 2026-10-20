@@ -82,13 +82,13 @@ errors are collapsed to generic reasons (the #142 pattern).
 | `POST /api/cart` | `success` | — | ✅ |
 | `PATCH /api/cart/:itemId` | `success` | — | ✅ |
 | `DELETE /api/cart/:itemId` | `success` | — | ✅ |
-| `POST /api/checkout` | `orderId, startDate` | SFN `StartExecution` | ✅ (was F-138-1; `executionArn` + SDK error string removed 2026-06-02) |
+| `POST /api/checkout` | `orderId, startDate`; on failure `error, reason` (order-api's error code; its free-text detail is logged, not returned) | `lib/checkout.ts` | ✅ (F-138-1; detail passthrough removed 2026-10-20, #40) |
 | `POST /api/ws-token` | `token, expires_in` | freshly minted HS256 JWT | ⚠️ by-design: caller's own 300s WS token, claims = `{sub, custom:tenant_id, token_use:ws}` (no email, no upstream secret) |
 | `GET /api/privacy/export` | `exported_at, user{sub, email, tenant_id}, cart[], order_api{...}` | claims + order-api | ⚠️ by-design GDPR export of caller's own identity |
 | `POST /api/privacy/delete` | `success, erased{...}, cleared{authenticated_cart_rows, guest_cart_rows, realtime_connections}` | row counts | ✅ counts only |
 | `GET /api/observe/topology` | Tempo/Mimir service-graph payload | `fetchTopology()` | ⚠️ server-side telemetry (service names, edge rates); Cognito-gated; no PII, no creds |
 | `GET /api/observe/metrics` | Mimir query payload | `lib/observe` | ⚠️ same trust note as topology |
-| `GET /api/observe/traces` | `traces[]` or `{trace}` (Tempo spans) | `fetchRecentTraces` / `fetchTraceById` | ⚠️ span metadata only; synthetic + tenant-scoped traffic; no PII |
+| `GET /api/observe/traces` | `traces[]` or `{trace}` (Tempo spans) | `fetchRecentTraces` / `fetchTraceById` | ✅ admin-only since 2026-10-20 (F-138-2) |
 | `POST /api/load/run` | passthrough loadgen body `{status/runId/...}` | loadgen | ✅ admin-gated; loadgen returns run stats only |
 | `POST /api/load/stop` | passthrough loadgen body | loadgen | ✅ admin-gated |
 | `GET /api/load/status` | passthrough loadgen body or `{running, configured}` | loadgen | ✅ |
@@ -120,12 +120,42 @@ errors are collapsed to generic reasons (the #142 pattern).
 collapses the `start_execution_failed` branch to a constant reason, logging the
 real error via `console.error`. No remaining response-shape leak.
 
+### F-138-2 (P2) — every signed-in user could read every tenant's traces
+
+`apps/storefront/src/app/api/observe/traces/route.ts`
+
+This audit first rated the route "span metadata only; no PII". It returns raw
+Tempo spans: attributes, URLs and tenant IDs, from every tenant, and its list
+hands out their trace IDs. It required a session, not admin, so any shopper
+could read other tenants' requests. **Fixed 2026-10-20 (#40):** admin-only,
+through the `requireAdmin()` gate the load routes use, with a test that fails
+if an admin route is gated by session only. Aggregate metrics and the
+topology carry no tenant data and stay open to signed-in users.
+
+---
+
+## Mesh services (added 2026-10-20)
+
+In-cluster only: the api-gateway Service is ClusterIP and no Ingress routes to
+it; the other services accept traffic only from the gateway or their caller.
+
+| Service · Path | Response keys | Flag |
+|---|---|---|
+| api-gateway `POST /v1/order` | `status, total_cents, auth_id, entry_id, fraud_decision, hops{<hop>: {status, ok}}`; on failure `error, failed_hop?, hops` | ✅ per-hop status codes only, no downstream bodies |
+| pricing `POST /quote` | `total_cents, lines[]` | ✅ |
+| inventory `POST /reserve` | `reserved, lines[]{sku, qty, available, ok}` | ✅ |
+| fraud `POST /score` | `score, decision` | ✅ |
+| payment `POST /authorize` | `status, auth_id, entry_id` or `error` | ✅ |
+| ledger `POST /entries` | the posted entry: `entry_id, auth_id, tenant_id, amount_cents, debit, credit, …` | ✅ HMAC-gated; returns to payment the entry it just posted |
+| loadgen control API | run status, counters | ✅ HMAC-gated writes |
+
 ---
 
 ## Conclusion
 
 order-api: **clean** — `ORDER_SAFE_COLUMNS` + explicit product column lists mean
 no password/hash/salt/JWT/session-token/`owner_sub` field reaches any client.
-storefront: **clean** — the one finding (F-138-1, checkout ARN + SDK error
-string, P4) was fixed in the same session. No P1–P3 response-shape leaks found.
-#138 closed.
+storefront: **clean** after F-138-1 (checkout ARN and SDK error string, P4,
+fixed 2026-06-02) and F-138-2 (every tenant's traces readable by any signed-in
+user, P2, found in the 2026-10-20 review and fixed in #40).
+Mesh: **clean**. #138 / BACKLOG O03 closed.
