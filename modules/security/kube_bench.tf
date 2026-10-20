@@ -1,36 +1,39 @@
-#This file defines kube bench settings for CloudOps.
-#kube-bench CIS Kubernetes Benchmark — EKS daily runner
+#kube-bench: the CIS Amazon EKS Benchmark, daily.
 #
-#Architecture:
-#CronJob (3 am UTC) ─► init container: kube-bench → /tmp/results/output.json
-#─► main container: Node.js dispatcher → Lambda invoke
-#─► kube_bench_processor Lambda → DynamoDB + CloudWatch
+#CronJob (3 am UTC) -> init container: kube-bench, report to an emptyDir
+#                   -> main container: aws lambda invoke with the report
+#                   -> kube_bench_processor Lambda -> DynamoDB + CloudWatch
 #
-#The CronJob pod uses IRSA so the processor container can invoke the Lambda
-#without any static credentials.  The ClusterRole gives kube-bench read-only
-#access to the Kubernetes API resources needed for the EKS 1.4 benchmark.
+#kube-bench reads the node it runs on: kubelet arguments through the host's
+#process table (hostPID) and its config files through read-only host mounts,
+#as root. Without those it reads its own container and the node checks
+#measure nothing. Running as root needs an exemption from Gatekeeper's
+#no-root constraint, so the job has a namespace of its own and only that
+#namespace is exempt (gatekeeper_policies.tf). It is not privileged.
 #
-#Note on privileges: EKS managed-node controls that require host-level file
-#access (kubelet config files, etc.) will be reported as NOT_CHECKED when the
-#pod runs without hostPID or privileged mode.  All API-checkable controls run
-#normally.  This is the correct trade-off for clusters protected by OPA
-#Gatekeeper's no-privileged policy.
+#Each run covers the node the pod lands on, not every node.
 #
-#Pin the kube-bench image to an immutable digest before deploying to production:
-#docker pull aquasec/kube-bench:v0.8.0
-#docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
-#Then replace the image value below with aquasec/kube-bench@sha256:<digest>.
+#Images are pinned by digest. The main container is the AWS CLI; it signs
+#the invoke with the pod's IRSA role. Nothing is installed at run time.
+
+locals {
+  kube_bench_namespace = "kube-bench"
+}
 
 #── Namespace ─────────────────────────────────────────────────────────────────
 
-resource "kubernetes_namespace" "security" {
+resource "kubernetes_namespace" "kube_bench" {
   metadata {
-    name = "security"
+    name = local.kube_bench_namespace
     labels = {
-      "kubernetes.io/metadata.name" = "security"
-      managed-by                    = "terraform"
+      managed-by = "terraform"
     }
   }
+}
+
+moved {
+  from = kubernetes_namespace.security
+  to   = kubernetes_namespace.kube_bench
 }
 
 #── RBAC ──────────────────────────────────────────────────────────────────────
@@ -113,12 +116,12 @@ resource "kubernetes_cluster_role_binding" "kube_bench" {
   subject {
     kind      = "ServiceAccount"
     name      = "kube-bench"
-    namespace = kubernetes_namespace.security.metadata[0].name
+    namespace = kubernetes_namespace.kube_bench.metadata[0].name
   }
 }
 
 #── IRSA — kube-bench pod IAM role ────────────────────────────────────────────
-#The processor container (node:alpine) uses this role to invoke the
+#The main container (AWS CLI) uses this role to invoke the
 #kube_bench_processor Lambda. IRSA is the only credential path — no static keys.
 
 data "aws_iam_policy_document" "kube_bench_assume_role" {
@@ -134,7 +137,7 @@ data "aws_iam_policy_document" "kube_bench_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${var.oidc_provider_url}:sub"
-      values   = ["system:serviceaccount:${kubernetes_namespace.security.metadata[0].name}:kube-bench"]
+      values   = ["system:serviceaccount:${kubernetes_namespace.kube_bench.metadata[0].name}:kube-bench"]
     }
 
     condition {
@@ -179,7 +182,7 @@ resource "aws_iam_role_policy" "kube_bench_pod" {
 resource "kubernetes_service_account" "kube_bench" {
   metadata {
     name      = "kube-bench"
-    namespace = kubernetes_namespace.security.metadata[0].name
+    namespace = kubernetes_namespace.kube_bench.metadata[0].name
     annotations = {
       "eks.amazonaws.com/role-arn" = aws_iam_role.kube_bench.arn
     }
@@ -187,78 +190,6 @@ resource "kubernetes_service_account" "kube_bench" {
       "app.kubernetes.io/name"       = "kube-bench"
       "app.kubernetes.io/managed-by" = "terraform"
     }
-  }
-}
-
-#── ConfigMap — dispatcher script for the main container ──────────────────────
-#Runs inside node:22-alpine, reads kube-bench JSON output, invokes the Lambda.
-
-resource "kubernetes_config_map" "kube_bench_script" {
-  metadata {
-    name      = "kube-bench-processor-script"
-    namespace = kubernetes_namespace.security.metadata[0].name
-  }
-
-  data = {
-    "process.js" = <<-JS
-      'use strict';
-      // Installed at pod startup via npm install --prefix /tmp/deps
-      const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
-      const fs = require('fs');
-
-      const REGION        = process.env.AWS_REGION           || 'us-east-1';
-      const FUNCTION_NAME = process.env.LAMBDA_FUNCTION_NAME || '';
-      const CLUSTER_NAME  = process.env.EKS_CLUSTER_NAME     || '';
-      const OUTPUT_FILE   = '/tmp/results/kube-bench-output.json';
-
-      function log(level, data) {
-        console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), ...data }));
-      }
-
-      async function main() {
-        log('info', { msg: 'kube-bench dispatcher starting', functionName: FUNCTION_NAME, clusterName: CLUSTER_NAME });
-
-        if (!fs.existsSync(OUTPUT_FILE)) {
-          log('error', { msg: 'kube-bench output file not found — init container may have failed', path: OUTPUT_FILE });
-          process.exit(1);
-        }
-
-        let kubeBenchOutput;
-        try {
-          kubeBenchOutput = JSON.parse(fs.readFileSync(OUTPUT_FILE, 'utf8'));
-        } catch (err) {
-          log('error', { msg: 'Failed to parse kube-bench JSON output', error: err.message });
-          process.exit(1);
-        }
-
-        const totals = kubeBenchOutput.Totals || {};
-        log('info', { msg: 'kube-bench results loaded', totals });
-
-        const client  = new LambdaClient({ region: REGION });
-        const payload = Buffer.from(JSON.stringify({ kubeBenchOutput, clusterName: CLUSTER_NAME }));
-
-        const response = await client.send(new InvokeCommand({
-          FunctionName:   FUNCTION_NAME,
-          InvocationType: 'RequestResponse',
-          Payload:        payload,
-        }));
-
-        const responseBody = Buffer.from(response.Payload).toString('utf8');
-
-        if (response.FunctionError) {
-          log('error', { msg: 'Lambda invocation returned function error', error: responseBody.slice(0, 500) });
-          process.exit(1);
-        }
-
-        const result = JSON.parse(responseBody);
-        log('info', { msg: 'Processing complete', result });
-      }
-
-      main().catch(err => {
-        console.error(JSON.stringify({ level: 'error', msg: 'Fatal error in kube-bench dispatcher', error: err.message }));
-        process.exit(1);
-      });
-    JS
   }
 }
 
@@ -403,7 +334,7 @@ resource "aws_lambda_function" "kube_bench_processor" {
 resource "kubernetes_cron_job_v1" "kube_bench" {
   metadata {
     name      = "kube-bench"
-    namespace = kubernetes_namespace.security.metadata[0].name
+    namespace = kubernetes_namespace.kube_bench.metadata[0].name
     labels = {
       "app.kubernetes.io/name"       = "kube-bench"
       "app.kubernetes.io/managed-by" = "terraform"
@@ -411,12 +342,8 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
   }
 
   spec {
-    #3 am UTC daily
-    schedule = "0 3 * * *"
-
-    #If a previous job is still running at 3 am, skip the new run
-    concurrency_policy = "Forbid"
-
+    schedule                      = "0 3 * * *"
+    concurrency_policy            = "Forbid"
     failed_jobs_history_limit     = 3
     successful_jobs_history_limit = 3
 
@@ -436,106 +363,147 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
           spec {
             restart_policy       = "Never"
             service_account_name = kubernetes_service_account.kube_bench.metadata[0].name
+            host_pid             = true
 
-            #── Init container — runs kube-bench, saves JSON to shared volume ──
-            #Image should be pinned to an immutable SHA256 digest in production.
-            #Run: docker pull aquasec/kube-bench:v0.8.0 && docker inspect aquasec/kube-bench:v0.8.0 --format='{{index .RepoDigests 0}}'
+            #kube-bench writes the report; a failed run fails the init
+            #container, so a broken report never reaches the Lambda.
             init_container {
-              name  = "kube-bench"
-              image = "aquasec/kube-bench:v0.8.0"
-
-              #Run the EKS-1.4 benchmark; redirect JSON stdout to the shared volume
-              command = ["/bin/sh", "-c"]
-              args    = ["kube-bench run --benchmark eks-1.4 --json > /tmp/results/kube-bench-output.json 2>&1; echo \"Exit: $?\""]
+              name    = "kube-bench"
+              image   = "aquasec/kube-bench:v0.16.0@sha256:75506f222d1eb6ce2a751a5533bdc0a3b54c898e2e49e7751d0ee22cfb862679"
+              command = ["kube-bench"]
+              args = [
+                "run",
+                "--targets", "node,policies,managedservices,controlplane",
+                "--benchmark", "eks-1.8.0",
+                "--json",
+                "--outputfile", "/results/kube-bench-output.json",
+              ]
 
               volume_mount {
                 name       = "results"
-                mount_path = "/tmp/results"
+                mount_path = "/results"
+              }
+              volume_mount {
+                name       = "var-lib-kubelet"
+                mount_path = "/var/lib/kubelet"
+                read_only  = true
+              }
+              volume_mount {
+                name       = "etc-systemd"
+                mount_path = "/etc/systemd"
+                read_only  = true
+              }
+              volume_mount {
+                name       = "etc-kubernetes"
+                mount_path = "/etc/kubernetes"
+                read_only  = true
               }
 
               resources {
-                requests = {
-                  cpu    = "100m"
-                  memory = "128Mi"
-                }
-                limits = {
-                  cpu    = "500m"
-                  memory = "256Mi"
-                }
+                requests = { cpu = "100m", memory = "128Mi" }
+                limits   = { cpu = "500m", memory = "256Mi" }
               }
 
+              #Root to read the node's files; not privileged, no added
+              #capabilities, read-only root filesystem.
               security_context {
-                run_as_non_root = false
-                run_as_user     = 0
+                run_as_user                = 0
+                allow_privilege_escalation = false
+                read_only_root_filesystem  = true
+                capabilities {
+                  drop = ["ALL"]
+                }
               }
             }
 
-            #── Main container — Node.js dispatcher → Lambda invoke ────────────
+            #Sends the report to the processor Lambda and fails the job if
+            #the Lambda fails. The cluster name is the module's own input.
             container {
-              name  = "processor"
-              image = "node:22-alpine"
-
-              #Install @aws-sdk/client-lambda at runtime, then run the dispatcher
+              name    = "processor"
+              image   = "amazon/aws-cli:2.37.10@sha256:3dacc5db57c923c4223e949795f538ecf1f2212b2b7d5a028b47b97f91564c0d"
               command = ["/bin/sh", "-c"]
-              args    = ["npm install --prefix /tmp/deps @aws-sdk/client-lambda@3 --no-fund --no-audit --quiet && NODE_PATH=/tmp/deps/node_modules node /scripts/process.js"]
+              args = [<<-SH
+                set -eu
+                {
+                  printf '{"clusterName":"%s","kubeBenchOutput":' "$EKS_CLUSTER_NAME"
+                  cat /results/kube-bench-output.json
+                  printf '}'
+                } > /work/payload.json
+                err=$(aws lambda invoke --function-name "$LAMBDA_FUNCTION_NAME" \
+                  --cli-binary-format raw-in-base64-out --payload fileb:///work/payload.json \
+                  --query FunctionError --output text /work/response.json)
+                cat /work/response.json; echo
+                [ "$err" = "None" ]
+              SH
+              ]
 
               env {
                 name  = "LAMBDA_FUNCTION_NAME"
                 value = aws_lambda_function.kube_bench_processor.function_name
               }
-
               env {
                 name  = "EKS_CLUSTER_NAME"
                 value = var.eks_cluster_name
               }
-
               env {
                 name  = "AWS_REGION"
                 value = var.region
               }
+              env {
+                name  = "HOME"
+                value = "/work"
+              }
 
               volume_mount {
                 name       = "results"
-                mount_path = "/tmp/results"
+                mount_path = "/results"
                 read_only  = true
               }
-
               volume_mount {
-                name       = "scripts"
-                mount_path = "/scripts"
-                read_only  = true
+                name       = "work"
+                mount_path = "/work"
               }
 
               resources {
-                requests = {
-                  cpu    = "100m"
-                  memory = "128Mi"
-                }
-                limits = {
-                  cpu    = "500m"
-                  memory = "256Mi"
-                }
+                requests = { cpu = "50m", memory = "128Mi" }
+                limits   = { cpu = "250m", memory = "256Mi" }
               }
 
               security_context {
                 run_as_non_root            = true
                 run_as_user                = 1000
                 allow_privilege_escalation = false
-                read_only_root_filesystem  = false
+                read_only_root_filesystem  = true
+                capabilities {
+                  drop = ["ALL"]
+                }
               }
             }
 
-            #Shared emptyDir between init container and main container
             volume {
               name = "results"
               empty_dir {}
             }
-
-            #ConfigMap containing the dispatcher Node.js script
             volume {
-              name = "scripts"
-              config_map {
-                name = kubernetes_config_map.kube_bench_script.metadata[0].name
+              name = "work"
+              empty_dir {}
+            }
+            volume {
+              name = "var-lib-kubelet"
+              host_path {
+                path = "/var/lib/kubelet"
+              }
+            }
+            volume {
+              name = "etc-systemd"
+              host_path {
+                path = "/etc/systemd"
+              }
+            }
+            volume {
+              name = "etc-kubernetes"
+              host_path {
+                path = "/etc/kubernetes"
               }
             }
           }
@@ -547,6 +515,5 @@ resource "kubernetes_cron_job_v1" "kube_bench" {
   depends_on = [
     kubernetes_cluster_role_binding.kube_bench,
     aws_lambda_function.kube_bench_processor,
-    kubernetes_config_map.kube_bench_script,
   ]
 }

@@ -96,8 +96,10 @@ resource "kubernetes_manifest" "c_no_root_containers" {
     spec = {
       enforcementAction = "deny"
       match = {
-        kinds              = [{ apiGroups = [""], kinds = ["Pod"] }]
-        excludedNamespaces = concat(["kube-system", "gatekeeper-system", "falco"], local.chaos_mesh_exempt)
+        kinds = [{ apiGroups = [""], kinds = ["Pod"] }]
+        #kube-bench runs as root to read node files (kube_bench.tf); its
+        #namespace holds only that job.
+        excludedNamespaces = concat(["kube-system", "gatekeeper-system", "falco", local.kube_bench_namespace], local.chaos_mesh_exempt)
       }
     }
   }
