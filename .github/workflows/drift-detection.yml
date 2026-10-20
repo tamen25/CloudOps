@@ -60,16 +60,18 @@ jobs:
       stacks: ${{ steps.build.outputs.stacks }}
     steps:
       - id: build
+        env:
+          REQUESTED_ENV: ${{ inputs.environment }}
+          REQUESTED_STACKS: ${{ inputs.stacks }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo 'envs=["${{ inputs.environment }}"]' >> "$GITHUB_OUTPUT"
-            requested='${{ inputs.stacks }}'
-            if [ -z "$requested" ]; then
+            echo "envs=[\"$REQUESTED_ENV\"]" >> "$GITHUB_OUTPUT"
+            if [ -z "$REQUESTED_STACKS" ]; then
               echo 'stacks=["foundation","cluster","platform"]' >> "$GITHUB_OUTPUT"
             else
               json='['
               first=1
-              for s in $requested; do
+              for s in $REQUESTED_STACKS; do
                 case "$s" in
                   foundation|cluster|platform) ;;
                   *) echo "::error::unknown stack '$s' (allowed: foundation cluster platform)"; exit 1 ;;
@@ -113,7 +115,11 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
 
+      #The nightly run covers every environment; one with no tfvars secret
+      #has never been deployed, so it is skipped rather than failed. A
+      #dispatched run asked for that environment, so it fails.
       - name: Write terraform.tfvars
+        id: tfvars
         env:
           #write-ci-tfvars.sh reads TARGET_ENVIRONMENT — set from the matrix
           #value so the scheduled fan-out works without inputs.
@@ -122,21 +128,47 @@ jobs:
           TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
           TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
           TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
-        run: bash scripts/write-ci-tfvars.sh
+        run: |
+          case "$TARGET_ENVIRONMENT" in
+            dev) selected="${TF_VARS_DEV:-$TF_VARS}" ;;
+            staging) selected="${TF_VARS_STAGING:-$TF_VARS}" ;;
+            prod) selected="${TF_VARS_PROD:-$TF_VARS}" ;;
+          esac
+          if [ -z "$selected" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "::notice::no tfvars secret for $TARGET_ENVIRONMENT; not deployed, skipped"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          bash scripts/write-ci-tfvars.sh
+
+      #Plan builds the Lambda zips from source; without their node_modules
+      #the zips differ from the applied ones and every Lambda reads as drift.
+      - name: Setup Node.js 22
+        if: steps.tfvars.outputs.skip != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Build Lambda dependencies
+        if: steps.tfvars.outputs.skip != 'true'
+        run: bash scripts/build-lambdas.sh
 
       - name: terraform init (${{ matrix.stack }})
+        if: steps.tfvars.outputs.skip != 'true'
         run: STACK=${{ matrix.stack }} ./scripts/tf-init.sh
 
       - name: Run terraform plan (${{ matrix.environment }} / ${{ matrix.stack }})
         id: plan
+        if: steps.tfvars.outputs.skip != 'true'
         run: |
-          terraform -chdir=stacks/${{ matrix.stack }} plan -detailed-exitcode -no-color 2>&1 | tee drift-output.txt
+          terraform -chdir=stacks/${{ matrix.stack }} plan -detailed-exitcode -no-color \
+            -var-file="$GITHUB_WORKSPACE/terraform.tfvars" 2>&1 | tee drift-output.txt
           PLAN_EXIT=${PIPESTATUS[0]}
           echo "exit_code=$PLAN_EXIT" >> "$GITHUB_OUTPUT"
           echo "Plan exit code: $PLAN_EXIT  (0=no-drift, 1=error, 2=drift)"
 
       - name: Manage drift issue (per env+stack)
-        if: steps.plan.outputs.exit_code != '1'
+        if: steps.tfvars.outputs.skip != 'true' && steps.plan.outputs.exit_code != '1'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ENV_NAME: ${{ matrix.environment }}
@@ -171,16 +203,19 @@ jobs:
             const existing = openIssues[0] || null;
 
             if (exitCode === 2) {
-              let planOutput = fs.readFileSync('drift-output.txt', 'utf8');
-              const maxLen = 60000;
-              const truncated = planOutput.length > maxLen;
-              if (truncated) planOutput = planOutput.substring(0, maxLen);
-
+              // The repository is public, and so are its issues: list which
+              // resources changed, not their attributes (ARNs, addresses,
+              // account IDs). The full plan is in the run's log.
+              const planOutput = fs.readFileSync('drift-output.txt', 'utf8');
+              const headlines = planOutput.split('\n')
+                .filter((l) => /^\s*# \S.* (will be|must be|has changed)/.test(l) || /^Plan: /.test(l))
+                .map((l) => l.trim());
+              const shown = headlines.slice(0, 100);
               const planBlock = [
-                '<details>', '<summary>Full plan output</summary>', '',
-                '```hcl', planOutput,
-                truncated ? '\n... (truncated — see full run log)' : '',
-                '```', '</details>',
+                '```', ...shown,
+                headlines.length > shown.length ? `... ${headlines.length - shown.length} more` : '',
+                '```', '',
+                `Full plan: the run log of [${context.runNumber}](${runUrl}).`,
               ].join('\n');
 
               if (existing) {
@@ -229,7 +264,7 @@ jobs:
             }
 
       - name: Write step summary
-        if: always()
+        if: always() && steps.tfvars.outputs.skip != 'true'
         run: |
           EXIT_CODE="${{ steps.plan.outputs.exit_code }}"
           case "$EXIT_CODE" in

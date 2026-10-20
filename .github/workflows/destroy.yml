@@ -56,11 +56,14 @@ jobs:
     steps:
 
       #── 1. Validate confirmation string ────────────────────────────────────
+      #The typed text reaches the script through env, never as ${{ }} in
+      #run:, so whatever was typed stays text.
       - name: Validate confirmation input
+        env:
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "${{ inputs.confirm }}" != "destroy-everything" ]; then
-            echo "::error::Confirmation input was '${{ inputs.confirm }}'"
-            echo "::error::Must be exactly: destroy-everything"
+          if [ "$CONFIRM" != "destroy-everything" ]; then
+            echo "::error::Confirmation input was not 'destroy-everything'"
             exit 1
           fi
           echo "✓ Confirmation accepted"
@@ -140,7 +143,7 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Project: $PROJECT  State bucket: $STATE_BUCKET"
 
-      #── 5. Install bucket-emptying helper ──────────────────────────────────
+      #── 6. Install bucket-emptying helper ──────────────────────────────────
       #Written once to /usr/local/bin and reused for every project bucket.
       #Handles three cases that `aws s3 rm` alone misses:
       #• versioned objects (bucket versioning enabled)
@@ -204,7 +207,7 @@ jobs:
           SCRIPT
           chmod +x /usr/local/bin/empty-s3-bucket
 
-      #── 6. Empty the data buckets ──────────────────────────────────────────
+      #── 7. Empty the data buckets ──────────────────────────────────────────
       #force_destroy is a variable on every bucket, so Terraform may refuse a
       #bucket with objects in it (Loki, Tempo, Mimir, Thanos, flow logs,
       #CloudTrail, Config). The state bucket is kept until the stacks are gone.
@@ -216,11 +219,53 @@ jobs:
             empty-s3-bucket "$b"
           done
 
-      #── 7. Platform stack ──────────────────────────────────────────────────
+      #── 8. Reach the cluster API ───────────────────────────────────────────
+      #The platform stack's Helm and Kubernetes providers talk to the EKS
+      #API. A private endpoint, or one limited to an operator's address,
+      #refuses this runner, and the platform destroy fails. Open it to this
+      #runner's address alone; the cluster is destroyed next, so nothing has
+      #to be closed again. If the run stops before that, the cluster stack's
+      #next apply re-asserts the endpoint settings from tfvars.
+      - name: Open the cluster API to this runner
+        run: |
+          if ! aws eks describe-cluster --name "$CLUSTER" >/dev/null 2>&1; then
+            echo "Cluster $CLUSTER not found; nothing to open."
+            exit 0
+          fi
+          RUNNER_IP=$(curl -fsS --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]')
+          if ! printf '%s' "$RUNNER_IP" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+            echo "::error::could not read this runner's public address"
+            exit 1
+          fi
+          CONFIG=$(aws eks describe-cluster --name "$CLUSTER" --query 'cluster.resourcesVpcConfig' --output json)
+          if jq -e --arg ip "$RUNNER_IP/32" \
+              '.endpointPublicAccess and (.publicAccessCidrs | index("0.0.0.0/0") or index($ip))' \
+              <<<"$CONFIG" >/dev/null; then
+            echo "The endpoint already admits $RUNNER_IP."
+            exit 0
+          fi
+          UPDATE=$(aws eks update-cluster-config --name "$CLUSTER" \
+            --resources-vpc-config "endpointPrivateAccess=true,endpointPublicAccess=true,publicAccessCidrs=$RUNNER_IP/32" \
+            --query 'update.id' --output text)
+          echo "Opening the endpoint to $RUNNER_IP/32 (update $UPDATE)"
+          STATUS=InProgress
+          for _ in $(seq 1 60); do
+            STATUS=$(aws eks describe-update --name "$CLUSTER" --update-id "$UPDATE" \
+              --query 'update.status' --output text)
+            case "$STATUS" in
+              Successful) echo "Open."; exit 0 ;;
+              Failed|Cancelled) echo "::error::endpoint update $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::endpoint update still $STATUS after 15 minutes"
+          exit 1
+
+      #── 9. Platform stack ──────────────────────────────────────────────────
       - name: Destroy the platform stack
         run: STACKS=platform bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      #── 8. Load balancers the cluster made ─────────────────────────────────
+      #── 10. Load balancers the cluster made ─────────────────────────────────
       #The AWS Load Balancer Controller creates load balancers and target
       #groups for Ingresses and Services, outside Terraform. Left behind they
       #hold ENIs and security groups, and the VPC cannot be deleted.
@@ -249,13 +294,13 @@ jobs:
             fi
           done
 
-      #── 9. Cluster and foundation stacks ───────────────────────────────────
+      #── 11. Cluster and foundation stacks ───────────────────────────────────
       #Foundation includes bootstrap: the OIDC provider and the role this run
       #holds. Its session stays valid until it expires.
       - name: Destroy the cluster and foundation stacks
         run: STACKS="cluster foundation" bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      #── 10. Delete the Terraform state bucket ───────────────────────────────
+      #── 12. Delete the Terraform state bucket ───────────────────────────────
       #State bucket was created by create-s3-bucket.sh (outside Terraform), so
       #Terraform destroy does not remove it — we must do so explicitly.
       - name: Empty Terraform state bucket
@@ -270,7 +315,7 @@ jobs:
             echo "State bucket $STATE_BUCKET not found — already deleted or never created"
           fi
 
-      #── 19. Summary ─────────────────────────────────────────────────────────
+      #── 13. Summary ─────────────────────────────────────────────────────────
       - name: Write destroy summary
         if: always()
         run: |
@@ -297,7 +342,7 @@ jobs:
           | Step | What |
           |------|------|
           | 1 | Every \`${PROJECT}-*\` bucket except the state bucket emptied |
-          | 2 | \`stacks/platform\` destroyed |
+          | 2 | Cluster API opened to this runner, \`stacks/platform\` destroyed |
           | 3 | Load balancers and target groups of \`${CLUSTER}\` deleted |
           | 4 | \`stacks/cluster\`, then \`stacks/foundation\` (bootstrap included) destroyed |
           | 5 | TF state bucket emptied and deleted: \`$STATE_BUCKET\` |

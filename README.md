@@ -147,10 +147,11 @@ Required status checks: `quality`, `plan` — blocks merges if Terraform fmt/val
 | **Infra Pipeline** (`infra.yml`) | Push to `main` on `*.tf`, `modules/**` (gated) · PR · `workflow_dispatch` | fmt/validate/lint/tfsec, Trivy and Checkov → Infracost cost diff (PR, when `INFRACOST_ENABLED`) → on `main` with `AWS_DEPLOY_ENABLED`: `terraform plan` → manual approval → staged `terraform apply` |
 | **Storefront Pipeline** (`storefront.yml`) | Push to `main` on `apps/storefront/**` (gated) · PR · `workflow_dispatch` | lint, contract check, tests with coverage, audit, build, manifest validation → with `AWS_DEPLOY_ENABLED`: build, sign and push to ECR → Trivy image scan → render from Terraform outputs → EKS rollout |
 | **Library Pipeline** (`libraries.yml`) | Push to `main` on `libraries/**` (gated) · PR · `workflow_dispatch` | per-language tests + coverage gates → optional publish to CodeArtifact |
-| **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → empty the project's buckets → destroy platform, the cluster's load balancers, cluster, foundation → state bucket |
-| **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC | `terraform plan -detailed-exitcode` → opens GitHub issue on drift, closes it when resolved |
-| **EKS Emergency Access** (`eks-emergency-access.yml`) | `workflow_dispatch` only | Break-glass: widens private EKS endpoint to a single CIDR via AWS API (state stays private) |
+| **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → empty the project's buckets → open the cluster API to the runner → destroy platform, the cluster's load balancers, cluster, foundation → state bucket |
+| **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC (with `AWS_DEPLOY_ENABLED`) · `workflow_dispatch` | per environment and stack: `terraform plan -detailed-exitcode` with that environment's tfvars → opens a GitHub issue listing the changed resources, closes it when resolved; environments without tfvars are skipped |
+| **EKS Emergency Access** (`eks-emergency-access.yml`) | `workflow_dispatch` only | Break-glass: widens the EKS endpoint to a single CIDR via the AWS API in dev, staging or prod, or closes it (state unchanged) |
 | **Runner Image** (`runner-image.yml`) | Push to `main` on `ci/runner/**` (gated) · PR · `workflow_dispatch` | PR: build only → with `AWS_DEPLOY_ENABLED`: push the in-VPC runner image to ECR → Trivy scan → prints the digest for `ci_runner_image` |
+| **Workflow Lint** (`workflow-lint.yml`) | Any change under `.github/workflows/` | actionlint, then `scripts/check-workflows.py`: OIDC permissions, Terraform wrapper off, kubeconfig before kubectl, no inputs pasted into scripts, plans with tfvars |
 
 #### Toggle: auto-run on merge to `main`
 

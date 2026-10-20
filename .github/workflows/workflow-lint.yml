@@ -1,0 +1,41 @@
+# Lints every workflow whenever one changes: actionlint (syntax, expressions,
+# shellcheck on run: blocks) and scripts/check-workflows.py (rules actionlint
+# does not know: OIDC permissions, the Terraform wrapper, kubeconfig before
+# kubectl, inputs pasted into scripts, plans without tfvars).
+
+name: Workflow Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/check-workflows.py'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/check-workflows.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: actionlint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.4/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.4
+          ./actionlint -color
+
+      - name: Workflow rules
+        run: |
+          python3 -m pip install --quiet pyyaml==6.0.2
+          python3 scripts/check-workflows.py
