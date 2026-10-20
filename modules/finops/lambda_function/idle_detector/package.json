@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "CloudOps FinOps idle resource detector Lambda — checks EKS nodes, RDS, and pod rightsizing",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
   "engines": {
     "node": ">=22.0.0"
   },
