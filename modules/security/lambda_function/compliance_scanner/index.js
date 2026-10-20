@@ -5,7 +5,7 @@ const { EC2Client, DescribeSecurityGroupsCommand } = require('@aws-sdk/client-ec
 const { RDSClient, DescribeDBInstancesCommand } = require('@aws-sdk/client-rds');
 const {
   S3Client,
-  GetBucketPublicAccessBlockCommand,
+  GetPublicAccessBlockCommand,
   GetBucketEncryptionCommand,
   GetBucketVersioningCommand,
 } = require('@aws-sdk/client-s3');
@@ -17,7 +17,7 @@ const {
   GetRoleCommand,
   GetAccountSummaryCommand,
 } = require('@aws-sdk/client-iam');
-const { EKSClient, DescribeClusterCommand } = require('@aws-sdk/client-eks');
+const { EKSClient, DescribeClusterCommand, DescribeClusterVersionsCommand } = require('@aws-sdk/client-eks');
 const {
   SecretsManagerClient,
   ListSecretsCommand,
@@ -42,9 +42,6 @@ const TEMPO_BUCKET     = process.env.TEMPO_BUCKET_NAME || '';
 const FINDINGS_TABLE   = process.env.FINDINGS_TABLE    || 'cloudops-security-findings';
 const SNS_TOPIC_ARN    = process.env.SNS_TOPIC_ARN     || '';
 
-// Latest EKS minor version — update when AWS releases a new minor version.
-const EKS_LATEST_MINOR = 32;
-
 // ── AWS clients — initialised once per container, reused across warm invocations ─
 
 const ec2            = new EC2Client({ region: REGION });
@@ -64,6 +61,13 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), ...data }));
 }
 
+// incomplete records that a check in this suite could not be evaluated
+// (an API error), so the suite's open findings are not resolved this run.
+function incomplete(ctx, msg, err) {
+  ctx.incomplete = true;
+  log('warn', { msg, error: err.message });
+}
+
 // Creates finding.
 function createFinding({ checkName, resource, severity, description, recommendation, evidence = {} }) {
   return { findingId: crypto.randomUUID(), checkName, resource, severity, description, recommendation, evidence };
@@ -72,7 +76,7 @@ function createFinding({ checkName, resource, severity, description, recommendat
 // ── S3 checks ─────────────────────────────────────────────────────────────────
 // Checks: public access block, SSE, versioning (state bucket only).
 
-async function checkS3() {
+async function checkS3(ctx) {
   const findings = [];
   const buckets = [
     { name: STATE_BUCKET, checkVersioning: true  },
@@ -83,7 +87,7 @@ async function checkS3() {
   for (const bucket of buckets) {
     // Public access block
     try {
-      const r = await s3.send(new GetBucketPublicAccessBlockCommand({ Bucket: bucket.name }));
+      const r = await s3.send(new GetPublicAccessBlockCommand({ Bucket: bucket.name }));
       const cfg = r.PublicAccessBlockConfiguration || {};
       if (!cfg.BlockPublicAcls || !cfg.IgnorePublicAcls || !cfg.BlockPublicPolicy || !cfg.RestrictPublicBuckets) {
         findings.push(createFinding({
@@ -107,7 +111,7 @@ async function checkS3() {
           evidence:       { bucket: bucket.name },
         }));
       } else {
-        log('warn', { msg: `s3 public access check failed for ${bucket.name}`, error: err.message });
+        incomplete(ctx, `s3 public access check failed for ${bucket.name}`, err);
       }
     }
 
@@ -125,7 +129,7 @@ async function checkS3() {
           evidence:       { bucket: bucket.name },
         }));
       } else {
-        log('warn', { msg: `s3 encryption check failed for ${bucket.name}`, error: err.message });
+        incomplete(ctx, `s3 encryption check failed for ${bucket.name}`, err);
       }
     }
 
@@ -144,7 +148,7 @@ async function checkS3() {
           }));
         }
       } catch (err) {
-        log('warn', { msg: `s3 versioning check failed for ${bucket.name}`, error: err.message });
+        incomplete(ctx, `s3 versioning check failed for ${bucket.name}`, err);
       }
     }
   }
@@ -154,7 +158,7 @@ async function checkS3() {
 
 // ── RDS checks ────────────────────────────────────────────────────────────────
 
-async function checkRDS() {
+async function checkRDS(ctx) {
   if (!RDS_INSTANCE_ID) return [];
 
   const r = await rds.send(new DescribeDBInstancesCommand({ DBInstanceIdentifier: RDS_INSTANCE_ID }));
@@ -234,7 +238,7 @@ async function checkRDS() {
 
 // ── EKS checks ────────────────────────────────────────────────────────────────
 
-async function checkEKS() {
+async function checkEKS(ctx) {
   if (!EKS_CLUSTER_NAME) return [];
 
   const r = await eks.send(new DescribeClusterCommand({ name: EKS_CLUSTER_NAME }));
@@ -289,20 +293,24 @@ async function checkEKS() {
     }));
   }
 
-  // Kubernetes version — flag if more than 2 minor versions behind
-  const minorMatch = (cluster.version || '').match(/^1\.(\d+)/);
-  if (minorMatch) {
-    const clusterMinor = parseInt(minorMatch[1], 10);
-    if (EKS_LATEST_MINOR - clusterMinor > 2) {
+  // Kubernetes version: EKS says whether it is still in standard support.
+  // Out of it, the version is in extended support (the control plane costs
+  // six times as much) or unsupported. A hardcoded "latest" went stale.
+  try {
+    const v = await eks.send(new DescribeClusterVersionsCommand({ clusterVersions: [cluster.version] }));
+    const info = v.clusterVersions?.[0];
+    if (info && info.versionStatus !== 'STANDARD_SUPPORT') {
       findings.push(createFinding({
         checkName:      'eks_version_outdated',
         resource:       `eks:cluster:${EKS_CLUSTER_NAME}`,
         severity:       'HIGH',
-        description:    `EKS cluster ${EKS_CLUSTER_NAME} runs Kubernetes ${cluster.version}, which is more than 2 minor versions behind the current latest (1.${EKS_LATEST_MINOR}).`,
-        recommendation: 'Upgrade the EKS cluster to a supported Kubernetes version.',
-        evidence:       { cluster: EKS_CLUSTER_NAME, currentVersion: cluster.version, latestMinor: `1.${EKS_LATEST_MINOR}` },
+        description:    `EKS cluster ${EKS_CLUSTER_NAME} runs Kubernetes ${cluster.version}, which is out of standard support (${info.versionStatus}).`,
+        recommendation: 'Upgrade the EKS cluster to a version in standard support.',
+        evidence:       { cluster: EKS_CLUSTER_NAME, currentVersion: cluster.version, versionStatus: info.versionStatus, endOfStandardSupportDate: info.endOfStandardSupportDate },
       }));
     }
+  } catch (err) {
+    incomplete(ctx, `eks version check failed for ${EKS_CLUSTER_NAME}`, err);
   }
 
   return findings;
@@ -310,7 +318,10 @@ async function checkEKS() {
 
 // ── Security group checks ─────────────────────────────────────────────────────
 
-async function checkSecurityGroups() {
+// Protocols whose rules have port ranges: TCP, UDP, and -1 (all traffic).
+const PORT_PROTOCOLS = new Set(['tcp', 'udp', '6', '17', '-1']);
+
+async function checkSecurityGroups(ctx) {
   if (!VPC_ID) return [];
 
   // Paginate all SGs in the project VPC
@@ -331,6 +342,9 @@ async function checkSecurityGroups() {
     const sgRef = `ec2:security-group:${sg.GroupId}`;
 
     for (const rule of (sg.IpPermissions || [])) {
+      // For ICMP, FromPort and ToPort hold the ICMP type and code, not ports:
+      // "type 3, code 4" (fragmentation needed) read as "ports 3-4".
+      if (!PORT_PROTOCOLS.has(String(rule.IpProtocol))) continue;
       const fromPort = rule.FromPort ?? 0;
       const toPort   = rule.ToPort   ?? 65535;
 
@@ -402,7 +416,7 @@ async function checkSecurityGroups() {
 
 // ── IAM checks ────────────────────────────────────────────────────────────────
 
-async function checkIAM() {
+async function checkIAM(ctx) {
   const findings = [];
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
@@ -436,7 +450,7 @@ async function checkIAM() {
           }));
         }
       } catch (err) {
-        log('warn', { msg: `Failed to inspect policy ${policy.PolicyName}`, error: err.message });
+        incomplete(ctx, `Failed to inspect policy ${policy.PolicyName}`, err);
       }
     }
     policyMarker = r.IsTruncated ? r.Marker : undefined;
@@ -461,7 +475,7 @@ async function checkIAM() {
           }));
         }
       } catch (err) {
-        log('warn', { msg: `Failed to check role ${role.RoleName}`, error: err.message });
+        incomplete(ctx, `Failed to check role ${role.RoleName}`, err);
       }
     }
     roleMarker = r.IsTruncated ? r.Marker : undefined;
@@ -485,7 +499,7 @@ async function checkIAM() {
 
 // ── Secrets Manager checks ────────────────────────────────────────────────────
 
-async function checkSecretsManager() {
+async function checkSecretsManager(ctx) {
   const findings = [];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -584,6 +598,20 @@ async function persistFinding(finding, isNew, existing) {
   }
 }
 
+// resolveFinding closes an open finding the latest complete scan did not
+// report. The condition keeps it from reopening or overwriting a finding
+// auto-remediation closed in the meantime.
+async function resolveFinding(item) {
+  await ddb.send(new UpdateCommand({
+    TableName:                 FINDINGS_TABLE,
+    Key:                       { finding_id: item.finding_id, timestamp: item.timestamp },
+    UpdateExpression:          'SET #s = :resolved, resolved_at = :ts, resolved_by = :by',
+    ConditionExpression:       '#s = :open',
+    ExpressionAttributeNames:  { '#s': 'status' },
+    ExpressionAttributeValues: { ':resolved': 'RESOLVED', ':open': 'OPEN', ':ts': new Date().toISOString(), ':by': 'compliance-scanner' },
+  }));
+}
+
 // ── SNS notification ──────────────────────────────────────────────────────────
 
 async function notifyFinding(finding) {
@@ -653,8 +681,10 @@ exports.handler = async function handler() {
 
   // 1. Load existing OPEN findings for deduplication.
   let openFindings;
+  let openFindingsLoaded = false;
   try {
     openFindings = await loadOpenFindings();
+    openFindingsLoaded = true;
     log('info', { msg: `Loaded ${openFindings.size} existing open findings`, runId });
   } catch (err) {
     log('error', { msg: 'Failed to load open findings from DynamoDB — proceeding without dedup', error: err.message, runId });
@@ -663,32 +693,36 @@ exports.handler = async function handler() {
 
   // 2. Run all check suites concurrently. Individual suite failures are caught
   //    so a single failing check (e.g. RDS not deployed) does not abort the run.
+  // prefix: the check names a suite reports, to know which open findings in
+  // the shared table are its own (kube-bench writes there too).
   const suites = [
-    { name: 's3',              fn: checkS3 },
-    { name: 'rds',             fn: checkRDS },
-    { name: 'eks',             fn: checkEKS },
-    { name: 'security-groups', fn: checkSecurityGroups },
-    { name: 'iam',             fn: checkIAM },
-    { name: 'secrets-manager', fn: checkSecretsManager },
-  ];
+    { name: 's3',              fn: checkS3,             prefix: 's3_' },
+    { name: 'rds',             fn: checkRDS,            prefix: 'rds_' },
+    { name: 'eks',             fn: checkEKS,            prefix: 'eks_' },
+    { name: 'security-groups', fn: checkSecurityGroups, prefix: 'sg_' },
+    { name: 'iam',             fn: checkIAM,            prefix: 'iam_' },
+    { name: 'secrets-manager', fn: checkSecretsManager, prefix: 'secrets_manager_' },
+  ].map(s => ({ ...s, ctx: { incomplete: false } }));
 
   const settled = await Promise.allSettled(
-    suites.map(s => s.fn().then(findings => ({ suite: s.name, findings })))
+    suites.map(s => s.fn(s.ctx).then(findings => ({ suite: s.name, findings })))
   );
 
   let allFindings  = [];
   let checksRun    = 0;
   const suiteErrors = [];
 
-  for (const result of settled) {
+  const completeSuites = [];
+  settled.forEach((result, i) => {
     if (result.status === 'fulfilled') {
       checksRun++;
+      if (!suites[i].ctx.incomplete) completeSuites.push(suites[i]);
       allFindings = allFindings.concat(result.value.findings);
     } else {
       suiteErrors.push(result.reason?.message || String(result.reason));
       log('error', { msg: 'Check suite failed', error: result.reason?.message, runId });
     }
-  }
+  });
 
   // 3. Deduplicate, persist, and alert.
   let newCount      = 0;
@@ -717,14 +751,33 @@ exports.handler = async function handler() {
     }
   }
 
-  // 4. Publish CloudWatch metrics.
+  // 4. Resolve what a complete suite no longer reports. A suite that failed,
+  //    or could not evaluate one of its checks, resolves nothing: an API
+  //    error is not a pass.
+  const seen = new Set(allFindings.map(f => `${f.checkName}::${f.resource}`));
+  let resolvedCount = 0;
+  if (openFindingsLoaded) {
+    for (const [key, item] of openFindings) {
+      if (seen.has(key) || !completeSuites.some(s => item.check_name?.startsWith(s.prefix))) continue;
+      try {
+        await resolveFinding(item);
+        resolvedCount++;
+      } catch (err) {
+        if (err.name !== 'ConditionalCheckFailedException') {
+          log('error', { msg: 'Failed to resolve finding', error: err.message, findingId: item.finding_id });
+        }
+      }
+    }
+  }
+
+  // 5. Publish CloudWatch metrics.
   try {
     await publishMetrics(allFindings, newCount);
   } catch (err) {
     log('warn', { msg: 'Failed to publish CloudWatch metrics', error: err.message });
   }
 
-  // 5. Structured summary log.
+  // 6. Structured summary log.
   const bySeverity = {};
   for (const f of allFindings) {
     bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
@@ -738,6 +791,7 @@ exports.handler = async function handler() {
     totalFindings:   allFindings.length,
     newFindings:     newCount,
     existingFindings: existingCount,
+    resolvedFindings: resolvedCount,
     bySeverity,
     ...(suiteErrors.length > 0 && { suiteErrors }),
   };
