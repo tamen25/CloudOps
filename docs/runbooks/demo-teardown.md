@@ -117,7 +117,8 @@ state.
 |---|---|---|
 | EKS control plane | $0.10/hr | cluster destroy |
 | EKS nodes, 2 × t3.large on-demand (defaults) | $0.17/hr | cluster destroy |
-| NAT Gateway | $0.045/hr each | foundation destroy |
+| NAT Gateway | $0.045/hr each (one per AZ) | foundation destroy |
+| VPC interface endpoints | $0.01/hr each per AZ (8 × 2 AZs = $0.16/hr) | foundation destroy |
 | RDS db.t4g.micro | ~$0.018/hr | foundation destroy |
 | Kinesis on-demand | $0.04/hr + per-GB | platform destroy |
 | Load balancers (controller-created) | ~$0.02/hr each | stage 4 |
@@ -125,8 +126,10 @@ state.
 | S3 + Dynamo on-demand | ~$0 idle | n/a |
 | Cognito | free <50k MAU | platform destroy |
 
-Active demo cost with the defaults: at least ~$0.37/hr before data
-transfer, storage and CloudWatch. Destroyed: ~$0.
+Active demo cost with the defaults: at least ~$0.53/hr before data
+transfer, storage and CloudWatch (the estimate for an Argus run, with a
+third node, is ~$0.62/hr: `docs/cost/2026-10-20-argus-run-estimate.md`).
+Destroyed: ~$0.
 
 ---
 

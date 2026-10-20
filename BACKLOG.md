@@ -9,36 +9,28 @@ ones still open are carried over below as O-items.
 
 Nothing is applied to AWS without a cost estimate and an explicit yes.
 
-## P1 — security
-
-- [ ] **S09** — The internal request signature (search-gateway, order-api,
-  ledger, the admin server, loadgen) is `sha256(ts.tenant.body.secret)`, a
-  secret-suffix hash, not an HMAC. Low risk as built (the secret is the
-  suffix; tenants are `[a-zA-Z0-9_-]`), but non-standard. Move to
-  HMAC-SHA256 with a dual-accept window, all five services together.
-
 ## P1 — correctness, supply chain, process
 
-- [ ] **A01** — Two Terraform layouts (root `main.tf` and `stacks/`) manage
-  the same modules. Retire the root layout (ADR, state-migration runbook).
-  Includes old #16 (layered-stack runbook not validated on a live env).
-  Teardown already uses the stacks, and the root scripts refuse to run
-  without `LEGACY_ROOT=1` (#36); left: `main.tf`, `deploy.sh`,
-  `destroy.sh`, the root steps in infra.yml, and the docs that use them.
+- [ ] **F02** — Terraform creates no ECR repository for order-api or the
+  mesh services, so app.yml pushes to a repository nothing creates. Add
+  them (scan on push, immutable tags) and an output for the URL.
 - [ ] **D02** — cosign-installer v4 installs cosign v3, which signs in the
   new bundle format. Whether the in-cluster cosign-gatekeeper-provider
   verifies it is unchecked; until then the installer pins cosign v2.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
-- [ ] **R01** — Finish the code review: the storefront (about 8,700
-  lines). The mesh services and loadgen are done (#35); the Lambdas are
-  done (T01).
-- [ ] **R02** — Decide the four open behaviours in
-  `docs/reviews/2026-10-20-mesh-services-review.md`: fraud fails open
+- [ ] **R02** — Decide the open behaviours in the reviews:
+  `docs/reviews/2026-10-20-mesh-services-review.md` — fraud fails open
   (R01-6), reservations are neither held nor released (R01-7),
   `synthetic-` tenants are trusted by name (R01-8), projection-worker
-  resilience (R01-9).
+  resilience (R01-9); `docs/reviews/2026-10-20-storefront-review.md` — an
+  identical cart bought again within 24 h replays the earlier order (SF-7),
+  rate limits are per pod (SF-8).
+- [ ] **Q01** — shellcheck findings in `scripts/build-and-push.sh` and
+  `scripts/validate-k8s-manifests.sh`, and generated comments the C03 rules
+  did not cover (workflow headers "This manifest defines …", "Exposes the
+  … output value.").
 - [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
   per node (a DaemonSet-style job, or one Job per node group) so a
   finding is about a node, not whichever node ran that night.
@@ -61,8 +53,9 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 Everything above the line is code; these are the parts only an apply can
 prove. I03 comes first.
 
-- [ ] **I03** — Capacity and cost estimate for running Argus here, before
-  any apply.
+- [ ] **I03** — Approve (or change) the estimate before any apply:
+  `docs/cost/2026-10-20-argus-run-estimate.md` — ≈ $0.62/hr while running,
+  ≈ $4–5 for a 4–6 h session, ≈ $15/day if left up; three t3.large nodes.
 - [ ] **S01** — First apply with the scoped deployer policy; check whether
   a role created by the old oidc.sh still exists with its any-branch trust.
 - [ ] **S08** — Switch the permissions boundary on and run its runbook's
@@ -78,6 +71,13 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **A01** — the root Terraform layout retired; the stacks are the only
+  one (ADR 028, #38).
+- [x] **S09** — the internal request signature is HMAC-SHA256 in all six
+  services (ADR 029, #39).
+- [x] **R01** — code review complete: storefront (#40), mesh services
+  (#35), Lambdas (T01). Open decisions are R02.
 
 - [x] **S11** — the Destroy workflow tears down the layered stacks CI
   deploys; it used to work on the root layout and would have left a stacks
