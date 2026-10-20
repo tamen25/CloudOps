@@ -20,6 +20,8 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
+## P2 — carried over from the old backlog
+
 - [ ] **O01** (#9) — Service mesh mTLS east-west (Cilium) is missing.
 - [ ] **O02** (#76) — Self-hosted runners in the VPC (ARC on EKS): module,
   runner image and workflow migration not built (ADR 025).
