@@ -18,6 +18,23 @@ interface BackoffState {
   lastFailureAt: number;
 }
 
+// Keys tracked per limiter. Every distinct client IP or user adds one, so
+// without a bound the maps grew for as long as the pod ran. Past the cap,
+// expired entries are swept; if that is not enough, the oldest go (a Map
+// iterates in insertion order), which at worst forgets a limit early.
+export const MAX_TRACKED_KEYS = 50_000;
+
+function bound<V>(map: Map<string, V>, expired: (v: V) => boolean): void {
+  if (map.size <= MAX_TRACKED_KEYS) return;
+  for (const [key, value] of map) {
+    if (expired(value)) map.delete(key);
+  }
+  for (const key of map.keys()) {
+    if (map.size <= MAX_TRACKED_KEYS) break;
+    map.delete(key);
+  }
+}
+
 function positiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -40,6 +57,7 @@ export class FixedWindowRateLimiter {
 
     bucket.count += 1;
     this.buckets.set(key, bucket);
+    bound(this.buckets, (b) => b.resetAt <= now);
 
     const allowed = bucket.count <= this.max;
     return {
@@ -54,6 +72,10 @@ export class FixedWindowRateLimiter {
 
   clear(): void {
     this.buckets.clear();
+  }
+
+  get size(): number {
+    return this.buckets.size;
   }
 }
 
@@ -92,6 +114,7 @@ export class ExponentialBackoffTracker {
       blockedUntil: now + delayMs,
       lastFailureAt: now,
     });
+    bound(this.states, (st) => now - st.lastFailureAt >= this.resetAfterMs);
     return Math.max(1, Math.ceil(delayMs / 1000));
   }
 
@@ -101,6 +124,10 @@ export class ExponentialBackoffTracker {
 
   clear(): void {
     this.states.clear();
+  }
+
+  get size(): number {
+    return this.states.size;
   }
 }
 

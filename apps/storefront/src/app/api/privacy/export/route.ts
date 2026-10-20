@@ -33,6 +33,7 @@ export async function GET() {
   }
 
   const upstream = await fetch(`${API_BASE_URL}/privacy/export`, {
+    signal: AbortSignal.timeout(10_000),
     headers: { authorization: `Bearer ${session}` },
     cache: "no-store",
   });

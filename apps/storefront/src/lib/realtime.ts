@@ -23,21 +23,30 @@ export async function deleteUserConnections(
 ): Promise<number> {
   const doc = getClient();
   if (!doc) return 0;
-  const res = await doc.send(
-    new QueryCommand({
-      TableName: TABLE,
-      IndexName: "by-tenant",
-      KeyConditionExpression: "tenantId = :tenant",
-      FilterExpression: "#sub = :sub",
-      ExpressionAttributeNames: { "#sub": "sub" },
-      ExpressionAttributeValues: {
-        ":tenant": tenantId,
-        ":sub": sub,
-      },
-      ProjectionExpression: "connId",
-    }),
-  );
-  const rows = (res.Items ?? []) as Array<{ connId?: string }>;
+  // The sub filter runs after each 1 MB page of the tenant's connections, so
+  // every page is read: an erase that stopped at the first page left the
+  // user's other connections behind.
+  const rows: Array<{ connId?: string }> = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const res = await doc.send(
+      new QueryCommand({
+        TableName: TABLE,
+        IndexName: "by-tenant",
+        KeyConditionExpression: "tenantId = :tenant",
+        FilterExpression: "#sub = :sub",
+        ExpressionAttributeNames: { "#sub": "sub" },
+        ExpressionAttributeValues: {
+          ":tenant": tenantId,
+          ":sub": sub,
+        },
+        ProjectionExpression: "connId",
+        ExclusiveStartKey: lastKey,
+      }),
+    );
+    rows.push(...((res.Items ?? []) as Array<{ connId?: string }>));
+    lastKey = res.LastEvaluatedKey;
+  } while (lastKey);
   for (const row of rows) {
     if (!row.connId) continue;
     await doc.send(

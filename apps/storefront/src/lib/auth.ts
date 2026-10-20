@@ -115,6 +115,7 @@ export async function exchangeCode(opts: {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     const text = await res.text();

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ExponentialBackoffTracker,
   FixedWindowRateLimiter,
+  MAX_TRACKED_KEYS,
   getClientIpFromHeaders,
 } from "../src/lib/rate-limit";
 
@@ -32,4 +33,20 @@ test("auth backoff doubles delay, caps it, and clears on success", () => {
   assert.equal(tracker.fail("ip:1", 3_000), 4, "delay is capped");
   tracker.success("ip:1");
   assert.equal(tracker.check("ip:1", 3_001), 0);
+});
+
+// Every distinct IP or user used to add an entry that was never removed.
+test("the limiters keep a bounded number of keys", () => {
+  const limiter = new FixedWindowRateLimiter(1_000, 5);
+  const tracker = new ExponentialBackoffTracker(1_000, 4_000, 60_000);
+  for (let i = 0; i < MAX_TRACKED_KEYS + 5_000; i++) {
+    limiter.consume(`ip-${i}`, i);
+    tracker.fail(`ip-${i}`, i);
+  }
+  assert.ok(limiter.size <= MAX_TRACKED_KEYS, `limiter holds ${limiter.size}`);
+  assert.ok(tracker.size <= MAX_TRACKED_KEYS, `tracker holds ${tracker.size}`);
+  // A key still inside its window keeps its count.
+  const last = `ip-${MAX_TRACKED_KEYS + 4_999}`;
+  for (let i = 0; i < 4; i++) limiter.consume(last, MAX_TRACKED_KEYS + 5_000);
+  assert.equal(limiter.consume(last, MAX_TRACKED_KEYS + 5_000).allowed, false);
 });

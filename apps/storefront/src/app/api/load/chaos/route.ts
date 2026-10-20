@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/bff-auth";
-import { isAdmin } from "@/lib/auth";
+import { requireAdmin } from "@/lib/bff-auth";
 import { triggerChaos } from "@/lib/loadgen-client";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +9,8 @@ export const runtime = "nodejs";
 // live mesh pod. The loadgen re-checks the service against a fixed allowlist and
 // defaults to dry-run, so a real kill needs an explicit {"dryRun": false} here.
 export async function POST(req: NextRequest) {
-  const claims = await requireSession();
-  if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!isAdmin(claims)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
 
   const baseUrl = process.env.LOADGEN_URL || "";
   const secret = process.env.INTERNAL_HMAC_SECRET || "";
