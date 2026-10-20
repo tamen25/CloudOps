@@ -1,4 +1,3 @@
-// This file contains config logic for traces src.
 #include "cloudops/otel/detail/tracer.hpp"
 
 #include <algorithm>
@@ -15,7 +14,6 @@ namespace cloudops::otel::traces {
 namespace {
 constexpr const char* default_ssm_parameters_file = "/tmp/otelExporterParams.json";
 
-// Handles trim.
 std::string trim(std::string s) {
   auto not_space = [](unsigned char c) { return !std::isspace(c); };
   s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
@@ -23,7 +21,6 @@ std::string trim(std::string s) {
   return s;
 }
 
-// Handles getenv str.
 std::string getenv_str(const char* name) {
   const char* v = std::getenv(name);
   return v == nullptr ? std::string{} : std::string{v};
@@ -38,7 +35,6 @@ std::string first_env(std::initializer_list<const char*> names) {
   return {};
 }
 
-// Handles JSON string field.
 std::optional<std::string> json_string_field(const std::string& raw, const std::string& field) {
   const std::string needle = "\"" + field + "\"";
   auto pos = raw.find(needle);
@@ -80,7 +76,6 @@ std::optional<std::string> json_string_field(const std::string& raw, const std::
   return std::nullopt;
 }
 
-// Handles SSM parameters from JSON.
 SsmParameters ssm_parameters_from_json(const std::string& raw) {
   SsmParameters params;
   TracesExporterConfig cfg;
@@ -157,7 +152,6 @@ std::string normalize_endpoint(const std::string& endpoint) {
   return e + suffix;
 }
 
-// Reads SSM parameters.
 SsmParameters read_ssm_parameters() {
   std::string configured = getenv_str("OTEL_SSM_PARAMETERS");
   if (!configured.empty()) {
@@ -188,7 +182,6 @@ SsmParameters read_ssm_parameters() {
   return params;
 }
 
-// Reads SSM parameters file.
 SsmParameters read_ssm_parameters_file(const std::string& file_path) {
   auto resolved_path = file_path;
   if (resolved_path.empty()) {
@@ -206,7 +199,6 @@ SsmParameters read_ssm_parameters_file(const std::string& file_path) {
   return ssm_parameters_from_json(buffer.str());
 }
 
-// Handles runtime resource attributes.
 std::map<std::string, std::string> runtime_resource_attributes() {
   auto attrs = parse_resource_attributes(getenv_str("OTEL_RESOURCE_ATTRIBUTES"));
 
@@ -255,7 +247,6 @@ std::map<std::string, std::string> runtime_resource_attributes() {
   return attrs;
 }
 
-// Gets sampler ratio.
 double sampler_ratio() {
   auto raw = getenv_str("TRACEID_RATIO_BASED_SAMPLER");
   if (raw.empty()) return 1.0;
@@ -268,7 +259,6 @@ double sampler_ratio() {
 
 }  // namespace detail
 
-// Checks whether empty.
 bool SsmParameters::is_empty() const {
   if (!otel_trace.has_value()) return true;
   const auto& cfg = otel_trace.value();

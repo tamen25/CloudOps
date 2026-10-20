@@ -1,4 +1,3 @@
-// This file contains logs configuration logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -12,10 +11,8 @@ final class LogsConfiguration {
   private static final ObjectMapper MAPPER = new ObjectMapper()
       .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-  // Handles logs configuration.
   private LogsConfiguration() {}
 
-  // Reads SSM parameters.
   static SsmParameters readSsmParameters() {
     String configured = System.getenv("OTEL_SSM_PARAMETERS");
     if (hasValue(configured)) {
@@ -51,14 +48,12 @@ final class LogsConfiguration {
     return parameters;
   }
 
-  // Reads SSM parameters file.
   static SsmParameters readSsmParametersFile() {
     String configuredPath = System.getenv("OTEL_SSM_PARAMETERS_FILE");
     String filePath = firstValue(configuredPath, DEFAULT_SSM_PARAMETERS_FILE);
     return readSsmParametersFile(Path.of(filePath));
   }
 
-  // Reads SSM parameters file.
   static SsmParameters readSsmParametersFile(Path filePath) {
     try {
       SsmParameters parsed = MAPPER.readValue(filePath.toFile(), SsmParameters.class);
@@ -90,7 +85,6 @@ final class LogsConfiguration {
     return values.length > 0 ? values : Arrays.copyOf(fallback, fallback.length);
   }
 
-  // Gets sampling rate.
   static double samplingRate() {
     try {
       return Double.parseDouble(firstValue(System.getenv("OTEL_LOGS_SAMPLING_RATE"), "100"));
@@ -106,7 +100,6 @@ final class LogsConfiguration {
     return normalized.endsWith("/v1/logs") ? normalized : normalized + "/v1/logs";
   }
 
-  // Handles has value.
   static boolean hasValue(String value) {
     return value != null && !value.isBlank();
   }

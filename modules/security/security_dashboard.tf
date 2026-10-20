@@ -1,4 +1,3 @@
-#This file defines security dashboard settings for CloudOps.
 #Security Posture Grafana Dashboard + Security SLO PrometheusRule
 #
 #1. ConfigMap: picked up by the Grafana sidecar (label grafana_dashboard=1,
@@ -41,7 +40,6 @@ resource "kubernetes_config_map" "security_posture_dashboard" {
   }
 }
 
-#Creates the kubernetes manifest resource named security SLO rules.
 resource "kubernetes_manifest" "security_slo_rules" {
   manifest = {
     apiVersion = "monitoring.coreos.com/v1"

@@ -1,4 +1,3 @@
-// This file contains cloud ops logger logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import io.opentelemetry.api.OpenTelemetry;
@@ -70,27 +69,22 @@ public final class CloudOpsLogger {
     return localInstance;
   }
 
-  // Handles resource attributes.
   public Map<String, String> resourceAttributes() {
     return resourceAttributes;
   }
 
-  // Handles info.
   public void info(Object message, Object... optionalParams) {
     log(LogLevel.INFO, message, optionalParams);
   }
 
-  // Handles error.
   public void error(Object message, Object... optionalParams) {
     log(LogLevel.ERROR, message, optionalParams);
   }
 
-  // Handles debug.
   public void debug(Object message, Object... optionalParams) {
     log(LogLevel.DEBUG, message, optionalParams);
   }
 
-  // Handles warn.
   public void warn(Object message, Object... optionalParams) {
     log(LogLevel.WARN, message, optionalParams);
   }
@@ -186,7 +180,6 @@ public final class CloudOpsLogger {
     useOtel = true;
   }
 
-  // Handles resource.
   private Resource resource() {
     io.opentelemetry.sdk.resources.ResourceBuilder builder = Resource.builder();
     resourceAttributes.forEach(builder::put);
@@ -250,7 +243,6 @@ public final class CloudOpsLogger {
     return rendered;
   }
 
-  // Handles contains exporter.
   private boolean containsExporter(String expected) {
     for (String exporter : exportersList) {
       if (expected.equalsIgnoreCase(exporter.trim())) return true;
@@ -259,7 +251,6 @@ public final class CloudOpsLogger {
     return false;
   }
 
-  // Gets current trace ID.
   private static String currentTraceId() {
     String lambdaTraceId = System.getenv("_X_AMZN_TRACE_ID");
     if (LogsConfiguration.hasValue(lambdaTraceId)) return lambdaTraceId;

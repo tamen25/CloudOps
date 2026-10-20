@@ -1,4 +1,3 @@
-// This file contains log level logic for OTel logs.
 package com.cloudops.otel.logs;
 
 public enum LogLevel {
@@ -7,7 +6,6 @@ public enum LogLevel {
   DEBUG,
   WARN;
 
-  // Handles value.
   public String value() {
     return name().toLowerCase();
   }

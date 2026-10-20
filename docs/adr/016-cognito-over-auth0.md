@@ -1,4 +1,3 @@
-<!-- This document explains 016 Cognito over Auth0 for CloudOps. -->
 # ADR 016 — Cognito User Pool over Auth0/Clerk
 
 **Status:** Accepted

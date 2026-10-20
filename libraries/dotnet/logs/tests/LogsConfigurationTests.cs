@@ -1,4 +1,3 @@
-// This file contains logs configuration tests logic for logs tests.
 using Xunit;
 
 namespace CloudOps.Otel.Logs.Tests;
@@ -25,7 +24,6 @@ public sealed class LogsConfigurationTests
     }
 
     [Fact]
-    // Reads SSM parameters prefers configured JSON and falls back to OTel environment.
     public void ReadSsmParametersPrefersConfiguredJsonAndFallsBackToOtelEnvironment()
     {
         using (new EnvironmentScope(new Dictionary<string, string?>
@@ -55,7 +53,6 @@ public sealed class LogsConfigurationTests
     }
 
     [Fact]
-    // Reads SSM parameters uses original params file before direct environment.
     public void ReadSsmParametersUsesOriginalParamsFileBeforeDirectEnvironment()
     {
         var tempDir = Directory.CreateTempSubdirectory("cloudops-otel-logs-");
@@ -86,7 +83,6 @@ public sealed class LogsConfigurationTests
     }
 
     [Fact]
-    // Reads SSM parameters falls back to direct environment when file is invalid.
     public void ReadSsmParametersFallsBackToDirectEnvironmentWhenFileIsInvalid()
     {
         var tempDir = Directory.CreateTempSubdirectory("cloudops-otel-logs-");

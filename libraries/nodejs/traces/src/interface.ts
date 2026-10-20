@@ -1,4 +1,3 @@
-// This file contains interfaces for traces src.
 import { Context, SpanKind } from "@opentelemetry/api";
 import { Context as AWSLambdaContext } from "aws-lambda";
 

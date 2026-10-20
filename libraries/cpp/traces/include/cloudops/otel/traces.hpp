@@ -1,4 +1,3 @@
-// This file contains traces logic for cloudops OTel.
 // CloudOps OpenTelemetry traces helper for C++ services.
 //
 // Mirrors the Node.js / Python / Java / .NET / Go libraries' API surface and

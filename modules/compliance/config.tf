@@ -1,4 +1,3 @@
-#This file defines config settings for CloudOps.
 #AWS Config — recorder + delivery channel + (optional) conformance packs.
 #Records all supported resource types in this region.
 
@@ -6,7 +5,6 @@ locals {
   config_bucket_name = "${var.name_prefix}-aws-config-${var.aws_account_id}"
 }
 
-#Creates the AWS s3 bucket resource named config.
 resource "aws_s3_bucket" "config" {
   count = var.enable_config ? 1 : 0
 
@@ -16,7 +14,6 @@ resource "aws_s3_bucket" "config" {
   tags = merge(var.tags, { Name = local.config_bucket_name, Domain = "audit-config" })
 }
 
-#Creates the AWS s3 bucket server side encryption configuration resource named config.
 resource "aws_s3_bucket_server_side_encryption_configuration" "config" {
   count  = var.enable_config ? 1 : 0
   bucket = aws_s3_bucket.config[0].id
@@ -28,7 +25,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "config" {
   }
 }
 
-#Creates the AWS s3 bucket public access block resource named config.
 resource "aws_s3_bucket_public_access_block" "config" {
   count                   = var.enable_config ? 1 : 0
   bucket                  = aws_s3_bucket.config[0].id
@@ -38,7 +34,6 @@ resource "aws_s3_bucket_public_access_block" "config" {
   restrict_public_buckets = true
 }
 
-#Creates the AWS s3 bucket policy resource named config.
 resource "aws_s3_bucket_policy" "config" {
   count  = var.enable_config ? 1 : 0
   bucket = aws_s3_bucket.config[0].id
@@ -67,7 +62,6 @@ resource "aws_s3_bucket_policy" "config" {
   })
 }
 
-#Creates the AWS IAM role resource named config.
 resource "aws_iam_role" "config" {
   count = var.enable_config ? 1 : 0
 
@@ -86,14 +80,12 @@ resource "aws_iam_role" "config" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named config.
 resource "aws_iam_role_policy_attachment" "config" {
   count      = var.enable_config ? 1 : 0
   role       = aws_iam_role.config[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
 }
 
-#Creates the AWS config configuration recorder resource named main.
 resource "aws_config_configuration_recorder" "main" {
   count    = var.enable_config ? 1 : 0
   name     = "${var.name_prefix}-recorder"
@@ -105,7 +97,6 @@ resource "aws_config_configuration_recorder" "main" {
   }
 }
 
-#Creates the AWS config delivery channel resource named main.
 resource "aws_config_delivery_channel" "main" {
   count          = var.enable_config ? 1 : 0
   name           = "${var.name_prefix}-channel"
@@ -114,7 +105,6 @@ resource "aws_config_delivery_channel" "main" {
   depends_on = [aws_s3_bucket_policy.config]
 }
 
-#Creates the AWS config configuration recorder status resource named main.
 resource "aws_config_configuration_recorder_status" "main" {
   count      = var.enable_config ? 1 : 0
   name       = aws_config_configuration_recorder.main[0].name
@@ -123,7 +113,6 @@ resource "aws_config_configuration_recorder_status" "main" {
   depends_on = [aws_config_delivery_channel.main]
 }
 
-#Creates the AWS config conformance pack resource named main.
 resource "aws_config_conformance_pack" "main" {
   for_each = var.enable_config ? { for p in var.config_conformance_packs : p.name => p } : {}
 

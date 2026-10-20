@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 #CloudOps Root Outputs
 
 #Bootstrap

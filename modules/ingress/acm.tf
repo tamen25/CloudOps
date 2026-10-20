@@ -1,4 +1,3 @@
-#This file defines acm settings for CloudOps.
 #Wildcard certificate for *.${var.domain_name} (also covers root domain via SAN)
 resource "aws_acm_certificate" "main" {
   domain_name               = "*.${var.domain_name}"

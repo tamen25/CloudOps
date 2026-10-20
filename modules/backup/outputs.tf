@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "vault_name" {
   description = "AWS Backup vault name."
   value       = aws_backup_vault.main.name

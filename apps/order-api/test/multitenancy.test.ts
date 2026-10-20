@@ -1,14 +1,11 @@
-// This file contains multitenancy test logic for order API test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app';
 
-// Handles silent logger.
 function silentLogger() {
   return { info() {}, warn() {}, error() {} };
 }
 
-// Builds pool.
 function makePool({ store }) {
   return {
     query: async (sql, params) => {
@@ -40,7 +37,6 @@ function makePool({ store }) {
   };
 }
 
-// Handles start app.
 async function startApp({ store }) {
   const pool = makePool({ store });
   const { app } = createApp({
@@ -141,7 +137,6 @@ test('rate limit is per-tenant (closes backlog #45)', async () => {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
-    // Handles post.
     const post = async (tenant) => fetch(`${baseUrl}/order`, {
       method: 'POST',
       headers: {

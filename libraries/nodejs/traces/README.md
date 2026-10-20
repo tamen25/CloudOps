@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # @cloudops/otel-traces
 
 CloudOps OpenTelemetry traces helper for Node.js services.

@@ -1,4 +1,3 @@
-// This file contains enums for traces src.
 export enum AttributeNames {
   TRIGGER_SERVICE_TYPE = "trigger.service.type",
   TRIGGER_SERVICE_NAME = "trigger.service",

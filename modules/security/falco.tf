@@ -1,4 +1,3 @@
-#This file defines falco settings for CloudOps.
 #Falco Runtime Threat Detection
 #Installs Falco as a DaemonSet using the eBPF driver (no kernel module compilation
 #required on EKS). Falcosidekick routes findings to the existing OTel Collector

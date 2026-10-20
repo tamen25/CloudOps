@@ -1,4 +1,3 @@
-#This file defines secrets settings for CloudOps.
 #GitHub PAT secret — created once by the bootstrap module so all other modules
 #can reference the ARN without storing the raw token value in tfvars.
 #
@@ -17,7 +16,6 @@ variable "github_token" {
   default     = ""
 }
 
-#Creates the AWS secretsmanager secret resource named github token.
 resource "aws_secretsmanager_secret" "github_token" {
   #checkov:skip=CKV_AWS_149:AWS managed key is acceptable for dev - CMK adds cost without meaningful security benefit
   #checkov:skip=CKV2_AWS_57:Automatic rotation not implemented - static credentials managed externally
@@ -34,7 +32,6 @@ resource "aws_secretsmanager_secret" "github_token" {
   })
 }
 
-#Creates the AWS secretsmanager secret version resource named github token.
 resource "aws_secretsmanager_secret_version" "github_token" {
   count = var.github_token != "" ? 1 : 0
 

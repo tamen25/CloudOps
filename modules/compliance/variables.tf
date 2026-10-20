@@ -1,10 +1,8 @@
-#This file defines variables settings for CloudOps.
 variable "name_prefix" {
   description = "Prefix for resource names."
   type        = string
 }
 
-#Defines the AWS account ID input value.
 variable "aws_account_id" {
   description = "AWS account ID — used for globally unique S3 bucket names."
   type        = string
@@ -18,21 +16,18 @@ variable "enable_cloudtrail" {
   default     = false
 }
 
-#Defines the cloudtrail object lock enabled input value.
 variable "cloudtrail_object_lock_enabled" {
   description = "Enable S3 Object Lock on the CloudTrail bucket (compliance mode). NEVER true in test envs — locked objects cannot be deleted until retention expires."
   type        = bool
   default     = false
 }
 
-#Defines the cloudtrail object lock retention days input value.
 variable "cloudtrail_object_lock_retention_days" {
   description = "Object Lock retention period for CloudTrail logs."
   type        = number
   default     = 90
 }
 
-#Defines the cloudtrail buckets force destroy input value.
 variable "cloudtrail_buckets_force_destroy" {
   description = "Allow `terraform destroy` to nuke the CloudTrail bucket. Set false in real prod."
   type        = bool
@@ -47,21 +42,18 @@ variable "enable_guardduty" {
   default     = false
 }
 
-#Defines the guardduty EKS protection input value.
 variable "guardduty_eks_protection" {
   description = "Enable GuardDuty EKS Audit Logs + Runtime Monitoring protection plans."
   type        = bool
   default     = true
 }
 
-#Defines the guardduty s3 protection input value.
 variable "guardduty_s3_protection" {
   description = "Enable GuardDuty S3 Protection."
   type        = bool
   default     = true
 }
 
-#Defines the guardduty malware protection input value.
 variable "guardduty_malware_protection" {
   description = "Enable GuardDuty Malware Protection for EBS volumes."
   type        = bool
@@ -76,7 +68,6 @@ variable "enable_config" {
   default     = false
 }
 
-#Defines the config conformance packs input value.
 variable "config_conformance_packs" {
   description = "Conformance pack templates to deploy. Each entry needs a name and template_s3_uri."
   type = list(object({
@@ -94,7 +85,6 @@ variable "enable_security_hub" {
   default     = false
 }
 
-#Defines the security hub standards input value.
 variable "security_hub_standards" {
   description = "Security Hub standard ARNs to subscribe to. Common: CIS AWS Foundations Benchmark, AWS Foundational Security Best Practices, PCI-DSS."
   type        = list(string)
@@ -104,7 +94,6 @@ variable "security_hub_standards" {
   ]
 }
 
-#Defines the tags input value.
 variable "tags" {
   description = "Common tags."
   type        = map(string)

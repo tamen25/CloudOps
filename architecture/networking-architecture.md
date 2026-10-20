@@ -1,4 +1,3 @@
-<!-- This document explains networking architecture for CloudOps. -->
 # Network Architecture Diagram
 
 Create a VPC with 10.0.0.0/16 in us-east-1 across 2 availability zones.

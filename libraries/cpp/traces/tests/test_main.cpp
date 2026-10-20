@@ -1,11 +1,9 @@
-// This file contains test main logic for traces tests.
 #include <cstdio>
 #include <cstdlib>
 
 extern int run_config_tests();
 extern int run_tracer_tests();
 
-// Runs the main workflow for the requested work.
 int main() {
   int failures = 0;
   failures += run_config_tests();

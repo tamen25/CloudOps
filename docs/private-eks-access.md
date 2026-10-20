@@ -1,4 +1,3 @@
-<!-- This document explains private EKS access for CloudOps. -->
 # Private EKS Access from CI
 
 Backlog #52. Production tfvars (`environments/prod.tfvars.example`) sets

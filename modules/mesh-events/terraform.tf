@@ -1,4 +1,3 @@
-#This file defines terraform settings for the mesh-events module.
 terraform {
   required_version = ">= 1.11.0"
 

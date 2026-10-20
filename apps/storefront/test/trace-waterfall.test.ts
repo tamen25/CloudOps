@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildWaterfall } from "../src/lib/trace-waterfall";
 
-// Builds a Tempo-shaped OTLP batch for one service with the given spans.
 function batch(service: string, spans: Array<Record<string, unknown>>) {
   return {
     resource: { attributes: [{ key: "service.name", value: { stringValue: service } }] },

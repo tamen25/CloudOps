@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 #Cluster outputs — consumed by the platform stack via terraform_remote_state.
 
 output "cluster_name" {

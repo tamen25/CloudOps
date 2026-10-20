@@ -1,4 +1,3 @@
-<!-- This document explains 019 Step Functions checkout saga for CloudOps. -->
 # ADR 019 — Step Functions Standard for Checkout Saga
 
 **Status:** Accepted

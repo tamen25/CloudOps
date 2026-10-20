@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "cloudtrail_arn" {
   description = "CloudTrail ARN. Empty when CloudTrail is disabled."
   value       = var.enable_cloudtrail ? aws_cloudtrail.main[0].arn : ""

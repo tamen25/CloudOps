@@ -1,4 +1,3 @@
-#This file defines github OIDC settings for CloudOps.
 #GitHub Actions OIDC provider — allows GitHub to federate identities into AWS
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
@@ -41,7 +40,6 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named github actions.
 resource "aws_iam_role" "github_actions" {
   name               = "${var.project_name}-github-actions"
   assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
@@ -87,7 +85,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named github actions permissions.
 resource "aws_iam_role_policy" "github_actions_permissions" {
   name   = "${var.project_name}-github-actions-permissions"
   role   = aws_iam_role.github_actions.id

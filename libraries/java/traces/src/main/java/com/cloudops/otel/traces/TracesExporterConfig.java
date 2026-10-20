@@ -1,4 +1,3 @@
-// This file contains traces exporter config logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import com.fasterxml.jackson.annotation.JsonProperty;

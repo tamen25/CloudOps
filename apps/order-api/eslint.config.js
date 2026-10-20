@@ -1,4 +1,3 @@
-// This file contains eslint config logic for apps order API.
 'use strict';
 
 // Flat config for ESLint 9. Covers .ts after the JS→TS conversion (#64);

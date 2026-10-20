@@ -1,4 +1,3 @@
-// This file contains index logic for lambda function compliance scanner.
 'use strict';
 
 const { EC2Client, DescribeSecurityGroupsCommand } = require('@aws-sdk/client-ec2');
@@ -354,7 +353,6 @@ async function checkSecurityGroups(ctx) {
 
       if (!hasOpenCidr) continue;
 
-      // Handles port in range.
       const portInRange = (p) => p >= fromPort && p <= toPort;
       const evidence = { groupId: sg.GroupId, groupName: sg.GroupName, fromPort, toPort };
 
@@ -541,7 +539,6 @@ async function checkSecretsManager(ctx) {
 // ── DynamoDB deduplication ────────────────────────────────────────────────────
 
 async function loadOpenFindings() {
-  // Returns a Map keyed by `${checkName}::${resource}` → existing DynamoDB item.
   const openFindings = new Map();
   let lastKey;
 
@@ -563,7 +560,6 @@ async function loadOpenFindings() {
   return openFindings;
 }
 
-// Handles persist finding.
 async function persistFinding(finding, isNew, existing) {
   const now = new Date().toISOString();
   const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;

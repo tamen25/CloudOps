@@ -1,4 +1,3 @@
-#This file defines WAF settings for CloudOps.
 #WAFv2 web ACL — regional, attached to the public ALB.
 #Created only when var.enable_waf = true. Defaults are OWASP-aligned and tight
 #enough to block common automated abuse without breaking real users.
@@ -197,7 +196,6 @@ data "aws_lb" "public" {
   depends_on = [helm_release.lb_controller]
 }
 
-#Creates the AWS wafv2 web acl association resource named alb.
 resource "aws_wafv2_web_acl_association" "alb" {
   count = var.enable_waf && var.alb_dns_name != "" ? 1 : 0
 
@@ -226,7 +224,6 @@ resource "aws_cloudwatch_log_group" "waf" {
   tags = local.common_tags
 }
 
-#Creates the AWS wafv2 web acl logging configuration resource named main.
 resource "aws_wafv2_web_acl_logging_configuration" "main" {
   count = var.enable_waf && var.waf_logging_enabled ? 1 : 0
 

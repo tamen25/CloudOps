@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # CloudOps.Otel.Logs
 
 .NET logging helper for CloudOps services.

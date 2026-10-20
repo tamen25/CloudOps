@@ -1,4 +1,3 @@
-// This file contains span props logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import io.opentelemetry.api.trace.SpanKind;
@@ -13,25 +12,21 @@ public final class SpanProps {
 
   public SpanProps() {}
 
-  // Handles span kind.
   public SpanProps spanKind(SpanKind value) {
     this.spanKind = value;
     return this;
   }
 
-  // Handles root.
   public SpanProps root(boolean value) {
     this.root = value;
     return this;
   }
 
-  // Handles set active context.
   public SpanProps setActiveContext(boolean value) {
     this.setActiveContext = value;
     return this;
   }
 
-  // Handles parent.
   public SpanProps parent(Context value) {
     this.parent = value;
     return this;

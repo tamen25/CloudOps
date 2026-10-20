@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-traces
 
 Python OpenTelemetry traces helper for CloudOps services.

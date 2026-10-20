@@ -1,4 +1,3 @@
-#This file defines main settings for CloudOps.
 #Cluster stack — closes backlog #16 (layer 2 of 3).
 #
 #Owns: EKS control plane + node group + addons + IRSA roles.

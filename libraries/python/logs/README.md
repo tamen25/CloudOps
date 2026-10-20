@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # cloudops-otel-logs
 
 Python logging helper for CloudOps services.

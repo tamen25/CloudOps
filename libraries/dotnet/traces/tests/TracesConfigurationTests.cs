@@ -1,4 +1,3 @@
-// This file contains traces configuration tests logic for traces tests.
 using Xunit;
 
 namespace CloudOps.Otel.Traces.Tests;
@@ -48,7 +47,6 @@ public sealed class TracesConfigurationTests
     }
 
     [Fact]
-    // Reads SSM parameters prefers configured JSON and falls back to OTel environment.
     public void ReadSsmParametersPrefersConfiguredJsonAndFallsBackToOtelEnvironment()
     {
         using (new EnvironmentScope(new Dictionary<string, string?>
@@ -78,7 +76,6 @@ public sealed class TracesConfigurationTests
     }
 
     [Fact]
-    // Reads SSM parameters uses params file before direct environment.
     public void ReadSsmParametersUsesParamsFileBeforeDirectEnvironment()
     {
         var tempDir = Directory.CreateTempSubdirectory("cloudops-otel-traces-");

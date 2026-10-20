@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs tf init automation for CloudOps.
 #Wrapper for `terraform init` that reads bucket + state-key config from the
 #repo-root terraform.tfvars and passes it as backend config.
 #
@@ -33,7 +32,6 @@ else
   TF_DIR="$REPO_ROOT"
 fi
 
-#Reads tfvar string.
 read_tfvar_string() {
   local name="$1"
   grep -E "^[[:space:]]*${name}[[:space:]]*=" "$TFVARS_FILE" 2>/dev/null \

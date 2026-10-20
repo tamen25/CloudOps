@@ -1,5 +1,4 @@
 #!/bin/bash
-#This script runs deploy automation for CloudOps.
 #CloudOps Deployment Script
 #Deploy order: bootstrap → networking → eks → ingress → observability → security → database → slo → final sync
 
@@ -40,7 +39,6 @@ get_tfvar_bool() {
     grep "^$1" terraform.tfvars 2>/dev/null | grep -o 'true\|false' | head -1
 }
 
-#Gets tfvar string.
 get_tfvar_string() {
     grep "^$1" terraform.tfvars 2>/dev/null | sed 's/.*= *"\(.*\)".*/\1/' | head -1
 }
@@ -298,7 +296,6 @@ if [ "$ENABLE_SLO" = "true" ]; then
         || echo "")
     END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-    #Gets cw metric.
     get_cw_metric() {
         local METRIC_NAME="$1"
         aws cloudwatch get-metric-statistics \
@@ -348,7 +345,6 @@ except Exception:
         fi
     }
 
-    #Handles fmt rate.
     fmt_rate() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ] || [ "$v" = "N/A" ]; then
@@ -358,7 +354,6 @@ except Exception:
         fi
     }
 
-    #Handles fmt exhaustion.
     fmt_exhaustion() {
         local v="$1"
         if [ -z "$v" ] || [ "$v" = "None" ] || [ "$v" = "null" ] || [ "$v" = "N/A" ]; then

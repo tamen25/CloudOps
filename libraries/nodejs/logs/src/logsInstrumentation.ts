@@ -1,4 +1,3 @@
-// This file contains logs instrumentation logic for logs src.
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
@@ -92,7 +91,6 @@ export function parseResourceAttributes(raw: string | undefined): Record<string,
   }, {});
 }
 
-// Handles auth headers.
 function authHeaders(apiKey: string | undefined): Record<string, string> {
   if (!apiKey) return {};
   return { authorization: `Bearer ${apiKey}` };
@@ -170,7 +168,6 @@ export class LogSampler {
     this.batchMap.set(invocationId, { logs: [logEntry] });
   }
 
-  // Flushes one batch.
   public flushOneBatch(): void {
     diag.debug("LogSampler.flushOneBatch called");
 
@@ -295,7 +292,6 @@ export class LogsInstrumentation {
     }
   }
 
-  // Handles setup exporters.
   private setupExporters(): void {
     diag.debug("LogsInstrumentation.setupExporters called");
 
@@ -383,7 +379,6 @@ export class LogsInstrumentation {
     }
   }
 
-  // Handles merge log attributes.
   private mergeLogAttributes(extraAttributes?: Record<string, any>): Record<string, any> {
     let attributes: Record<string, any> = {};
 
@@ -404,7 +399,6 @@ export class LogsInstrumentation {
     return attributes;
   }
 
-  // Handles active baggage attributes.
   private activeBaggageAttributes(): Record<string, string> {
     const activeBaggage = propagation.getActiveBaggage();
     if (!activeBaggage) return {};
@@ -483,22 +477,18 @@ export class LogsInstrumentation {
     this.sampler.addLog({ invocationId, level, message, optionalParams });
   }
 
-  // Handles info.
   public info(message?: any, ...optionalParams: any[]): void {
     this.log("info", message, ...optionalParams);
   }
 
-  // Handles error.
   public error(message?: any, ...optionalParams: any[]): void {
     this.log("error", message, ...optionalParams);
   }
 
-  // Handles debug.
   public debug(message?: any, ...optionalParams: any[]): void {
     this.log("debug", message, ...optionalParams);
   }
 
-  // Handles warn.
   public warn(message?: any, ...optionalParams: any[]): void {
     this.log("warn", message, ...optionalParams);
   }

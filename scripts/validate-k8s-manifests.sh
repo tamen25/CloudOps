@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs validate Kubernetes manifests automation for CloudOps.
 #Renders apps/order-api/k8s AND apps/storefront/k8s with placeholder values
 #and runs schema validation locally — closes backlog #35 + #79. Mirrors what
 #.github/workflows/app.yml `manifest-validation` does in CI, so app

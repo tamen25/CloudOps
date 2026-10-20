@@ -1,4 +1,3 @@
-// This file contains console activity exporter logic for traces src.
 using System.Diagnostics;
 using OpenTelemetry;
 

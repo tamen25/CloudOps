@@ -1,4 +1,3 @@
-// This file contains main logic for examples smoke.
 // Smoke test consumer for the cloudops-otel-logs Go library. Exercises every
 // public surface and exits 0 when the library is wired correctly.
 package main
@@ -11,7 +10,6 @@ import (
 	logs "github.com/cloudops/otel-logs"
 )
 
-// Runs the main workflow for the requested work.
 func main() {
 	os.Setenv("OTEL_SERVICE_NAME", "smoke-test")
 	os.Setenv("OTEL_LOGS_SAMPLING_RATE", "0") // process every entry

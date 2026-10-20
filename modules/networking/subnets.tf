@@ -1,4 +1,3 @@
-#This file defines subnets settings for CloudOps.
 #Public subnets — ALB and NAT gateways; tagged for external load balancer discovery
 resource "aws_subnet" "public" {
   #checkov:skip=CKV_AWS_130:Public subnets intentionally assign public IPs - required for ALB nodes

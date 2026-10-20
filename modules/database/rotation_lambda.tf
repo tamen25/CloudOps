@@ -1,4 +1,3 @@
-#This file defines rotation lambda settings for CloudOps.
 #Auto-deploys the AWS SAR app `SecretsManagerRDSPostgreSQLRotationSingleUser`
 #when var.rotation_enabled = true and var.rotation_lambda_arn = "".
 #

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs build lambdas automation for CloudOps.
 #Installs production node_modules for every Lambda module out-of-band so
 #`terraform apply` no longer runs `npm install` via a null_resource +
 #local-exec. Closes backlog #20.
@@ -32,7 +31,6 @@ LAMBDA_DIRS=(
   "modules/mesh-events/lambdas/analytics"
 )
 
-#Handles needs install.
 needs_install() {
   local dir="$1"
   [ ! -d "$dir/node_modules" ] && return 0
@@ -43,7 +41,6 @@ needs_install() {
   awk -v a="$pkg_mtime" -v b="$nm_mtime" 'BEGIN { exit !(a > b) }'
 }
 
-#Handles login codeartifact.
 login_codeartifact() {
   if [[ -z "${CODEARTIFACT_DOMAIN:-}" || -z "${CODEARTIFACT_REPOSITORY:-}" ]]; then
     return
@@ -67,7 +64,6 @@ login_codeartifact() {
     --repository "$CODEARTIFACT_REPOSITORY"
 }
 
-#Runs the main workflow for the requested work.
 main() {
   local force="${FORCE_REBUILD:-0}"
   local installed=0 skipped=0

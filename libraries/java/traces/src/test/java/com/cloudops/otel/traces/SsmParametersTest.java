@@ -1,4 +1,3 @@
-// This file contains SSM parameters test logic for OTel traces.
 package com.cloudops.otel.traces;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;

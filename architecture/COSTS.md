@@ -1,4 +1,3 @@
-<!-- This document explains costs for CloudOps. -->
 # CloudOps Infrastructure Cost Breakdown
 
 ## Monthly Cost Estimates (us-east-1)

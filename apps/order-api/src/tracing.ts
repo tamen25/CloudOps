@@ -1,4 +1,3 @@
-// This file contains tracing logic for order API src.
 // Must be the very first import in the process — instruments all subsequently loaded modules.
 
 import { NodeSDK } from '@opentelemetry/sdk-node';

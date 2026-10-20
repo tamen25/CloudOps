@@ -1,4 +1,3 @@
-// This file contains runtime resource attributes logic for traces src.
 namespace CloudOps.Otel.Traces;
 
 public static class RuntimeResourceAttributes
@@ -13,7 +12,6 @@ public static class RuntimeResourceAttributes
     private const string AttrK8sNodeName = "k8s.node.name";
     private const string AttrK8sPodName = "k8s.pod.name";
 
-    // Creates the requested work.
     public static IReadOnlyDictionary<string, string> Create()
     {
         var attributes = ParseResourceAttributes(Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES"));
@@ -90,7 +88,6 @@ public static class RuntimeResourceAttributes
         return attributes;
     }
 
-    // Handles put if present.
     private static void PutIfPresent(Dictionary<string, string> attributes, string key, string? value)
     {
         if (HasValue(value)) attributes[key] = value!;
@@ -114,7 +111,6 @@ public static class RuntimeResourceAttributes
         return values.FirstOrDefault(HasValue) ?? "unknown_service";
     }
 
-    // Handles has value.
     private static bool HasValue(string? value)
     {
         return !string.IsNullOrWhiteSpace(value);

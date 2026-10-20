@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # .NET Libraries
 
 .NET CloudOps telemetry libraries.

@@ -1,4 +1,3 @@
-#This file defines auto remediation settings for CloudOps.
 #Auto-Remediation Lambda
 #
 #Subscribes to the cloudops-security-alerts SNS topic with a HIGH/CRITICAL
@@ -24,7 +23,6 @@ data "archive_file" "auto_remediation" {
   output_path = "${path.module}/lambda_function/auto_remediation.zip"
 }
 
-#Creates the AWS cloudwatch log group resource named auto remediation.
 resource "aws_cloudwatch_log_group" "auto_remediation" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-auto-remediation"
@@ -33,7 +31,6 @@ resource "aws_cloudwatch_log_group" "auto_remediation" {
   tags = var.tags
 }
 
-#Creates the AWS lambda function resource named auto remediation.
 resource "aws_lambda_function" "auto_remediation" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -121,7 +118,6 @@ data "aws_iam_policy_document" "auto_remediation_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named auto remediation.
 resource "aws_iam_role" "auto_remediation" {
   name                 = "${var.project_name}-auto-remediation"
   permissions_boundary = var.permissions_boundary_arn
@@ -131,13 +127,11 @@ resource "aws_iam_role" "auto_remediation" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named auto remediation basic execution.
 resource "aws_iam_role_policy_attachment" "auto_remediation_basic_execution" {
   role       = aws_iam_role.auto_remediation.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-#Reads the AWS IAM policy document data source named auto remediation permissions.
 data "aws_iam_policy_document" "auto_remediation_permissions" {
   #checkov:skip=CKV_AWS_356:Auto-remediation Lambda requires broad read access to scan AWS services
   #checkov:skip=CKV_AWS_111:Auto-remediation Lambda requires write access to remediate findings
@@ -248,7 +242,6 @@ data "aws_iam_policy_document" "auto_remediation_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named auto remediation permissions.
 resource "aws_iam_role_policy" "auto_remediation_permissions" {
   name   = "${var.project_name}-auto-remediation-permissions"
   role   = aws_iam_role.auto_remediation.id

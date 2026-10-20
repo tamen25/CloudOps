@@ -1,4 +1,3 @@
-<!-- This document explains 020 Next.js on EKS over Lambda@Edge for CloudOps. -->
 # ADR 020 — Next.js Standalone on EKS over Lambda@Edge / OpenNext
 
 **Status:** Accepted

@@ -1,4 +1,3 @@
-// This file contains tracer logic for traces src.
 #include "cloudops/otel/detail/tracer.hpp"
 
 #include <chrono>
@@ -14,13 +13,11 @@ namespace cloudops::otel::traces {
 
 namespace {
 
-// Returns the current wall-clock time in nanoseconds.
 long long now_nano() {
   using namespace std::chrono;
   return duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-// Returns a thread-local random engine seeded once per thread.
 std::mt19937_64& rng() {
   static thread_local std::mt19937_64 engine{std::random_device{}()};
   return engine;
@@ -130,7 +127,6 @@ Span::Span(TraceInstrumentation* owner, std::string trace_id, std::string span_i
       sampled_(sampled),
       start_nano_(now_nano()) {}
 
-// Sets a single attribute on the span.
 void Span::set_attribute(const std::string& key, const std::string& value) {
   attributes_[key] = value;
 }
@@ -256,7 +252,6 @@ void TraceInstrumentation::record_error(const std::string& message,
   target->set_status_error();
 }
 
-// Sets the active span context.
 void TraceInstrumentation::set_active_context(const std::shared_ptr<Span>& span) {
   if (!span) return;
   std::lock_guard<std::mutex> lock(mu_);
@@ -348,7 +343,6 @@ void TraceInstrumentation::export_spans() {
   transport(url, headers, build_otlp_payload(pending));
 }
 
-// Builds an OTLP/HTTP JSON traces payload.
 std::string TraceInstrumentation::build_otlp_payload(const std::vector<Span>& spans) const {
   std::ostringstream os;
   os << "{\"resourceSpans\":[{\"resource\":{\"attributes\":[";
@@ -374,7 +368,6 @@ std::string TraceInstrumentation::build_otlp_payload(const std::vector<Span>& sp
   return os.str();
 }
 
-// Handles resource attributes.
 const std::map<std::string, std::string>& TraceInstrumentation::resource_attributes() const noexcept {
   return resource_attributes_;
 }
@@ -385,7 +378,6 @@ std::shared_ptr<Span> TraceInstrumentation::active_span() const noexcept {
   return current_span_;
 }
 
-// Returns the parent trace/span ids captured by extract_trace_attrs.
 std::pair<std::string, std::string> TraceInstrumentation::propagation_context() const {
   std::lock_guard<std::mutex> lock(mu_);
   return {propagation_trace_id_, propagation_span_id_};

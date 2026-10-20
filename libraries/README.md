@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # CloudOps Client Libraries
 
 Internal client libraries live here before they are published to AWS

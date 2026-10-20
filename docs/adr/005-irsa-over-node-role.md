@@ -1,4 +1,3 @@
-<!-- This document explains 005 irsa over node role for CloudOps. -->
 # ADR 005 — IRSA over Node-Level IAM Roles
 
 **Status:** Accepted

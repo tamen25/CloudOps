@@ -1,4 +1,3 @@
-// This file contains index logic for SLO lambda function.
 'use strict';
 
 const { CloudWatchClient, PutMetricDataCommand } = require('@aws-sdk/client-cloudwatch');
@@ -30,7 +29,6 @@ const smClient  = new SecretsManagerClient({ region: REGION });
 
 let cachedGrafanaApiKey = null;
 
-// Gets grafana API key.
 async function getGrafanaApiKey() {
   if (cachedGrafanaApiKey !== null) return cachedGrafanaApiKey;
   if (!GRAFANA_API_KEY_SECRET_ARN) return null;

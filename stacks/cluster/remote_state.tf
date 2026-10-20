@@ -1,4 +1,3 @@
-#This file defines remote state settings for CloudOps.
 #Read foundation outputs (closes backlog #16). `STACK=cluster
 #scripts/tf-init.sh` writes ignored backend.auto.tfvars values for the
 #foundation state bucket/key. They can also be supplied explicitly via

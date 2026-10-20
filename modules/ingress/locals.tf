@@ -1,4 +1,3 @@
-#This file defines locals settings for CloudOps.
 locals {
   name    = "${var.name_prefix}-${var.environment}"
   zone_id = var.zone_id

@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #IRSA roles for the observability data planes.
 #When buckets_kms_cmk is on, each role gets kms:Encrypt/Decrypt scoped to its
 #domain CMK so the helm chart can read/write encrypted objects.
@@ -27,7 +26,6 @@ resource "aws_iam_role" "loki" {
   tags = merge(local.common_tags, { Name = "${local.name}-loki-irsa" })
 }
 
-#Creates the AWS IAM role policy resource named loki.
 resource "aws_iam_role_policy" "loki" {
   name = "loki-s3-access"
   role = aws_iam_role.loki.id
@@ -82,7 +80,6 @@ resource "aws_iam_role" "tempo" {
   tags = merge(local.common_tags, { Name = "${local.name}-tempo-irsa" })
 }
 
-#Creates the AWS IAM role policy resource named tempo.
 resource "aws_iam_role_policy" "tempo" {
   name = "tempo-s3-access"
   role = aws_iam_role.tempo.id

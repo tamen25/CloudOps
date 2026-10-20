@@ -1,4 +1,3 @@
-#This file defines route tables settings for CloudOps.
 #Route table for public subnets
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id

@@ -1,5 +1,4 @@
 #!/bin/bash
-#This script runs build and push automation for CloudOps.
 #Build and push Order API to ECR
 #Called by scripts/deploy.sh before terraform apply when compute module is enabled
 

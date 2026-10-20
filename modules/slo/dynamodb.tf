@@ -1,4 +1,3 @@
-#This file defines dynamodb settings for CloudOps.
 #DynamoDB table for SLO error budget historical snapshots
 #
 #Schema:

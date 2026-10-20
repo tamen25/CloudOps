@@ -1,4 +1,3 @@
-#This file defines cluster settings for CloudOps.
 #Requires hashicorp/tls ~> 4.0 in root providers.tf
 
 #EKS control plane.

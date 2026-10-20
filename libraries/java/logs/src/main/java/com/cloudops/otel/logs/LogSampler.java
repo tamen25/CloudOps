@@ -1,4 +1,3 @@
-// This file contains log sampler logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import java.util.Iterator;
