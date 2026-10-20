@@ -55,7 +55,8 @@ pulls from public registries, ~10 GB → ~$0.45), interface-endpoint data
 ($0.01/GB), CloudWatch Logs for the EKS control plane, and data transfer out
 through the port-forwards (Argus queries, well under 1 GB → < $0.10).
 
-Not hourly but worth knowing: the Route 53 hosted zone the foundation stack
+Images: about 2 GB across ten ECR repositories, $0.10/GB-month, deleted with
+the foundation stack. Not hourly but worth knowing: the Route 53 hosted zone the foundation stack
 creates costs $0.50 for the month unless it is deleted within 12 hours; KMS
 keys cost $1/month each, prorated.
 
@@ -63,11 +64,13 @@ keys cost $1/month each, prorated.
 
 | Phase | Time |
 |---|---|
-| Apply (foundation, cluster ~15 min, platform) | ~40 min |
+| Apply foundation and cluster (~15 min for EKS) | ~25 min |
+| Build and push the mesh images (`scripts/build-and-push.sh`), set the printed `mesh_*_image` lines in tfvars | ~15 min |
+| Apply platform | ~15 min |
 | Warm-up: services serve traffic until their request metrics exist (Argus gotcha: verify on a warm cluster) | ~30 min |
 | Argus score, spend and backtest; bench scenarios | 2–4 h |
 | Destroy workflow | ~25 min |
-| **Total** | **~4–6 h** |
+| **Total** | **~4.5–6.5 h** |
 
 **≈ $3–4 in hourly charges + ≈ $1 usage ≈ $4–5 per session.**
 

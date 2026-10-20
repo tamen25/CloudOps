@@ -58,6 +58,17 @@ module "dns" {
   tags        = local.common_tags
 }
 
+# Repositories for the images the pipelines and scripts/build-and-push.sh
+# build. Empty repositories cost nothing.
+module "ecr" {
+  count  = var.destroy_all ? 0 : 1
+  source = "../../modules/ecr"
+
+  name_prefix  = var.project_name
+  repositories = var.ecr_repositories
+  tags         = local.common_tags
+}
+
 #Wires the codeartifact module into this stack.
 module "codeartifact" {
   count  = var.enable_codeartifact ? 1 : 0

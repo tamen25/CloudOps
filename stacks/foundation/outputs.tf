@@ -137,3 +137,8 @@ output "permissions_boundary_arn" {
   description = "Workload permissions boundary, put on every role the cluster and platform stacks create (null while it is off)"
   value       = local.permissions_boundary_arn
 }
+
+output "ecr_repository_urls" {
+  description = "ECR repository URL by image name; order-api's is the ECR_REPOSITORY_URL secret"
+  value       = var.destroy_all ? {} : module.ecr[0].repository_urls
+}

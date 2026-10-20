@@ -66,6 +66,16 @@ variable "enable_backup" {
   default = false
 }
 
+variable "ecr_repositories" {
+  description = "Images CloudOps builds; one ECR repository each, named <project_name>/<image>"
+  type        = list(string)
+  default = [
+    "order-api", "storefront",
+    "api-gateway", "pricing", "inventory", "fraud", "payment", "ledger",
+    "projection-worker", "loadgen",
+  ]
+}
+
 variable "enable_codeartifact" {
   type    = bool
   default = false

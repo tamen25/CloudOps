@@ -11,9 +11,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 
 ## P1 — correctness, supply chain, process
 
-- [ ] **F02** — Terraform creates no ECR repository for order-api or the
-  mesh services, so app.yml pushes to a repository nothing creates. Add
-  them (scan on push, immutable tags) and an output for the URL.
 - [ ] **D02** — cosign-installer v4 installs cosign v3, which signs in the
   new bundle format. Whether the in-cluster cosign-gatekeeper-provider
   verifies it is unchecked; until then the installer pins cosign v2.
@@ -71,6 +68,10 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **F02** — ECR repositories for every image in the foundation stack
+  (immutable tags, scan on push, lifecycle), and a working
+  `scripts/build-and-push.sh` (#42).
 
 - [x] **A01** — the root Terraform layout retired; the stacks are the only
   one (ADR 028, #38).

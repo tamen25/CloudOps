@@ -1,157 +1,73 @@
-#!/bin/bash
-#Build and push Order API to ECR
-#Called by scripts/deploy.sh before terraform apply when compute module is enabled
+#!/usr/bin/env bash
+# Builds CloudOps images and pushes them to the foundation stack's ECR
+# repositories (modules/ecr), tagged with the commit they were built from.
+# Prints the tfvars lines that point the platform stack at them.
+#
+# Usage: scripts/build-and-push.sh [image ...]     (default: every repository)
+#   e.g. scripts/build-and-push.sh api-gateway pricing
+#
+# Needs: docker, aws, jq, and the foundation stack applied (STACK=foundation
+# scripts/tf-init.sh first on a fresh checkout).
+set -euo pipefail
 
-set -e
+cd "$(dirname "$0")/.."
 
-echo "=========================================="
-echo "Building and Pushing Order API to ECR"
-echo "=========================================="
+for tool in docker aws jq terraform git; do
+  command -v "$tool" >/dev/null || { echo "Error: $tool not found." >&2; exit 1; }
+done
 
-#Get configuration from terraform.tfvars
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-TFVARS_FILE="$ROOT_DIR/terraform.tfvars"
+# Tags are immutable and name a commit, so the tree must match it.
+if [ -n "$(git status --porcelain -- apps)" ]; then
+  echo "Error: uncommitted changes under apps/. Commit them so the tag names what was built." >&2
+  exit 1
+fi
+TAG=$(git rev-parse --short=12 HEAD)
 
-if [ ! -f "$TFVARS_FILE" ]; then
-    echo "Error: terraform.tfvars not found at $TFVARS_FILE"
-    exit 1
+URLS=$(terraform -chdir=stacks/foundation output -json ecr_repository_urls)
+if [ "$(jq 'length' <<<"$URLS")" -eq 0 ]; then
+  echo "Error: no ECR repositories in the foundation stack's outputs. Apply it first." >&2
+  exit 1
 fi
 
-#Extract variables
-REGION=$(grep '^region' "$TFVARS_FILE" | sed 's/.*=\s*"\(.*\)".*/\1/')
-PROJECT_NAME=$(grep '^project_name' "$TFVARS_FILE" | sed 's/.*=\s*"\(.*\)".*/\1/')
-ENVIRONMENT=$(grep '^environment' "$TFVARS_FILE" | sed 's/.*=\s*"\(.*\)".*/\1/')
-ENABLE_COMPUTE=$(grep '^enable_compute' "$TFVARS_FILE" | sed 's/.*=\s*\([a-z]*\).*/\1/')
-
-#Check if compute is enabled
-if [ "$ENABLE_COMPUTE" != "true" ]; then
-    echo "Compute module is disabled. Skipping Docker build and push."
-    exit 0
+if [ "$#" -gt 0 ]; then
+  IMAGES=("$@")
+else
+  mapfile -t IMAGES < <(jq -r 'keys[]' <<<"$URLS")
 fi
 
-echo "Configuration:"
-echo "  Project:     $PROJECT_NAME"
-echo "  Environment: $ENVIRONMENT"
-echo "  Region:      $REGION"
-echo ""
+REGISTRY=$(jq -r 'first(.[])' <<<"$URLS" | cut -d/ -f1)
+REGION=$(cut -d. -f4 <<<"$REGISTRY")
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 
-#Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "Error: Docker is not installed"
-    exit 1
+# The platform stack's variable for each mesh image.
+declare -A TFVAR=(
+  [api-gateway]=mesh_gateway_image [pricing]=mesh_pricing_image
+  [inventory]=mesh_inventory_image [fraud]=mesh_fraud_image
+  [payment]=mesh_payment_image [ledger]=mesh_ledger_image
+  [projection-worker]=mesh_projection_image [loadgen]=mesh_loadgen_image
+)
+
+LINES=()
+for image in "${IMAGES[@]}"; do
+  url=$(jq -r --arg i "$image" '.[$i] // empty' <<<"$URLS")
+  [ -n "$url" ] || { echo "Error: no repository for '$image'." >&2; exit 1; }
+  [ -f "apps/$image/Dockerfile" ] || { echo "Error: apps/$image/Dockerfile not found." >&2; exit 1; }
+
+  repo=${url#*/}
+  if aws ecr describe-images --region "$REGION" --repository-name "$repo" --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
+    echo "$image:$TAG is already in ECR (tags are immutable); not rebuilt."
+  else
+    # EKS nodes are x86_64 (t3); build for them whatever this machine is.
+    docker build --platform linux/amd64 -t "$url:$TAG" "apps/$image"
+    docker push "$url:$TAG"
+  fi
+  if [ -n "${TFVAR[$image]:-}" ]; then
+    LINES+=("${TFVAR[$image]} = \"$url:$TAG\"")
+  fi
+done
+
+if [ "${#LINES[@]}" -gt 0 ]; then
+  echo
+  echo "# terraform.tfvars, for the platform stack:"
+  printf '%s\n' "${LINES[@]}"
 fi
-
-#Check if AWS CLI is installed
-if ! command -v aws &> /dev/null; then
-    echo "Error: AWS CLI is not installed"
-    exit 1
-fi
-
-#Get ECR repository name
-ECR_REPO_NAME="${PROJECT_NAME}-${ENVIRONMENT}-app"
-
-#Check if ECR repository exists
-echo "Checking if ECR repository exists: $ECR_REPO_NAME"
-if ! aws ecr describe-repositories --repository-names "$ECR_REPO_NAME" --region "$REGION" &> /dev/null; then
-    echo "Warning: ECR repository '$ECR_REPO_NAME' does not exist yet."
-    echo "This is expected on first deployment. Terraform will create it."
-    echo "Please run this script again after 'terraform apply' creates the ECR repository."
-    exit 0
-fi
-
-#Get ECR repository URI
-ECR_URI=$(aws ecr describe-repositories \
-    --repository-names "$ECR_REPO_NAME" \
-    --region "$REGION" \
-    --query 'repositories[0].repositoryUri' \
-    --output text)
-
-echo "ECR Repository: $ECR_URI"
-echo ""
-
-#Generate version tag (timestamp-based)
-VERSION_TAG="v$(date +%Y%m%d-%H%M%S)"
-echo "Image Version: $VERSION_TAG"
-echo ""
-
-#Login to ECR
-echo "Logging in to ECR..."
-aws ecr get-login-password --region "$REGION" | \
-    docker login --username AWS --password-stdin "$ECR_URI" > /dev/null 2>&1
-
-if [ $? -ne 0 ]; then
-    echo "Error: Failed to login to ECR"
-    exit 1
-fi
-
-echo "ECR login successful"
-echo ""
-
-#Build Docker image
-APP_DIR="$ROOT_DIR/apps/order-api"
-
-if [ ! -d "$APP_DIR" ]; then
-    echo "Error: Order API directory not found at $APP_DIR"
-    exit 1
-fi
-
-echo "Building Docker image..."
-echo "  Source: $APP_DIR"
-echo "  Tag: order-api:$VERSION_TAG"
-echo ""
-
-cd "$APP_DIR"
-docker build -t "order-api:$VERSION_TAG" -t "order-api:latest" .
-
-if [ $? -ne 0 ]; then
-    echo "Error: Docker build failed"
-    exit 1
-fi
-
-echo ""
-echo "Docker build successful"
-echo ""
-
-#Tag for ECR
-echo "Tagging image for ECR..."
-docker tag "order-api:$VERSION_TAG" "$ECR_URI:$VERSION_TAG"
-docker tag "order-api:$VERSION_TAG" "$ECR_URI:latest"
-
-#Push to ECR
-echo "Pushing to ECR..."
-echo "  $ECR_URI:$VERSION_TAG"
-echo "  $ECR_URI:latest"
-echo ""
-
-docker push "$ECR_URI:$VERSION_TAG"
-docker push "$ECR_URI:latest"
-
-if [ $? -ne 0 ]; then
-    echo "Error: Docker push failed"
-    exit 1
-fi
-
-echo ""
-echo "=========================================="
-echo "Build and Push Complete!"
-echo "=========================================="
-echo "Image: $ECR_URI:$VERSION_TAG"
-echo ""
-
-#Update terraform.tfvars with new image
-echo "Updating terraform.tfvars with new image..."
-
-#Create temporary file
-TMP_FILE=$(mktemp)
-
-#Update container_image line
-sed "s|^container_image = .*|container_image = \"$ECR_URI:$VERSION_TAG\"|" "$TFVARS_FILE" > "$TMP_FILE"
-
-#Replace original file
-mv "$TMP_FILE" "$TFVARS_FILE"
-
-echo "Updated container_image in terraform.tfvars"
-echo ""
-echo "Next: Terraform will deploy this image to ECS"
-echo ""
