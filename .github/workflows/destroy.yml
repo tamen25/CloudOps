@@ -48,6 +48,9 @@ env:
 
 jobs:
   destroy:
+    # Always GitHub-hosted: destroying the platform stack removes the in-VPC
+    # runners, and with them the job. With a private EKS endpoint, open
+    # emergency access first (docs/runbooks/ci-runner.md).
     runs-on: ubuntu-latest
     environment: production  # requires manual approval from configured reviewers
     steps:

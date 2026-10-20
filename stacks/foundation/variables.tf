@@ -72,7 +72,7 @@ variable "ecr_repositories" {
   default = [
     "order-api", "storefront",
     "api-gateway", "pricing", "inventory", "fraud", "payment", "ledger",
-    "projection-worker", "loadgen",
+    "projection-worker", "loadgen", "ci-runner",
   ]
 }
 

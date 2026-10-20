@@ -777,3 +777,20 @@ module "chaos_mesh" {
   # The Gatekeeper exemption must exist before the privileged daemon starts.
   depends_on = [module.security]
 }
+
+# In-VPC GitHub Actions runners (ADR 025): cluster jobs keep working when the
+# EKS endpoint is private. Workflows opt in through the DEPLOY_RUNNER
+# repository variable; docs/runbooks/ci-runner.md.
+module "ci_runner" {
+  count  = var.enable_ci_runner ? 1 : 0
+  source = "../../modules/ci-runner"
+
+  github_config_url     = "https://github.com/${var.security_github_repo}"
+  github_app_secret_arn = var.ci_runner_github_app_secret_arn
+  runner_image          = var.ci_runner_image
+  max_runners           = var.ci_runner_max_runners
+
+  # Gatekeeper's no-root constraint must be in place before the pods start,
+  # so a pod spec that breaks it fails here rather than admitting silently.
+  depends_on = [module.security]
+}

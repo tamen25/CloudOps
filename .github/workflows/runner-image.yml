@@ -1,0 +1,130 @@
+# Runner image for the in-VPC runner set (ci/runner/Dockerfile, ADR 025).
+#
+# Runs on GitHub-hosted runners: rebuilding the image must not depend on the
+# runners it builds. PRs build without pushing, to prove the Dockerfile and
+# its pinned checksums. Pushes to main and manual runs push to the
+# foundation stack's ci-runner ECR repository, scan, and print the
+# digest-pinned reference to set as ci_runner_image in the platform tfvars
+# (docs/runbooks/ci-runner.md).
+#
+# Pushes to main run only when the AUTO_RUN_ON_MERGE repository variable is
+# true. PRs and manual runs always do.
+
+name: Runner Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ci/runner/**'
+      - '.github/workflows/runner-image.yml'
+  pull_request:
+    paths:
+      - 'ci/runner/**'
+      - '.github/workflows/runner-image.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment whose ECR repository receives the image'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, staging, prod]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build (no push)
+        run: docker build -t ci-runner:pr ci/runner
+
+      - name: Tools are on the path
+        run: docker run --rm --entrypoint bash ci-runner:pr -c 'aws --version && kubectl version --client && envsubst --version'
+
+  build-and-push:
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name != 'pull_request' && (github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true')
+    runs-on: ubuntu-latest
+    environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
+    permissions:
+      id-token: write   # AWS credentials
+      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-runner-image
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+
+      - name: Find the ECR repository
+        run: |
+          bash scripts/write-ci-tfvars.sh
+          STACKS=foundation bash scripts/terraform-stacks.sh init
+          REPO=$(terraform -chdir=stacks/foundation output -json ecr_repository_urls | jq -r '."ci-runner" // empty')
+          if [ -z "$REPO" ]; then
+            echo "::error::no ci-runner repository in the foundation stack's ecr_repository_urls"
+            exit 1
+          fi
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Only the commit tag is pushed (tags are immutable in the repository);
+      # the runner set pins the digest.
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ci/runner
+          push: true
+          tags: ${{ env.REPO }}:${{ github.sha }}
+
+      - name: Scan image (CRITICAL fails the job)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.REPO }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Reference for the platform tfvars
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Runner image"
+            echo
+            echo "Set in the platform stack's tfvars, then apply:"
+            echo
+            echo '```hcl'
+            echo "ci_runner_image = \"${REPO}@${DIGEST}\""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

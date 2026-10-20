@@ -297,9 +297,6 @@ jobs:
       #https://github.com/${{ github.repository }}/.github/workflows/app.yml@refs/heads/main
       #─────────────────────────────────────────────────────────────────────────
 
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
-
       - name: Install Cosign
         #Pinned (closes backlog #39).
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -689,7 +686,9 @@ jobs:
   #only images signed by this workflow are deployed to the cluster.
   #─────────────────────────────────────────────────────────────────────────────
   deploy:
-    runs-on: ubuntu-latest
+    # In-VPC runner when DEPLOY_RUNNER is set (ADR 025,
+    # docs/runbooks/ci-runner.md); GitHub-hosted otherwise.
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     #build-and-push (and image-scan/budget-check) are skipped on promotion;
     #`!cancelled() && !failure()` lets deploy run when those upstream
     #jobs were skipped but lets a real failure still block.

@@ -238,7 +238,9 @@ jobs:
   #Job 3: Terraform plan — all triggers
   #─────────────────────────────────────────────────────────────────────────────
   plan:
-    runs-on: ubuntu-latest
+    # In-VPC runner when DEPLOY_RUNNER is set (ADR 025,
+    # docs/runbooks/ci-runner.md); GitHub-hosted otherwise.
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     needs: quality
     if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request')
     permissions:
@@ -409,7 +411,9 @@ jobs:
   #platform). After the apply, key outputs are posted to the step summary.
   #─────────────────────────────────────────────────────────────────────────────
   apply:
-    runs-on: ubuntu-latest
+    # In-VPC runner when DEPLOY_RUNNER is set (ADR 025,
+    # docs/runbooks/ci-runner.md); GitHub-hosted otherwise.
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     needs: approve
     if: vars.AWS_DEPLOY_ENABLED == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}

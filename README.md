@@ -147,6 +147,7 @@ Required status checks: `quality`, `plan` — blocks merges if Terraform fmt/val
 | **Destroy** (`destroy.yml`) | `workflow_dispatch` only | Double-gated: `production` env approval + typed confirmation `destroy-everything` → empty the project's buckets → destroy platform, the cluster's load balancers, cluster, foundation → state bucket |
 | **Drift Detection** (`drift-detection.yml`) | Nightly 02:00 UTC | `terraform plan -detailed-exitcode` → opens GitHub issue on drift, closes it when resolved |
 | **EKS Emergency Access** (`eks-emergency-access.yml`) | `workflow_dispatch` only | Break-glass: widens private EKS endpoint to a single CIDR via AWS API (state stays private) |
+| **Runner Image** (`runner-image.yml`) | Push to `main` on `ci/runner/**` (gated) · PR · `workflow_dispatch` | PR: build only → with `AWS_DEPLOY_ENABLED`: push the in-VPC runner image to ECR → Trivy scan → prints the digest for `ci_runner_image` |
 
 #### Toggle: auto-run on merge to `main`
 
@@ -166,6 +167,15 @@ When disabled, the entry jobs (`quality` in infra, `test` in app, the six
 `*-check` jobs + `publish-plan` in libraries) skip on push, and every
 downstream job cascade-skips through `needs:`. PR runs and manual dispatches
 are unaffected. This lets every promotion to dev/staging/prod be deliberate.
+
+#### Toggle: in-VPC runners for cluster jobs
+
+With a private EKS endpoint, GitHub-hosted runners cannot reach the cluster.
+The jobs that need it (app and storefront `deploy`, infra `plan` and `apply`,
+`detect-drift`) run on `${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}`. Set
+`DEPLOY_RUNNER` to `cloudops-vpc` once the ARC runners are up
+(`enable_ci_runner`, [docs/runbooks/ci-runner.md](docs/runbooks/ci-runner.md));
+unset, everything runs on GitHub-hosted runners.
 
 ---
 
