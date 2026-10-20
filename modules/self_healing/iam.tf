@@ -124,7 +124,6 @@ data "aws_iam_policy_document" "self_healing" {
       "rds:DescribeDBInstances",
       "rds:DescribeDBParameters",
       "rds:DescribeDBParameterGroups",
-      "rds:RebootDBInstance",
     ]
     resources = var.rds_instance_id != "" ? [
       "arn:aws:rds:${var.region}:${var.aws_account_id}:db:${var.rds_instance_id}",

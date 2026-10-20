@@ -3,7 +3,7 @@
 
 const {
   S3Client,
-  PutBucketPublicAccessBlockCommand,
+  PutPublicAccessBlockCommand,
   PutBucketEncryptionCommand,
 } = require('@aws-sdk/client-s3');
 const {
@@ -283,12 +283,25 @@ const ISSUE_HANDLERS = {
 
 // ── Auto-remediation handlers ─────────────────────────────────────────────────
 
+// recordRemediation marks the finding remediated and counts it, but only when
+// the change was made. In DRY_RUN nothing was changed, so the finding stays
+// open and is not counted; the log says what would have been recorded.
+async function recordRemediation(finding, remediationAction) {
+  if (DRY_RUN) {
+    log('info', { action: 'dry_run_not_recorded', checkName: finding.checkName, resource: finding.resource, remediationAction });
+    return;
+  }
+  const item = await findOpenFinding(finding.checkName, finding.resource);
+  await markRemediated(item, remediationAction);
+  await publishMetric('AutoRemediations', finding.severity);
+}
+
 async function remediateS3PublicAccess(finding) {
   const bucket = finding.resource.replace('s3:::', '');
   log('info', { action: 'remediate_s3_public_access', bucket });
 
   if (!DRY_RUN) {
-    await s3.send(new PutBucketPublicAccessBlockCommand({
+    await s3.send(new PutPublicAccessBlockCommand({
       Bucket: bucket,
       PublicAccessBlockConfiguration: {
         BlockPublicAcls:       true,
@@ -299,9 +312,7 @@ async function remediateS3PublicAccess(finding) {
     }));
   }
 
-  const item = await findOpenFinding(finding.checkName, finding.resource);
-  await markRemediated(item, 'PutBucketPublicAccessBlock — all 4 flags set to true');
-  await publishMetric('AutoRemediations', finding.severity);
+  await recordRemediation(finding, 'PutBucketPublicAccessBlock — all 4 flags set to true');
 
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, result: 'success' });
 }
@@ -323,9 +334,7 @@ async function remediateS3Encryption(finding) {
     }));
   }
 
-  const item = await findOpenFinding(finding.checkName, finding.resource);
-  await markRemediated(item, 'PutBucketEncryption — AES256 default encryption enabled');
-  await publishMetric('AutoRemediations', finding.severity);
+  await recordRemediation(finding, 'PutBucketEncryption — AES256 default encryption enabled');
 
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, result: 'success' });
 }
@@ -368,9 +377,7 @@ async function remediateSGIngress(finding, port) {
     }));
   }
 
-  const item = await findOpenFinding(finding.checkName, finding.resource);
-  await markRemediated(item, `RevokeSecurityGroupIngress — removed open ingress on port ${port} from 0.0.0.0/0`);
-  await publishMetric('AutoRemediations', finding.severity);
+  await recordRemediation(finding, `RevokeSecurityGroupIngress — removed open ingress on port ${port} from 0.0.0.0/0`);
 
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, port, result: 'success' });
 }
@@ -394,9 +401,7 @@ async function remediateRDSDeletionProtection(finding) {
     }));
   }
 
-  const item = await findOpenFinding(finding.checkName, finding.resource);
-  await markRemediated(item, 'ModifyDBInstance — DeletionProtection set to true');
-  await publishMetric('AutoRemediations', finding.severity);
+  await recordRemediation(finding, 'ModifyDBInstance — DeletionProtection set to true');
 
   log('info', { action: 'remediated', checkName: finding.checkName, resource: finding.resource, result: 'success' });
 }

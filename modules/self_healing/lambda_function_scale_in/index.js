@@ -14,6 +14,7 @@ const EKS_CLUSTER     = process.env.EKS_CLUSTER_NAME || '';
 const BASELINE_PODS   = parseInt(process.env.BASELINE_MIN_PODS || '2', 10);
 const ENVIRONMENT     = process.env.ENVIRONMENT      || 'dev';
 const DRY_RUN         = process.env.DRY_RUN === 'true';
+const K8S_NAME        = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/; // DNS-1123 label
 
 const eks = new EKSClient({ region: REGION });
 const cw  = new CloudWatchClient({ region: REGION });
@@ -42,7 +43,17 @@ async function getEKSBearerToken(clusterName) {
 exports.handler = async function handler(event) {
   const namespace   = event.namespace   || 'cloudops';
   const hpaName     = event.hpaName     || 'order-api';
-  const targetMin   = event.targetMin   || BASELINE_PODS;
+  const targetMin   = event.targetMin   ?? BASELINE_PODS;
+
+  // The event names what to patch, and the names go into the API URL: only
+  // Kubernetes object names (so "../x" cannot reach another object), and a
+  // minimum of at least one pod (0 would scale the service away).
+  if (!K8S_NAME.test(namespace) || !K8S_NAME.test(hpaName)) {
+    throw new Error(`invalid namespace or HPA name: ${JSON.stringify({ namespace, hpaName })}`);
+  }
+  if (!Number.isInteger(targetMin) || targetMin < 1) {
+    throw new Error(`targetMin must be a positive integer, got ${JSON.stringify(targetMin)}`);
+  }
 
   log('info', { action: 'scale_in_start', namespace, hpaName, targetMin });
 
