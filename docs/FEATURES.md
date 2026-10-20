@@ -555,13 +555,15 @@ Everything else is destroyed nightly and rebuilt by pipeline.
 - 023 — Observability KMS signal separation.
 - 024 — HMAC 5-minute replay window accepted.
 - 025 — Self-hosted runner: ARC-on-EKS chosen, EC2/managed rejected.
+- 029 — internal request signature is HMAC-SHA256.
+- 030 — east-west mTLS: Istio ambient proposed, decision pending.
 
 ---
 
 ## 15. Known open gaps (`BACKLOG.md` is the source of truth)
 
 - #16 — Layered stack migration: runbook needs validation on a live env.
-- #9 — Service mesh (Cilium / mTLS east-west) missing.
+- #9 (O01) — east-west mTLS: decision pending (ADR 030).
 - #76 (impl) — ARC-on-EKS module + runner image + workflow migration not
   yet built.
 

@@ -23,7 +23,9 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 
 ## P2 — carried over from the old backlog
 
-- [ ] **O01** (#9) — Service mesh mTLS east-west (Cilium) is missing.
+- [ ] **O01** (#9) — East-west mTLS: decide ADR 030. Assessed: Istio
+  ambient (no CNI swap, no sidecars) after the first AWS run, or accept
+  the risk (NetworkPolicy and request signatures only) and close.
 - [ ] **O02** (#76) — Self-hosted runners in the VPC (ARC on EKS): module,
   runner image and workflow migration not built (ADR 025).
 
