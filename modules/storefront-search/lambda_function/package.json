@@ -5,6 +5,9 @@
   "description": "search-gateway Lambda — Cognito JWT verify + LRU cache + HMAC sign to order-api _internal/search",
   "main": "index.mjs",
   "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.511.0"
   }
