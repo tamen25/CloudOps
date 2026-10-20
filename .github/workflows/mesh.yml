@@ -1,8 +1,9 @@
 # Mesh pipeline — per-service build/test/lint/scan for the polyglot mesh.
 # Each new mesh service is one row in the matrix. Test/lint/build run on PRs
-# and (when AUTO_RUN_ON_MERGE=true) on push; image build + push to ECR is a
-# commented activation block until per-service ECR repos + IRSA land
-# (mirrors the storefront.yml skeleton pattern, backlog #84/#121).
+# and (when AUTO_RUN_ON_MERGE=true) on push. With AWS_DEPLOY_ENABLED, pushes
+# to main and manual runs then build every service image, push it to its ECR
+# repository and print the mesh_*_image lines for the platform stack's
+# tfvars (image-build.yml); applying the platform stack deploys them.
 #
 # Toolchains pinned to match local dev: Node 22, Go 1.22+, Python 3.12,
 # Java 17.
@@ -35,7 +36,14 @@ on:
       - 'modules/mesh/**'
       - 'modules/mesh-events/**'
       - '.github/workflows/mesh.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment whose ECR repositories receive the images'
+        required: true
+        type: choice
+        default: dev
+        options: [dev, staging, prod]
 
 permissions:
   contents: read
@@ -77,9 +85,8 @@ jobs:
         run: npm run contract-check
       - name: Build
         run: npm run build
-      - name: Audit (high+)
+      - name: Audit (high+, allowlist in .github/npm-audit-allowlist.json)
         run: npm run audit
-        continue-on-error: true
 
   # ── Go services ──────────────────────────────────────────────────────────--
   go:
@@ -224,30 +231,27 @@ jobs:
           ignore-unfixed: true
           exit-code: '0'
 
-  # ── Image build + push (ACTIVATION PENDING) ──────────────────────────────---
-  # Activate when each mesh service has an ECR repository + the deploy job sets
-  # mesh_*_image from the pushed digest. Until then, image build/push lives in
-  # this commented block (same pattern as storefront.yml build-and-push, #121).
-  #
-  # build-and-push:
-  #   needs: [node, go]
-  #   if: github.event_name != 'pull_request'
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     id-token: write   # OIDC to assume AWS_GITHUB_ACTIONS_ROLE_ARN
-  #   strategy:
-  #     matrix:
-  #       include:
-  #         - { service: api-gateway, context: apps/api-gateway }
-  #         - { service: pricing,     context: apps/pricing }
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
-  #     - uses: aws-actions/amazon-ecr-login@v2
-  #     - run: |
-  #         docker build -t "$ECR/${{ matrix.service }}:$GITHUB_SHA" ${{ matrix.context }}
-  #         docker push "$ECR/${{ matrix.service }}:$GITHUB_SHA"
+  # ── Images: build, push, scan; print the tfvars lines ─────────────────────
+  images:
+    needs: [node, go, python, java]
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name != 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: api-gateway,       tfvar: mesh_gateway_image }
+          - { image: pricing,           tfvar: mesh_pricing_image }
+          - { image: inventory,         tfvar: mesh_inventory_image }
+          - { image: fraud,             tfvar: mesh_fraud_image }
+          - { image: payment,           tfvar: mesh_payment_image }
+          - { image: ledger,            tfvar: mesh_ledger_image }
+          - { image: projection-worker, tfvar: mesh_projection_image }
+    uses: ./.github/workflows/image-build.yml
+    with:
+      image: ${{ matrix.image }}
+      tfvar: ${{ matrix.tfvar }}
+      environment: ${{ inputs.environment || 'dev' }}
+    secrets: inherit

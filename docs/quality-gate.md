@@ -11,16 +11,16 @@ for this repo.
 | Terraform format | `terraform fmt -check -recursive` | `infra.yml` quality | unformatted file |
 | Terraform validate | `terraform validate` (root + every layered stack) | `infra.yml` quality | schema/expression error |
 | Terraform lint | `tflint --recursive --config="$(pwd)/.tflint.hcl" --minimum-failure-severity=error` | `infra.yml` quality | tflint error |
-| Workflow lint | `actionlint 1.7.4` | `infra.yml` quality | invalid action input, shellcheck violation in `run:` |
+| Workflow lint | `actionlint 1.7.4` + `scripts/check-workflows.py` | `workflow-lint.yml`, `infra.yml` quality (actionlint) | invalid action input, shellcheck violation in `run:`; AWS role without `id-token: write`, Terraform wrapper on, kubectl before kubeconfig, input pasted into `run:`, stack plan without `-var-file` |
 | IaC security | `aquasecurity/tfsec-action@v1.0.3` (`--minimum-severity HIGH`, `soft_fail: false`) | `infra.yml` quality | HIGH/CRITICAL tfsec finding |
 | Secret scan | `gitleaks` over the full history (`.gitleaksignore` for reviewed false positives) | `secrets.yml` | any finding not in `.gitleaksignore` |
-| Image scan | `trivy@0.28.0` (HIGH/CRITICAL) | `app.yml` build-and-push | unsuppressed vulnerable layer |
-| Manifest schema | `kubeconform v0.6.7 -strict -kubernetes-version 1.32.0` | `app.yml` manifest-validation, `scripts/validate-k8s-manifests.sh` | invalid manifest |
+| Image scan | Grype on the SBOM (`--only-fixed --fail-on critical`); `aquasecurity/trivy-action@v0.36.0` (CRITICAL) | Grype: `app.yml` build-and-push. Trivy: `app.yml` image-scan, `storefront.yml` build-and-push, `image-build.yml` (mesh, loadgen), `runner-image.yml` | CRITICAL vulnerability with a fix available |
+| Manifest schema | `kubeconform v0.6.7 -strict -kubernetes-version 1.35.0` | `app.yml` manifest-validation, `scripts/validate-k8s-manifests.sh` | invalid manifest |
 | Node lint | `eslint src test scripts` (flat config) | `app.yml` test, `libraries.yml` nodejs-check | error-level rule |
-| TypeScript build | `tsc` | `app.yml` test (`npm run build`) | type or import error |
+| TypeScript build | `tsc` | `app.yml` test (`npm run build`), `mesh.yml` node | type or import error |
 | Node audit | `npm run audit` → `scripts/npm-audit-gate.mjs` | `app.yml` test, `mesh.yml`, `storefront.yml` | HIGH/CRITICAL advisory not in `.github/npm-audit-allowlist.json`, or an allowlist entry past its `until` date |
 | Lambda lockfiles | `npm ci --omit=dev` per Lambda dir | `infra.yml` quality | missing/stale `package-lock.json` |
-| order-api tests | `npm test` (node:test) + `npm run test:coverage` gate | `app.yml` test | test failure or coverage below threshold (`docs/coverage-gates.md`) |
+| order-api tests | `npm run test:coverage` (node:test, coverage gates); the migrations applied to a Postgres 15 service | `app.yml` test | test failure or coverage below threshold (`docs/coverage-gates.md`) |
 | Library tests | per-language test runner + coverage gate | `libraries.yml` per language | test failure or coverage below threshold |
 | Contract check | `npm run contract-check` (env-var drift app↔manifest) | `app.yml` test | missing env var in `deployment.yaml` |
 | API contract | `npm run openapi:lint` (Spectral against `apps/order-api/openapi.yaml`) | `app.yml` test | OpenAPI syntax error or `error`-severity lint rule |
@@ -32,8 +32,8 @@ PR runs:
 - Static checks above: all of them.
 - AWS-touching jobs (`build-and-push`, `image-scan`, `budget-check`, `deploy`,
   `integration-test`): SKIPPED (closes backlog #25).
-- `plan-pr` runs Terraform validate without AWS credentials or production
-  tfvars (closes backlog #48).
+- `infra.yml` quality runs Terraform validate and the module tests without
+  AWS credentials or production tfvars (closes backlog #48).
 
 Push to `main` and `workflow_dispatch` runs the full pipeline including
 deploy paths, **but only when the repository variable `AWS_DEPLOY_ENABLED`

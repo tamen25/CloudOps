@@ -115,6 +115,10 @@ jobs:
         run: npm run lint
         working-directory: apps/order-api
 
+      - name: Type-check and build
+        run: npm run build
+        working-directory: apps/order-api
+
       - name: Contract check (manifest env vars ⇄ app)
         run: npm run contract-check
         working-directory: apps/order-api
