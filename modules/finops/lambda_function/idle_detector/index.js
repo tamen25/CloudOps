@@ -136,32 +136,31 @@ async function checkEKSNodes() {
     return null;
   }
 
-  // 2. Fetch nodegroups to get node count + instance type for cost calculation
-  let nodeCount     = 0;
-  let instanceType  = 't3.large';
+  // 2. Idle means every measured resource is under the threshold. A node
+  //    busy on CPU but light on memory (or the reverse) cannot be removed.
+  const measured = [avgCpu, avgMem].filter(v => v !== null);
+  if (!measured.every(v => v < IDLE_CPU_THRESHOLD)) return null;
 
-  try {
-    const ngs = await eksClient.send(new ListNodegroupsCommand({ clusterName: EKS_CLUSTER_NAME }));
-    for (const ngName of (ngs.nodegroups || [])) {
-      const ng = await eksClient.send(new DescribeNodegroupCommand({ clusterName: EKS_CLUSTER_NAME, nodegroupName: ngName }));
-      nodeCount    += ng.nodegroup?.scalingConfig?.desiredSize || 0;
-      instanceType  = ng.nodegroup?.instanceTypes?.[0] || instanceType;
-    }
-  } catch (err) {
-    log('warn', { msg: 'Failed to describe EKS nodegroups', error: err.message });
-    nodeCount = 2; // fallback estimate
+  // 3. Node count and hourly cost, per node group: groups can differ in
+  //    instance type. An error here fails the check rather than guessing.
+  const ngs = await eksClient.send(new ListNodegroupsCommand({ clusterName: EKS_CLUSTER_NAME }));
+  let nodeCount      = 0;
+  let nodeHourlyCost = 0;
+  const unpriced     = new Set();
+  for (const ngName of (ngs.nodegroups || [])) {
+    const ng    = await eksClient.send(new DescribeNodegroupCommand({ clusterName: EKS_CLUSTER_NAME, nodegroupName: ngName }));
+    const count = ng.nodegroup?.scalingConfig?.desiredSize || 0;
+    const type  = ng.nodegroup?.instanceTypes?.[0];
+    nodeCount += count;
+    if (type in EC2_HOURLY) nodeHourlyCost += count * EC2_HOURLY[type];
+    else unpriced.add(type || 'unknown');
   }
 
-  const nodeHourlyCost = EC2_HOURLY[instanceType] ?? EC2_HOURLY['t3.large'];
-  const cpuIdle        = avgCpu !== null && avgCpu < IDLE_CPU_THRESHOLD;
-  const memIdle        = avgMem !== null && avgMem < IDLE_CPU_THRESHOLD;
-
-  if (!cpuIdle && !memIdle) return null;
-
-  // Wasted cost: fraction of cluster that is idle × node cost × 24h
-  const wastedFraction  = 1 - Math.max(avgCpu ?? 0, avgMem ?? 0) / 100;
-  const wastedHourlyCost = wastedFraction * nodeHourlyCost * nodeCount;
-  const wastedDailyCost  = wastedHourlyCost * 24;
+  // Wasted cost: the unused fraction of the priced nodes, over a day. Node
+  // groups whose instance type has no price here are left out and named.
+  const wastedFraction  = 1 - Math.max(...measured) / 100;
+  const wastedDailyCost = wastedFraction * nodeHourlyCost * 24;
+  const pricing = unpriced.size > 0 ? ` Not priced (instance type not in the table): ${[...unpriced].join(', ')}.` : '';
 
   return {
     resourceType:    'EKS_NODES',
@@ -169,10 +168,9 @@ async function checkEKSNodes() {
     avgCpuPercent:   avgCpu,
     avgMemPercent:   avgMem,
     nodeCount,
-    instanceType,
     wastedDailyCostUsd: wastedDailyCost,
     recommendation:  `EKS cluster ${EKS_CLUSTER_NAME} nodes are ${avgCpu?.toFixed(1)}% CPU / ${avgMem?.toFixed(1)}% memory utilized over the last 2h. ` +
-                     `Consider scaling down node group min/desired count from ${nodeCount} (estimated waste: $${wastedDailyCost.toFixed(2)}/day).`,
+                     `Consider scaling down node group min/desired count from ${nodeCount} (estimated waste: $${wastedDailyCost.toFixed(2)}/day).${pricing}`,
   };
 }
 
@@ -205,8 +203,8 @@ async function checkRDS() {
     log('warn', { msg: 'Failed to describe RDS instance', error: err.message });
   }
 
-  const rdsHourlyCost  = RDS_HOURLY[instanceClass] ?? RDS_HOURLY['db.t3.micro'];
-  const wastedDailyCost = rdsHourlyCost * 24;
+  // A class with no price here is reported without a cost, not as a micro.
+  const wastedDailyCost = (RDS_HOURLY[instanceClass] ?? 0) * 24;
 
   return {
     resourceType:       'RDS_INSTANCE',
@@ -226,11 +224,14 @@ async function checkRDS() {
 async function checkPodRightsizing() {
   if (!EKS_CLUSTER_NAME) return [];
 
-  // SEARCH across all pods in cloudops namespace — each pod is a separate MetricDataResult
+  // One series per pod. pod_cpu_utilization_over_pod_limit is the pod's use
+  // of its own CPU limit (pod_cpu_utilization is a share of the node). The
+  // dynamic label makes each result's Label the pod name.
   const results = await cwMetricData([
     {
       Id:         'pod_cpu',
-      Expression: `SEARCH('{ContainerInsights,ClusterName,Namespace,PodName} MetricName="pod_cpu_utilization" AND ClusterName="${EKS_CLUSTER_NAME}" AND Namespace="${ORDER_API_NAMESPACE}"', 'Average', 900)`,
+      Expression: `SEARCH('{ContainerInsights,ClusterName,Namespace,PodName} MetricName="pod_cpu_utilization_over_pod_limit" AND ClusterName="${EKS_CLUSTER_NAME}" AND Namespace="${ORDER_API_NAMESPACE}"', 'Average', 900)`,
+      Label:      "${PROP('Dim.PodName')}",
     },
   ], 2);
 
@@ -242,15 +243,13 @@ async function checkPodRightsizing() {
     const avg = avgValues(result);
     if (avg === null || avg >= 20) continue; // ≥20% utilized — OK
 
-    // Extract PodName from the label: "pod_cpu_utilization ClusterName=X Namespace=Y PodName=Z"
-    const match   = (result.Label || '').match(/PodName=([^\s]+)/);
-    const podName = match ? match[1] : result.Id;
+    const podName = result.Label || result.Id;
 
     overprovisioned.push({
       podName,
       avgCpuUtilizationPercent: avg,
       recommendation: `Pod ${podName} in namespace ${ORDER_API_NAMESPACE} is using only ${avg.toFixed(1)}% of its CPU limit. ` +
-                      `Reduce cpu.requests in apps/order-api/k8s/deployment.yaml to reclaim capacity.`,
+                      `Lower its CPU request and limit in its deployment manifest to reclaim capacity.`,
     });
   }
 
