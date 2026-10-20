@@ -60,10 +60,11 @@ Use only when:
 ## Required secrets
 
 - `AWS_GITHUB_ACTIONS_ROLE_ARN` — already used by `infra.yml` / `app.yml`.
-- `EKS_CLUSTER_NAME` — already used by `app.yml`.
+- `EKS_CLUSTER_NAME` — the cluster to open (`terraform -chdir=stacks/cluster output -raw cluster_name`).
 - `AWS_REGION` — already used.
 
-No new secrets are needed for the emergency workflow.
+The other workflows read the cluster name from the cluster stack's outputs;
+this one runs without Terraform state, so it takes it from the secret.
 
 ## Approval policy
 

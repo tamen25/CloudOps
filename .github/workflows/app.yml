@@ -1,12 +1,14 @@
 #Required GitHub Actions secrets:
 #AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform -chdir=stacks/foundation output -raw github_actions_role_arn
 #AWS_REGION                   — AWS region (e.g. us-east-1)
-#ECR_REPOSITORY_URL           — ECR repository URI without tag (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/order-api)
-#EKS_CLUSTER_NAME             — EKS cluster name from: terraform -chdir=stacks/cluster output -raw cluster_name
 #GRAFANA_API_KEY              — Grafana service account token for OTel trace verification
+#ORDER_API_KEY_SECRET_ARN     — API key secret the integration tests authenticate with
 #TF_VARS_DEV / TF_VARS_STAGING / TF_VARS_PROD
 #— Full contents of each environment's terraform.tfvars
 #TF_VARS                      — Optional fallback when scoped as a GitHub environment secret
+#
+#The ECR repository and the cluster come from the stacks' outputs
+#(ecr_repository_urls, cluster_name), not from secrets that can drift.
 #
 #Image signing (Cosign keyless — no secrets required):
 #Signatures are stored in ECR alongside the image using Sigstore's keyless flow.
@@ -61,8 +63,6 @@ on:
 env:
   TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   AWS_REGION:         ${{ secrets.AWS_REGION }}
-  ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-  EKS_CLUSTER_NAME:   ${{ secrets.EKS_CLUSTER_NAME }}
   IMAGE_TAG:          ${{ github.sha }}
   #Opt JavaScript actions still on Node 20 into the Node 24 runtime (GitHub
   #compatibility shim). Remove once every action listed below is on a release
@@ -82,6 +82,17 @@ jobs:
     #manifest-validation, build-and-push, deploy, integration-test all chain
     #through `needs: test`, so disabling here cascade-skips the whole pipeline.
     if: github.event_name != 'push' || vars.AUTO_RUN_ON_MERGE == 'true'
+    # The migrations are applied to a real Postgres (test/migrations-postgres
+    # .test.ts); the same major version as the RDS default (15.5).
+    services:
+      postgres:
+        image: postgres:15-alpine@sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81
+        env:
+          POSTGRES_PASSWORD: ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -114,9 +125,11 @@ jobs:
         run: npm run openapi:lint
         working-directory: apps/order-api
 
-      - name: Run tests with 100% line coverage
+      - name: Run tests with coverage gates
         run: npm run test:coverage
         working-directory: apps/order-api
+        env:
+          MIGRATIONS_PG_URL: postgres://postgres:ci-only@localhost:5432/postgres
 
   #─────────────────────────────────────────────────────────────────────────────
   #Job 2: Kubernetes manifest validation — runs in parallel with build-and-push
@@ -191,7 +204,7 @@ jobs:
 
       - name: kubeconform — strict schema validation
         run: |
-          kubeconform -strict -kubernetes-version 1.32.0 -ignore-missing-schemas \
+          kubeconform -strict -kubernetes-version 1.35.0 -ignore-missing-schemas \
             -summary /tmp/order-api-k8s/*.yaml
 
       - name: Verify deployment manifest container name
@@ -257,9 +270,13 @@ jobs:
       #on the immutable `@sha256:` reference, not the mutable `:tag`.
       #Closes backlog #18.
       image_digest: ${{ steps.build.outputs.digest }}
+      repository: ${{ steps.repo.outputs.repository }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -270,6 +287,27 @@ jobs:
           role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
           role-session-name: github-actions-app
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+
+      # The policy-controller admits order-api images from this repository
+      # only (<project>/order-api), so the name comes from the stack.
+      - name: Find the ECR repository
+        id: repo
+        run: |
+          bash scripts/write-ci-tfvars.sh
+          STACKS=foundation bash scripts/terraform-stacks.sh init
+          REPO=$(terraform -chdir=stacks/foundation output -json ecr_repository_urls | jq -r '."order-api" // empty')
+          if [ -z "$REPO" ]; then
+            echo "::error::no order-api repository in the foundation stack's ecr_repository_urls"
+            exit 1
+          fi
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
+          echo "repository=$REPO" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
@@ -286,9 +324,13 @@ jobs:
           #Closes backlog #18 — only the SHA tag is published. The `:latest`
           #mutable tag is intentionally NOT pushed; the deploy step pins on
           #the resulting `@sha256:` digest from this step's output.
-          tags: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          tags: ${{ env.REPO }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Sign, attest and scan the digest that was pushed, not a tag lookup.
+      - name: Image reference
+        run: echo "IMAGE_REF=${REPO}@${{ steps.build.outputs.digest }}" >> "$GITHUB_ENV"
 
       #── Cosign keyless image signing ──────────────────────────────────────────
       #Signs the image in-toto using GitHub Actions OIDC as the identity.
@@ -308,9 +350,8 @@ jobs:
 
       - name: Sign image
         run: |
-          echo "Signing ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
-          cosign sign --yes \
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          echo "Signing $IMAGE_REF"
+          cosign sign --yes "$IMAGE_REF"
           echo "✓ Image signed"
 
       - name: Verify image signature
@@ -318,7 +359,7 @@ jobs:
           cosign verify \
             --certificate-identity-regexp="https://github\.com/${{ github.repository }}/\.github/workflows/app\.yml@refs/heads/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REF }}
           echo "✓ Signature verified"
 
       #── Syft SBOM generation and attestation ──────────────────────────────────
@@ -339,7 +380,7 @@ jobs:
         env:
           SYFT: ${{ steps.syft.outputs.cmd }}
         run: |
-          "$SYFT" ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }} \
+          "$SYFT" ${{ env.IMAGE_REF }} \
             --output spdx-json=sbom.spdx.json
           echo "✓ SBOM written to sbom.spdx.json"
 
@@ -349,8 +390,8 @@ jobs:
             --predicate sbom.spdx.json \
             --type spdxjson \
             --yes \
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
-          echo "✓ SBOM attestation attached to ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}"
+            ${{ env.IMAGE_REF }}
+          echo "✓ SBOM attestation attached to ${{ env.IMAGE_REF }}"
 
       - name: Upload SBOM as workflow artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -375,7 +416,7 @@ jobs:
 
           | | |
           |---|---|
-          | **Image** | \`${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}\` |
+          | **Image** | \`${{ env.IMAGE_REF }}\` |
           | **Format** | SPDX-JSON |
           | **Packages** | ${PKG_COUNT} |
           | **Artifact** | \`sbom-${{ env.IMAGE_TAG }}\` (retained 90 days) |
@@ -387,7 +428,7 @@ jobs:
             --type spdxjson \\
             --certificate-identity-regexp="https://github.com/${{ github.repository }}/.*" \\
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \\
-            ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REF }}
           \`\`\`
           EOF
 
@@ -441,7 +482,7 @@ jobs:
 
           | | |
           |---|---|
-          | **Image** | \`${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}\` |
+          | **Image** | \`${{ env.IMAGE_REF }}\` |
           | **Scope** | Fixable vulnerabilities only (\`--only-fixed\`) |
           | **CRITICAL with fix** | **${CRIT_COUNT}** |
           | **Action** | Review the Security tab for full findings — update affected packages before deploying |
@@ -470,7 +511,7 @@ jobs:
       security-events: write
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      IMAGE_REF: ${{ needs.build-and-push.outputs.repository }}@${{ needs.build-and-push.outputs.image_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -494,7 +535,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          image-ref: ${{ env.IMAGE_REF }}
           exit-code: '1'
           severity: CRITICAL
           format: sarif
@@ -518,7 +559,7 @@ jobs:
 
           | | |
           |---|---|
-          | **Image** | \`${{ env.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}\` |
+          | **Image** | \`${{ env.IMAGE_REF }}\` |
           | **Severity** | CRITICAL |
           | **Action** | Review the Security tab for full findings — fix before deploying |
 
@@ -547,7 +588,13 @@ jobs:
     #Skip when the override input is explicitly set to true.
     #For push triggers (no inputs), github.event.inputs.override_budget_check
     #is null, which evaluates to != 'true', so the job runs normally.
-    if: vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'pull_request' && github.event.inputs.override_budget_check != 'true')
+    #A promotion skips image-scan; !cancelled() keeps this job from being
+    #skipped with it, so promoting to prod still checks prod's budget.
+    if: >-
+      !cancelled() && vars.AWS_DEPLOY_ENABLED == 'true'
+      && github.event_name != 'pull_request'
+      && github.event.inputs.override_budget_check != 'true'
+      && (needs.image-scan.result == 'success' || inputs.promote_digest != '')
     environment: ${{ (inputs.environment || 'dev') == 'prod' && 'production' || (inputs.environment || 'dev') }}
     permissions:
       id-token: write
@@ -707,13 +754,11 @@ jobs:
       #the digest signed in the source environment is the digest deployed
       #in the target environment.
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
       TF_VARS: ${{ secrets.TF_VARS }}
       TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
       TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
       TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
-      IMAGE_REF: ${{ secrets.ECR_REPOSITORY_URL }}@${{ inputs.promote_digest != '' && inputs.promote_digest || needs.build-and-push.outputs.image_digest }}
+      PROMOTE_DIGEST: ${{ inputs.promote_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -735,11 +780,11 @@ jobs:
         if: inputs.promote_digest != ''
         run: |
           set -euo pipefail
-          if ! echo "${{ inputs.promote_digest }}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
-            echo "::error::promote_digest must match ^sha256:[a-f0-9]{64}$ (got: ${{ inputs.promote_digest }})"
+          if ! printf '%s' "$PROMOTE_DIGEST" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+            echo "::error::promote_digest must match ^sha256:[a-f0-9]{64}$"
             exit 1
           fi
-          echo "✓ Promoting digest ${{ inputs.promote_digest }} to environment=${{ inputs.environment }}"
+          echo "✓ Promoting digest $PROMOTE_DIGEST to environment=${{ inputs.environment }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -751,16 +796,39 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
+      # The wrapper adds its own lines to stdout, which would end up in every
+      # value read with $(terraform output -raw ...).
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.11.0
+          terraform_wrapper: false
 
       - name: Write terraform.tfvars
         run: bash scripts/write-ci-tfvars.sh
 
       - name: Init Terraform for outputs
         run: bash scripts/terraform-stacks.sh init
+
+      # A promotion deploys a digest built by an earlier run, from this
+      # environment's repository; a build deploys what build-and-push pushed.
+      - name: Image reference
+        env:
+          BUILT_REPOSITORY: ${{ needs.build-and-push.outputs.repository }}
+          BUILT_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          if [ -n "$PROMOTE_DIGEST" ]; then
+            REPO=$(terraform -chdir=stacks/foundation output -json ecr_repository_urls | jq -r '."order-api" // empty')
+            DIGEST=$PROMOTE_DIGEST
+          else
+            REPO=$BUILT_REPOSITORY
+            DIGEST=$BUILT_DIGEST
+          fi
+          if [ -z "$REPO" ] || [ -z "$DIGEST" ]; then
+            echo "::error::no image to deploy (repository '$REPO', digest '$DIGEST')"
+            exit 1
+          fi
+          echo "IMAGE_REF=${REPO}@${DIGEST}" >> "$GITHUB_ENV"
 
       - name: Load deployment configuration from Terraform state
         run: |
@@ -804,8 +872,10 @@ jobs:
           OIDC_JWKS_URL="${{ secrets.OIDC_JWKS_URL }}"
           OIDC_REQUIRED_SCOPES="${{ secrets.OIDC_REQUIRED_SCOPES }}"
 
-          #Kinesis stream (closes backlog #85). Empty disables publishing.
-          KINESIS_STREAM_NAME=$(echo "$TF_VARS" | grep "^kinesis_stream_name" | cut -d'"' -f2 || echo "")
+          #Kinesis stream (closes backlog #85): the platform stack's stream when
+          #enable_storefront_events is on (null otherwise). Empty disables
+          #publishing.
+          KINESIS_STREAM_NAME=$(terraform -chdir=stacks/platform output -json storefront_events_stream_name | jq -r '. // ""')
           #CSRF Origin allow-list (closes backlog #97). Comma-separated; empty=permissive.
           #In staging/prod set to the storefront + admin origins.
           ALLOWED_ORIGINS="${{ secrets.ALLOWED_ORIGINS }}"
@@ -846,6 +916,9 @@ jobs:
             echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}"
             echo "ORDER_API_REPLICAS=${ORDER_API_REPLICAS:-2}"
           } >> "$GITHUB_ENV"
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
       #── Signature gate ────────────────────────────────────────────────────────
       #Aborts the deployment if the image does not have a valid Cosign signature
@@ -959,7 +1032,6 @@ jobs:
       contents: read
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
       TF_VARS: ${{ secrets.TF_VARS }}
       TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
       TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
@@ -979,6 +1051,7 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.11.0
+          terraform_wrapper: false
 
       - name: Write terraform.tfvars
         run: bash scripts/write-ci-tfvars.sh
@@ -988,8 +1061,11 @@ jobs:
 
       - name: Load integration endpoints
         run: |
-          echo "BASE_URL=$(terraform -chdir=stacks/platform output -raw order_api_url)" >> "$GITHUB_ENV"
-          echo "GRAFANA_URL=$(terraform -chdir=stacks/platform output -raw grafana_url)" >> "$GITHUB_ENV"
+          {
+            echo "BASE_URL=$(terraform -chdir=stacks/platform output -raw order_api_url)"
+            echo "GRAFANA_URL=$(terraform -chdir=stacks/platform output -raw grafana_url)"
+            echo "EKS_CLUSTER_NAME=$(terraform -chdir=stacks/cluster output -raw cluster_name)"
+          } >> "$GITHUB_ENV"
 
       - name: Resolve auth credential for authenticated endpoints
         env:
@@ -1073,6 +1149,8 @@ jobs:
           echo "✗ FAIL: /health did not return 200 after 5 attempts"
           exit 1
 
+      #it-widget at 999 cents is the integration-test tenant's product
+      #(migration 008); orders are re-priced, so the total must match.
       - name: "Test 2 — POST /order → 201 with orderId"
         id: t2
         run: |
@@ -1082,7 +1160,7 @@ jobs:
               -H "Content-Type: application/json" \
               ${OIDC_ACCESS_TOKEN:+-H "Authorization: Bearer $OIDC_ACCESS_TOKEN"} \
               ${API_KEY:+-H "X-Api-Key: $API_KEY"} -H "X-Tenant-Id: integration-test" \
-              -d '{"items":[{"sku":"test","quantity":1}],"total":9.99}')
+              -d '{"items":[{"sku":"it-widget","quantity":1}],"total":9.99}')
             STATUS=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
             echo "  HTTP $STATUS"
@@ -1339,7 +1417,6 @@ jobs:
           | | |
           |---|---|
           | **Image tag**        | \`${{ env.IMAGE_TAG }}\` |
-          | **Cluster**          | \`${{ env.EKS_CLUSTER_NAME }}\` |
           | **Integration tests** | All passed ✓ |
           | **Budget gate**      | ${BUDGET_RESULT} ${OVERRIDE:+— override was active} |
           EOF
