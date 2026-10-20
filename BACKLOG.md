@@ -22,18 +22,23 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **A01** — Two Terraform layouts (root `main.tf` and `stacks/`) manage
   the same modules. Retire the root layout (ADR, state-migration runbook).
   Includes old #16 (layered-stack runbook not validated on a live env).
-- [ ] **D01** — Dependabot's actions bump (#12): 20 updates, most majors.
-  Reviewed against each action's release notes; setup-go v6 broke the mesh
-  Go jobs (fixed in #31). Open: merge with cosign pinned to v2 (see D02).
+  Teardown already uses the stacks, and the root scripts refuse to run
+  without `LEGACY_ROOT=1` (#36); left: `main.tf`, `deploy.sh`,
+  `destroy.sh`, the root steps in infra.yml, and the docs that use them.
 - [ ] **D02** — cosign-installer v4 installs cosign v3, which signs in the
   new bundle format. Whether the in-cluster cosign-gatekeeper-provider
   verifies it is unchecked; until then the installer pins cosign v2.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
-- [ ] **R01** — Finish the code review: storefront, loadgen, api-gateway,
-  payment, fraud (Java), inventory and projection-worker (Python). The
-  Lambdas are done (T01).
+- [ ] **R01** — Finish the code review: the storefront (about 8,700
+  lines). The mesh services and loadgen are done (#35); the Lambdas are
+  done (T01).
+- [ ] **R02** — Decide the four open behaviours in
+  `docs/reviews/2026-10-20-mesh-services-review.md`: fraud fails open
+  (R01-6), reservations are neither held nor released (R01-7),
+  `synthetic-` tenants are trusted by name (R01-8), projection-worker
+  resilience (R01-9).
 - [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
   per node (a DaemonSet-style job, or one Job per node group) so a
   finding is about a node, not whichever node ran that night.
@@ -68,15 +73,23 @@ prove. I03 comes first.
   and dynamic label), and the SLO deploy gate (finds its metric).
 - [ ] **I02** — First Chaos Mesh experiment: check the Falco rules against
   the chaos daemon (docs/runbooks/chaos-mesh.md).
-
-## In review
-
-- **S10** — kube-bench can run: own namespace, node mounts, pinned images,
-  no run-time npm install (#32).
-- **C03** — 1,419 machine-written comments removed (#17).
-- **D01** — actions bump (#12).
+- [ ] **V02** — Run the Destroy workflow once at the end of the first AWS
+  session and confirm nothing is left: `plan -destroy` empty per stack,
+  no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **S11** — the Destroy workflow tears down the layered stacks CI
+  deploys; it used to work on the root layout and would have left a stacks
+  environment running without state (#36).
+- [x] **S10** — kube-bench can run: own namespace, node mounts, pinned
+  images, no run-time npm install (#32).
+- [x] **R01** (part) — mesh services: projection skipped every record,
+  inventory checked repeated SKUs separately, fraud approved malformed
+  amounts, no timeouts on any hop (#35).
+- [x] **D01** — the 20 Actions updates, with the fixes the majors needed;
+  cosign kept on v2 (#31, #34).
+- [x] **C03** — 1,418 machine-written comments removed (#17).
 
 - [x] **S01** — deployer and CI IAM scoped to the project's roles,
   policies and buckets; one policy for both bootstrap paths; MFA default
