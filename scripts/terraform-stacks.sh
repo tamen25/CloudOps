@@ -3,13 +3,13 @@ set -euo pipefail
 
 command="${1:-}"
 if [ -z "$command" ]; then
-  echo "Usage: scripts/terraform-stacks.sh <plan|apply|validate|init> [terraform args...]" >&2
+  echo "Usage: scripts/terraform-stacks.sh <plan|apply|destroy|validate|init> [terraform args...]" >&2
   exit 1
 fi
 shift || true
 
 case "$command" in
-  plan|apply|validate|init) ;;
+  plan|apply|destroy|validate|init) ;;
   *)
     echo "Error: unsupported Terraform stack command '$command'." >&2
     exit 1
@@ -19,7 +19,13 @@ esac
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 TFVARS_FILE="${TFVARS_FILE:-$REPO_ROOT/terraform.tfvars}"
-STACKS="${STACKS:-foundation cluster platform}"
+# Each stack reads the outputs of the ones before it, so they are applied in
+# this order and destroyed in the reverse one.
+if [ "$command" = "destroy" ]; then
+  STACKS="${STACKS:-platform cluster foundation}"
+else
+  STACKS="${STACKS:-foundation cluster platform}"
+fi
 
 if [ ! -f "$TFVARS_FILE" ]; then
   echo "Error: $TFVARS_FILE not found." >&2
@@ -72,6 +78,9 @@ for stack in $STACKS; do
       ;;
     apply)
       terraform -chdir="$stack_dir" apply -var-file="$TFVARS_FILE" "$@"
+      ;;
+    destroy)
+      terraform -chdir="$stack_dir" destroy -var-file="$TFVARS_FILE" "$@"
       ;;
   esac
 

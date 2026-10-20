@@ -1,4 +1,3 @@
-#This manifest defines destroy for CloudOps.
 #Required GitHub Actions secrets:
 #AWS_GITHUB_ACTIONS_ROLE_ARN  — IAM role ARN from: terraform output -raw bootstrap_github_actions_role_arn
 #AWS_REGION                   — AWS region (e.g. us-east-1)
@@ -8,6 +7,16 @@
 #production  — Settings → Environments → production; add required reviewers
 #
 #Double-gated: GitHub environment approval + typed confirmation string.
+#
+#Destroys the layered stacks (stacks/), the layout CI applies, in reverse:
+#platform, cluster, foundation. It used to destroy the root layout, a
+#different state: on a stacks environment that applied the root first
+#(creating a second copy), then deleted the state bucket the stacks' state
+#lives in, leaving the real environment running and unmanaged.
+#
+#With the permissions boundary on (BACKLOG S08), the deployer cannot change
+#the bootstrap roles, so the foundation destroy stops at bootstrap; an
+#administrator destroys that part (docs/runbooks/security/permissions-boundary.md).
 
 name: Destroy Infrastructure
 
@@ -109,14 +118,27 @@ jobs:
           fi
           echo "✓ tfvars environment ($TFVARS_ENV) matches input"
 
-      - name: terraform init
-        #tf-init.sh derives STATE_KEY from `environment` in tfvars (backlog
-        ##10), so the assertion above guarantees the destroy targets the
-        #state file matching the selected input.
-        run: ./scripts/tf-init.sh
+      #── 5. Names, from tfvars and the modules' naming ──────────────────────
+      #Every bucket the modules create is named "<project_name>-…" (the
+      #deployer's S3 scope); the state bucket defaults to
+      #<project_name>-tfstate-bucket; the cluster is
+      #<project_name>-<environment>-cluster.
+      - name: Read names from tfvars
+        run: |
+          tfvar() { grep -E "^[[:space:]]*$1[[:space:]]*=" terraform.tfvars | sed 's/.*= *"\(.*\)".*/\1/' | head -1; }
+          PROJECT=$(tfvar project_name)
+          PROJECT=${PROJECT:-cloudops}
+          STATE_BUCKET=$(tfvar bootstrap_bucket_name)
+          STATE_BUCKET=${STATE_BUCKET:-${PROJECT}-tfstate-bucket}
+          {
+            echo "PROJECT=$PROJECT"
+            echo "STATE_BUCKET=$STATE_BUCKET"
+            echo "CLUSTER=${PROJECT}-${{ inputs.environment }}-cluster"
+          } >> "$GITHUB_ENV"
+          echo "Project: $PROJECT  State bucket: $STATE_BUCKET"
 
       #── 5. Install bucket-emptying helper ──────────────────────────────────
-      #Written once to /usr/local/bin and reused for Loki, Tempo, and state buckets.
+      #Written once to /usr/local/bin and reused for every project bucket.
       #Handles three cases that `aws s3 rm` alone misses:
       #• versioned objects (bucket versioning enabled)
       #• Glacier-transitioned objects (s3 rm fails; s3api delete-objects succeeds)
@@ -179,86 +201,58 @@ jobs:
           SCRIPT
           chmod +x /usr/local/bin/empty-s3-bucket
 
-      #── 6–8. Capture bucket names before any apply runs ────────────────────
-      #Must happen before applies because bootstrap output becomes null after
-      #destroy_all=true and observability output becomes null after disabling it.
-      - name: Get Loki bucket name
+      #── 6. Empty the data buckets ──────────────────────────────────────────
+      #force_destroy is a variable on every bucket, so Terraform may refuse a
+      #bucket with objects in it (Loki, Tempo, Mimir, Thanos, flow logs,
+      #CloudTrail, Config). The state bucket is kept until the stacks are gone.
+      - name: Empty the project's data buckets
         run: |
-          LOKI_BUCKET=$(terraform output -raw loki_bucket 2>/dev/null || \
-            echo "cloudops-loki-chunks-$(aws sts get-caller-identity --query Account --output text)")
-          echo "LOKI_BUCKET=$LOKI_BUCKET" >> "$GITHUB_ENV"
-          echo "Loki bucket: $LOKI_BUCKET"
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, '${PROJECT}-')].Name" --output text)
+          for b in $BUCKETS; do
+            [ "$b" = "$STATE_BUCKET" ] && continue
+            empty-s3-bucket "$b"
+          done
 
-      - name: Get Tempo bucket name
-        run: |
-          TEMPO_BUCKET=$(terraform output -raw tempo_bucket 2>/dev/null || \
-            echo "cloudops-tempo-traces-$(aws sts get-caller-identity --query Account --output text)")
-          echo "TEMPO_BUCKET=$TEMPO_BUCKET" >> "$GITHUB_ENV"
-          echo "Tempo bucket: $TEMPO_BUCKET"
+      #── 7. Platform stack ──────────────────────────────────────────────────
+      - name: Destroy the platform stack
+        run: STACKS=platform bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      - name: Get Terraform state bucket name
+      #── 8. Load balancers the cluster made ─────────────────────────────────
+      #The AWS Load Balancer Controller creates load balancers and target
+      #groups for Ingresses and Services, outside Terraform. Left behind they
+      #hold ENIs and security groups, and the VPC cannot be deleted.
+      - name: Delete the cluster's load balancers and target groups
         run: |
-          #Capture before any apply — bootstrap output becomes null after destroy_all=true
-          STATE_BUCKET=$(terraform output -raw bootstrap_bucket_name 2>/dev/null || \
-            grep '^bootstrap_bucket_name' terraform.tfvars \
-              | awk -F'=' '{print $2}' | tr -d ' "' | head -1)
-          if [ -z "$STATE_BUCKET" ]; then
-            echo "::error::Could not determine state bucket name from terraform output or tfvars"
-            exit 1
+          owned() {
+            [ "$(aws elbv2 describe-tags --resource-arns "$1" \
+              --query "TagDescriptions[0].Tags[?Key=='elbv2.k8s.aws/cluster'].Value | [0]" --output text)" = "$CLUSTER" ]
+          }
+          LBS=""
+          for arn in $(aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerArn' --output text); do
+            if owned "$arn"; then
+              echo "Deleting load balancer $arn"
+              aws elbv2 delete-load-balancer --load-balancer-arn "$arn"
+              LBS="$LBS $arn"
+            fi
+          done
+          if [ -n "$LBS" ]; then
+            # shellcheck disable=SC2086 # one argument per ARN
+            aws elbv2 wait load-balancers-deleted --load-balancer-arns $LBS
           fi
-          echo "STATE_BUCKET=$STATE_BUCKET" >> "$GITHUB_ENV"
-          echo "State bucket: $STATE_BUCKET"
+          for arn in $(aws elbv2 describe-target-groups --query 'TargetGroups[].TargetGroupArn' --output text); do
+            if owned "$arn"; then
+              echo "Deleting target group $arn"
+              aws elbv2 delete-target-group --target-group-arn "$arn"
+            fi
+          done
 
-      #── 9–10. Empty observability data buckets ─────────────────────────────
-      #Must happen before disabling observability — Terraform's force_destroy=true
-      #can still fail on Glacier-transitioned objects, so we empty them manually first.
-      - name: Empty Loki bucket
-        run: empty-s3-bucket "$LOKI_BUCKET"
+      #── 9. Cluster and foundation stacks ───────────────────────────────────
+      #Foundation includes bootstrap: the OIDC provider and the role this run
+      #holds. Its session stays valid until it expires.
+      - name: Destroy the cluster and foundation stacks
+        run: STACKS="cluster foundation" bash scripts/terraform-stacks.sh destroy -auto-approve
 
-      - name: Empty Tempo bucket
-        run: empty-s3-bucket "$TEMPO_BUCKET"
-
-      #── 11–15. Disable modules in reverse dependency order ─────────────────
-      #Each step writes the variable to terraform.tfvars before applying so that
-      #previously-disabled modules are not re-enabled on the next apply.
-      - name: Disable observability
-        run: |
-          sed -i "s|^enable_observability *=.*|enable_observability = false|" terraform.tfvars
-          grep -q "^enable_observability" terraform.tfvars || echo "enable_observability = false" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      - name: Disable ingress
-        run: |
-          sed -i "s|^enable_ingress *=.*|enable_ingress = false|" terraform.tfvars
-          grep -q "^enable_ingress" terraform.tfvars || echo "enable_ingress = false" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      - name: Disable database
-        run: |
-          sed -i "s|^enable_database *=.*|enable_database = false|" terraform.tfvars
-          grep -q "^enable_database" terraform.tfvars || echo "enable_database = false" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      - name: Disable EKS
-        run: |
-          sed -i "s|^enable_eks *=.*|enable_eks = false|" terraform.tfvars
-          grep -q "^enable_eks" terraform.tfvars || echo "enable_eks = false" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      - name: Disable networking
-        run: |
-          sed -i "s|^enable_networking *=.*|enable_networking = false|" terraform.tfvars
-          grep -q "^enable_networking" terraform.tfvars || echo "enable_networking = false" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      #── 16. Destroy bootstrap (KMS key, IAM deployer role, OIDC provider) ──
-      - name: Destroy bootstrap infrastructure
-        run: |
-          sed -i "s|^destroy_all *=.*|destroy_all = true|" terraform.tfvars
-          grep -q "^destroy_all" terraform.tfvars || echo "destroy_all = true" >> terraform.tfvars
-          terraform apply -auto-approve
-
-      #── 17–18. Delete Terraform state bucket ───────────────────────────────
+      #── 10. Delete the Terraform state bucket ───────────────────────────────
       #State bucket was created by create-s3-bucket.sh (outside Terraform), so
       #Terraform destroy does not remove it — we must do so explicitly.
       - name: Empty Terraform state bucket
@@ -295,19 +289,15 @@ jobs:
           | **Triggered by** | @${{ github.actor }} |
           | **Run** | [${{ github.repository }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
-          **Resources destroyed (in order):**
+          **Destroyed, in order:**
 
-          | Step | Resource |
-          |------|----------|
-          | 1 | Loki S3 bucket emptied: \`$LOKI_BUCKET\` |
-          | 2 | Tempo S3 bucket emptied: \`$TEMPO_BUCKET\` |
-          | 3 | \`module.observability\` disabled and destroyed |
-          | 4 | \`module.ingress\` disabled and destroyed |
-          | 5 | \`module.database\` disabled and destroyed |
-          | 6 | \`module.eks\` disabled and destroyed |
-          | 7 | \`module.networking\` disabled and destroyed |
-          | 8 | Bootstrap (KMS, IAM, OIDC) destroyed via \`destroy_all=true\` |
-          | 9 | TF state bucket emptied and deleted: \`$STATE_BUCKET\` |
+          | Step | What |
+          |------|------|
+          | 1 | Every \`${PROJECT}-*\` bucket except the state bucket emptied |
+          | 2 | \`stacks/platform\` destroyed |
+          | 3 | Load balancers and target groups of \`${CLUSTER}\` deleted |
+          | 4 | \`stacks/cluster\`, then \`stacks/foundation\` (bootstrap included) destroyed |
+          | 5 | TF state bucket emptied and deleted: \`$STATE_BUCKET\` |
 
-          $([ "$STATUS" != "success" ] && echo "> ⚠️ Teardown may be incomplete. Run \`terraform state list\` with a fresh backend to check for remaining resources.")
+          $([ "$STATUS" != "success" ] && echo "> ⚠️ Teardown may be incomplete. Run \`STACKS=<stack> scripts/terraform-stacks.sh plan -destroy\` per stack to see what remains, before the state bucket is gone.")
           EOF

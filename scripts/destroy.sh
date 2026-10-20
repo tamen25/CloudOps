@@ -57,6 +57,17 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$REPO_ROOT"
 
+# This script drives the root Terraform layout (main.tf). CI deploys the
+# layered stacks (stacks/), a different state: run against a stacks
+# environment, it would destroy a second, separate copy and leave the real one
+# untouched. It runs only when asked for the root layout explicitly.
+if [ "${LEGACY_ROOT:-0}" != "1" ]; then
+    echo "$0 drives the root Terraform layout; CI deploys stacks/." >&2
+    echo "Use: STACKS=\"<stacks>\" scripts/terraform-stacks.sh destroy   (or the Destroy workflow)." >&2
+    echo "Set LEGACY_ROOT=1 to run this against a root-layout environment." >&2
+    exit 1
+fi
+
 get_tfvar() {
     grep "^$1" terraform.tfvars 2>/dev/null | sed 's/.*=\s*"\(.*\)"/\1/' | tr -d ' "'
 }
