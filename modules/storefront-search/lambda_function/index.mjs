@@ -12,6 +12,10 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 const ORDER_API_URL = process.env.ORDER_API_INTERNAL_URL || "";
 const HMAC_PARAM = process.env.HMAC_SECRET_PARAMETER_NAME || "";
 
+// order-api answers a search in well under a second; past this the client
+// gets a 504 instead of waiting out the Lambda timeout.
+const UPSTREAM_TIMEOUT_MS = 5000;
+
 const CACHE_MAX = 500;
 const CACHE_TTL_MS = 60 * 1000;
 const cache = new Map(); // key -> { value, expiresAt }
@@ -89,25 +93,34 @@ async function callExpressSearch(tenantId, query, limit) {
     .update(`${timestamp}.${tenantId}.${payload}.${secret}`)
     .digest("hex");
 
-  const res = await fetch(`${ORDER_API_URL}/_internal/search`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-cloudops-hmac": hmac,
-      "x-cloudops-timestamp": timestamp,
-      "x-cloudops-tenant": tenantId,
-    },
-    body: payload,
-  });
+  let res;
+  try {
+    res = await fetch(`${ORDER_API_URL}/_internal/search`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-cloudops-hmac": hmac,
+        "x-cloudops-timestamp": timestamp,
+        "x-cloudops-tenant": tenantId,
+      },
+      body: payload,
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const timedOut = err?.name === "TimeoutError";
+    console.error("search upstream failed", { err: err?.message });
+    return { status: timedOut ? 504 : 502, body: { error: timedOut ? "upstream_timeout" : "upstream_unreachable" } };
+  }
 
   const text = await res.text();
-  let parsed;
   try {
-    parsed = JSON.parse(text);
+    return { status: res.status, body: JSON.parse(text) };
   } catch {
-    parsed = { error: "upstream_invalid_json", raw: text.slice(0, 256) };
+    // The upstream body is logged, never returned: it can carry internals.
+    // A 200 with a body that is not JSON is a failure, not a result to cache.
+    console.error("search upstream returned invalid JSON", { status: res.status, body: text.slice(0, 256) });
+    return { status: 502, body: { error: "upstream_invalid_json" } };
   }
-  return { status: res.status, body: parsed };
 }
 
 export const handler = async (event) => {

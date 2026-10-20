@@ -4,6 +4,9 @@
   "private": true,
   "main": "index.mjs",
   "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.511.0"
   }
