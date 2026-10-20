@@ -17,13 +17,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
-- [ ] **R02** — Decide the open behaviours in the reviews:
-  `docs/reviews/2026-10-20-mesh-services-review.md` — fraud fails open
-  (R01-6), reservations are neither held nor released (R01-7),
-  `synthetic-` tenants are trusted by name (R01-8), projection-worker
-  resilience (R01-9); `docs/reviews/2026-10-20-storefront-review.md` — an
-  identical cart bought again within 24 h replays the earlier order (SF-7),
-  rate limits are per pod (SF-8).
 - [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
   per node (a DaemonSet-style job, or one Job per node group) so a
   finding is about a node, not whichever node ran that night.
@@ -64,6 +57,12 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **R02** — review decisions: fraud fails closed, no trust by tenant
+  name, projection-worker recovers from throttling, expired iterators and
+  reshards, inventory's stock check documented; storefront checkout takes
+  a per-attempt Idempotency-Key (SF-7), per-pod limits accepted (SF-8)
+  (#44).
 
 - [x] **Q01** — 185 more generated comments; shellcheck clean on every
   script; the fraud image's OTel agent pinned by checksum (#43).

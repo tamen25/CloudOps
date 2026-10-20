@@ -33,10 +33,19 @@ Each fix has a test that fails without it.
   inside the 5-minute skew window; ADR 024 records that choice. The
   signature itself is BACKLOG S09.
 
-## Open — decisions, not defects
+## Decided (2026-10-20)
 
-These are behaviours the code chooses, possibly on purpose. They are
-listed so the choice is made knowingly.
+| ID | Decision |
+|---|---|
+| R01-6 | **Fail closed.** No answer from fraud stops the order with 503 `fraud_unavailable`, before payment. A fraud outage shows as errors on the map. |
+| R01-7 | **Keep the stock check, say so.** `/reserve` checks availability and holds nothing; the inventory README states it and what a stock scenario would need. |
+| R01-8 | **No trust by name.** The `synthetic-` cap in fraud is gone. Loadgen's orders (at most $13.50) score as approve without it. |
+| R01-9 | **Recover instead of restart.** `projection/consumer.py` retries throttled shards, resumes an expired iterator after the last record read, follows a reshard to the child shards, and keeps the other shards going when one fails. |
+
+## Open — decisions, not defects (as found)
+
+These are behaviours the code chose. They were listed so the choice was made
+knowingly; the decisions are in the table above.
 
 - **R01-6, fraud fails open.** The gateway proceeds to payment when the
   fraud service errors (`fraud.ok` false). Only an explicit `deny` stops

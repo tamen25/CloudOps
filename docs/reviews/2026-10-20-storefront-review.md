@@ -34,7 +34,17 @@ without it.
   `X-Forwarded-For` hop, which a client cannot spoof.
 - **Load generator routes.** Admin-only and signed; the target is fixed.
 
-## Open
+## Decided (2026-10-20)
+
+- **SF-7** fixed: `/api/checkout` accepts an `Idempotency-Key` header (8–64
+  of `[A-Za-z0-9_-]`) and derives the checkout's name from it, so a retried
+  submit is the same checkout and a later purchase of the same cart is a
+  new one. Without the header the cart-derived key still applies; a checkout
+  page should send one per attempt.
+- **SF-8** stays as it is: limits are per pod, and the shared-store option is
+  recorded here for when an exact limit is needed.
+
+## Open (as found)
 
 - **SF-7, repeat purchases within 24 hours.** The idempotency key is
   derived from the cart contents, so buying the identical cart again within

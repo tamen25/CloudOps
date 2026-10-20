@@ -1,6 +1,13 @@
 # inventory (Python / FastAPI)
 
-Mesh service. One job: reserve stock for a set of line items (all-or-nothing).
+Mesh service. One job: check stock for a set of line items (all-or-nothing).
+
+`/reserve` checks availability; it does not hold stock. Nothing is
+decremented, and nothing is released when a later hop (fraud, payment)
+fails. That is deliberate: the service exists to make the order trace
+deep, and the stock is an in-memory seed. A scenario that reasons about
+stock levels needs a real reservation (decrement on reserve, release on
+failure) first.
 
 - `POST /reserve` `{ "items": [{ "sku": "A", "qty": 2 }] }` →
   `{ "reserved": bool, "lines": [...] }`

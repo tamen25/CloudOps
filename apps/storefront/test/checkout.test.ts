@@ -3,7 +3,7 @@
 // recorded.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkout, type CheckoutDeps } from "../src/lib/checkout";
+import { checkout, executionNameFor, type CheckoutDeps } from "../src/lib/checkout";
 
 const USER = { session: "id-token", sub: "user-1", tenant: "t1", email: "a@example.com" };
 const ITEMS = [{ sku: "A", qty: 2, name: "A", price_cents: 150 }];
@@ -85,4 +85,23 @@ test("a cart already being checked out is a 409 and touches nothing", async () =
   const res = await checkout(USER, d);
   assert.equal(res.status, 409);
   assert.deepEqual(calls, []);
+});
+
+// SF-7: a key derived from the cart made an identical cart, bought again
+// within order-api's 24 h idempotency window, replay the first order.
+test("with a client attempt key, the same cart bought twice is two checkouts", () => {
+  const items = [{ sku: "A", quantity: 2 }];
+  const first = executionNameFor({ ...USER, attemptKey: "attempt-0001" }, items, 3);
+  const second = executionNameFor({ ...USER, attemptKey: "attempt-0002" }, items, 3);
+  const retry = executionNameFor({ ...USER, attemptKey: "attempt-0001" }, [{ sku: "B", quantity: 1 }], 9);
+  assert.notEqual(first, second);
+  assert.equal(first, retry, "a retried submit of one attempt is the same checkout");
+  assert.match(first, /^user-1-[0-9a-f]{32}$/);
+});
+
+test("without a usable attempt key, the key comes from the cart", () => {
+  const items = [{ sku: "A", quantity: 2 }];
+  const none = executionNameFor(USER, items, 3);
+  assert.equal(executionNameFor({ ...USER, attemptKey: "bad key with spaces" }, items, 3), none);
+  assert.notEqual(executionNameFor(USER, [{ sku: "B", quantity: 1 }], 3), none);
 });

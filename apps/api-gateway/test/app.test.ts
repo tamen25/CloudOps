@@ -196,16 +196,21 @@ test('non-JSON pricing body falls back to total_cents 0 and still chains', async
   }
 });
 
-// Fraud hop errors (non-ok) — exercises the `fraud.ok &&` false branch (a 5xx
-// fraud response is treated as fail-open, not a deny) and `decision ?? 'unknown'`.
-test('fraud hop 500 is fail-open and decision defaults to unknown', async () => {
-  const { server, baseUrl } = await startServer(
-    routingFetch({ '/score': { status: 500, body: {} } }),
-  );
+// A fraud error used to let the order through to payment (fail open). An
+// order is charged only after it has been scored.
+test('a fraud hop that fails stops the order before payment', async () => {
+  const calls: string[] = [];
+  const base = routingFetch({ '/score': { status: 500, body: {} } });
+  const recording = ((url: string, init: RequestInit) => {
+    calls.push(new URL(url).pathname);
+    return base(url, init);
+  }) as unknown as typeof fetch;
+  const { server, baseUrl } = await startServer(recording);
   try {
     const res = await placeOrder(baseUrl, { items: [{ sku: 'A', qty: 1 }] });
-    assert.equal(res.status, 200);
-    assert.equal((await res.json()).fraud_decision, 'unknown');
+    assert.equal(res.status, 503);
+    assert.equal((await res.json()).error, 'fraud_unavailable');
+    assert.ok(!calls.includes('/authorize'), 'payment was called');
   } finally {
     server.close();
   }
