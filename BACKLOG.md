@@ -20,12 +20,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
-- [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
-  per node (a DaemonSet-style job, or one Job per node group) so a
-  finding is about a node, not whichever node ran that night.
-
-## P2 — carried over from the old backlog
-
 - [ ] **O01** (#9) — Service mesh mTLS east-west (Cilium) is missing.
 - [ ] **O02** (#76) — Self-hosted runners in the VPC (ARC on EKS): module,
   runner image and workflow migration not built (ADR 025).
@@ -60,6 +54,10 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **K01** — kube-bench findings record the node they came from. The
+  cluster has one managed node group (one AMI, one launch template), so one
+  node per run stands for all; with more groups, one job per group (#46).
 
 - [x] **R02** — review decisions: fraud fails closed, no trust by tenant
   name, projection-worker recovers from throttling, expired iterators and

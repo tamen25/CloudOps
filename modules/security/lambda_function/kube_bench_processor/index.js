@@ -55,7 +55,7 @@ const STATUS_TO_SEVERITY = {
 //   "Totals": { "total_pass": 45, "total_fail": 5, "total_warn": 3, "total_info": 0 }
 // }
 
-function extractFindings(kubeBenchOutput, clusterName) {
+function extractFindings(kubeBenchOutput, clusterName, nodeName) {
   const findings = [];
 
   for (const control of (kubeBenchOutput.Controls || [])) {
@@ -75,6 +75,7 @@ function extractFindings(kubeBenchOutput, clusterName) {
           recommendation: (result.remediation || 'See CIS Kubernetes Benchmark for remediation steps').trim(),
           evidence: {
             source:      'kube-bench',
+            node:        nodeName || null,
             status:      result.status,
             testNumber:  result.test_number,
             testDesc:    result.test_desc,
@@ -218,7 +219,7 @@ async function publishMetrics({ failures, warnings, clusterName }) {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 exports.handler = async function handler(event) {
-  const { kubeBenchOutput, clusterName } = event;
+  const { kubeBenchOutput, clusterName, nodeName } = event;
 
   if (!kubeBenchOutput) {
     throw new Error('Event is missing required field: kubeBenchOutput');
@@ -230,7 +231,7 @@ exports.handler = async function handler(event) {
   log('info', { msg: 'kube-bench processor started', clusterName, environment: ENVIRONMENT });
 
   // 1. Extract FAIL and WARN findings from the kube-bench JSON tree.
-  const findings = extractFindings(kubeBenchOutput, clusterName);
+  const findings = extractFindings(kubeBenchOutput, clusterName, nodeName);
   log('info', { msg: 'Findings extracted', total: findings.length, clusterName });
 
   // 2. Load existing open findings for this cluster to deduplicate.

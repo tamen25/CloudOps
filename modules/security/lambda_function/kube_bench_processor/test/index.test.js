@@ -59,3 +59,10 @@ test('an event without the report or the cluster name is refused', async () => {
   await assert.rejects(handler({ clusterName: 'c1' }), /kubeBenchOutput/);
   await assert.rejects(handler({ kubeBenchOutput: report() }), /clusterName/);
 });
+
+// A run checks one node; the finding says which.
+test('a finding records the node kube-bench read', async () => {
+  const { handler, calls } = load();
+  await handler({ clusterName: 'c1', nodeName: 'ip-10-0-1-5.ec2.internal', kubeBenchOutput: report(['3.2.1', 'FAIL']) });
+  assert.equal(calls.find((c) => c.name === 'PutCommand').input.Item.evidence.node, 'ip-10-0-1-5.ec2.internal');
+});
