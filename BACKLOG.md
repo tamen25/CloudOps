@@ -85,7 +85,7 @@ prove. I03 comes first.
 - [x] **S08** — permissions boundary on every workload role, off by
   default, with a Terraform test (#29). Switch-on under AWS phase.
 - [x] **T01** — every Lambda has tests that CI runs (15 packages); they
-  found defects in twelve (#23, #30).
+  found defects in eleven (#23, #30).
 - [x] **SC1** — read-only init containers, tracked EKS suppressions; the
   Trivy gates filter by severity again; tfsec authenticates its release
   lookup (#20).
