@@ -141,6 +141,12 @@ resource "helm_release" "thanos" {
   timeout = 600
 
   values = [yamlencode({
+    # Bitnami withdrew its free images in 2025; the chart's default
+    # (docker.io/bitnami/thanos) no longer exists. bitnamilegacy holds the
+    # same image, frozen: no further patches. Mimir (metrics_long_term_storage
+    # = "mimir") is the maintained path.
+    image = { repository = "bitnamilegacy/thanos" }
+
     existingObjstoreSecret = "thanos-objstore"
 
     query = {

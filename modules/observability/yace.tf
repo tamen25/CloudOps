@@ -74,7 +74,7 @@ resource "helm_release" "yace" {
   name       = "yace"
   repository = "https://nerdswords.github.io/helm-charts"
   chart      = "yet-another-cloudwatch-exporter"
-  version    = "0.39.0"
+  version    = "0.38.0" # 0.39.0, pinned before, was never published
   namespace  = "monitoring"
 
   timeout = 300
