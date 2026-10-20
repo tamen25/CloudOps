@@ -564,9 +564,6 @@ Everything else is destroyed nightly and rebuilt by pipeline.
 - #9 — Service mesh (Cilium / mTLS east-west) missing.
 - #76 (impl) — ARC-on-EKS module + runner image + workflow migration not
   yet built.
-- #138 — JSON response shape audit for PII / internal tokens.
-- #139 — AWS Budgets hard-cap action (currently notify-only).
-- #140 — CSAM/NCMEC hash scan on storefront upload pipeline.
 
 ---
 

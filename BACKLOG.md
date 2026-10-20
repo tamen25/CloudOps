@@ -20,18 +20,12 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
+
 ## P2 — carried over from the old backlog
 
 - [ ] **O01** (#9) — Service mesh mTLS east-west (Cilium) is missing.
 - [ ] **O02** (#76) — Self-hosted runners in the VPC (ARC on EKS): module,
   runner image and workflow migration not built (ADR 025).
-- [ ] **O03** (#138) — JSON response-shape audit for PII and internal
-  tokens. Verify against `docs/security/response-shape-audit.md`; close if
-  that covers it.
-- [ ] **O04** (#139) — AWS Budgets hard-cap action. Verify: `c6aee6a`
-  added a budget hard cap; close if it is the action this asked for.
-- [ ] **O05** (#140) — CSAM/NCMEC hash scan on the storefront upload
-  pipeline.
 
 ## AWS phase — checks that need a live environment
 
@@ -56,6 +50,18 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **O03** (#138) — response-shape audit checked against the code: one
+  row was wrong (traces, now admin-only, F-138-2), mesh endpoints added
+  (#47).
+- [x] **O04** (#139) — the AWS Budgets hard-cap action exists:
+  `modules/finops/budget_action.tf` attaches a deny policy (new instances,
+  node groups, clusters, ASGs) to the named roles when actual spend crosses
+  the cap; off by default, runbook `security/abuse-response.md` A3 (#47).
+- [x] **O05** (#140) — carried over by mistake: closed as moot on
+  2026-06-02 (backlog archive) when the upload route was removed. Checked
+  again: the storefront has no upload route, presigned URL or multipart
+  handler (#47).
 
 - [x] **K01** — kube-bench findings record the node they came from. The
   cluster has one managed node group (one AMI, one launch template), so one
