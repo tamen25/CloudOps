@@ -2,7 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createLogger } from './logger';
-import { createHash, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Registry, Counter, Histogram } from 'prom-client';
 import type { OrderEvent } from './kinesis';
 
@@ -627,7 +627,7 @@ export function createApp({
   const internalHmacSecretPrevious = process.env.INTERNAL_HMAC_SECRET_PREVIOUS ?? '';
   const tryHmac = (timestamp: string, tenantHeader: string, raw: string, given: Buffer, secret: string): boolean => {
     if (!secret) return false;
-    const expected = createHash('sha256').update(`${timestamp}.${tenantHeader}.${raw}.${secret}`).digest('hex');
+    const expected = createHmac('sha256', secret).update(`${timestamp}.${tenantHeader}.${raw}`).digest('hex');
     const exp = Buffer.from(expected, 'hex');
     return given.length === exp.length && timingSafeEqual(given, exp);
   };

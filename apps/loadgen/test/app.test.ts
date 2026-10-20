@@ -213,3 +213,10 @@ test('POST /chaos/kill rejects a non-allowlisted service with 400', async () => 
     server.close();
   }
 });
+
+// Computed independently (Python's hmac module) so every service, in either language, agrees on the same bytes: HMAC-SHA256("test-secret", "1760000000000.t1.{"amount_cents":500}").
+// The old secret-suffix hash of the same input was 6e7b29c48fc9a95250bc0a19c544172a5633df1f9058b180328289ac8a7ae386.
+test('the signature is HMAC-SHA256 over timestamp.tenant.body', () => {
+  assert.equal(computeHmac('1760000000000', 't1', '{"amount_cents":500}', 'test-secret'),
+    'f9e725dd1768e7e3dc234317ecab1366e857f22c0d060d14cf94c85409ccc11f');
+});
