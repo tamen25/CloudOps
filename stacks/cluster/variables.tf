@@ -181,3 +181,9 @@ variable "eks_endpoint_public_access_cidrs" {
   type    = list(string)
   default = ["0.0.0.0/0"]
 }
+
+variable "permissions_boundary_arn" {
+  description = "Workload permissions boundary when use_remote_state_foundation is false (otherwise the foundation output is used)"
+  type        = string
+  default     = null
+}

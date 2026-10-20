@@ -86,3 +86,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_permissions_boundary" {
+  description = "Require the deployer to put the workload permissions boundary on every project role, and pass it to every module (permissions_boundary.tf). Applied by an administrator; see docs/runbooks/security/permissions-boundary.md."
+  type        = bool
+  default     = false
+}

@@ -14,9 +14,10 @@ data "aws_iam_policy_document" "cost_ingestion_assume" {
 
 #Creates the AWS IAM role resource named cost ingestion.
 resource "aws_iam_role" "cost_ingestion" {
-  name               = "${var.project_name}-cost-ingestion-role"
-  assume_role_policy = data.aws_iam_policy_document.cost_ingestion_assume.json
-  tags               = var.tags
+  name                 = "${var.project_name}-cost-ingestion-role"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.cost_ingestion_assume.json
+  tags                 = var.tags
 }
 
 #Reads the AWS IAM policy document data source named cost ingestion.

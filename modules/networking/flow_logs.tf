@@ -22,7 +22,8 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
 resource "aws_iam_role" "vpc_flow_logs" {
   count = var.enable_flow_logs && var.flow_logs_destination == "cloudwatch" ? 1 : 0
 
-  name = "${var.name_prefix}-vpc-flow-logs-role"
+  name                 = "${var.name_prefix}-vpc-flow-logs-role"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

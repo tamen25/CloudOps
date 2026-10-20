@@ -75,7 +75,8 @@ resource "aws_backup_plan" "main" {
 #── IAM service role ─────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "backup" {
-  name = "${local.name}-backup-role"
+  name                 = "${local.name}-backup-role"
+  permissions_boundary = var.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

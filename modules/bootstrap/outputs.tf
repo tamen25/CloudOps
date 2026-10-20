@@ -47,3 +47,12 @@ output "oidc_provider_arn" {
   description = "GitHub Actions OIDC provider ARN"
   value       = aws_iam_openid_connect_provider.github.arn
 }
+
+output "permissions_boundary_arn" {
+  description = "ARN of the workload permissions boundary, for every module that creates a role (null while enable_permissions_boundary is off)"
+  value       = var.enable_permissions_boundary ? local.permissions_boundary_arn : null
+
+  # Known at plan time, but a role must not be given the boundary before the
+  # policy exists.
+  depends_on = [aws_iam_policy.permissions_boundary]
+}

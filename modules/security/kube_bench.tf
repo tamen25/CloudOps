@@ -147,9 +147,10 @@ data "aws_iam_policy_document" "kube_bench_assume_role" {
 
 #Creates the AWS IAM role resource named kube bench.
 resource "aws_iam_role" "kube_bench" {
-  name               = "${var.project_name}-kube-bench"
-  assume_role_policy = data.aws_iam_policy_document.kube_bench_assume_role.json
-  description        = "IRSA role for the kube-bench CronJob pod — allows Lambda invoke"
+  name                 = "${var.project_name}-kube-bench"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.kube_bench_assume_role.json
+  description          = "IRSA role for the kube-bench CronJob pod — allows Lambda invoke"
 
   tags = var.tags
 }
@@ -296,9 +297,10 @@ data "aws_iam_policy_document" "kube_bench_processor_assume_role" {
 
 #Creates the AWS IAM role resource named kube bench processor.
 resource "aws_iam_role" "kube_bench_processor" {
-  name               = "${var.project_name}-kube-bench-processor"
-  assume_role_policy = data.aws_iam_policy_document.kube_bench_processor_assume_role.json
-  description        = "Execution role for the kube-bench processor Lambda"
+  name                 = "${var.project_name}-kube-bench-processor"
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy   = data.aws_iam_policy_document.kube_bench_processor_assume_role.json
+  description          = "Execution role for the kube-bench processor Lambda"
 
   tags = var.tags
 }

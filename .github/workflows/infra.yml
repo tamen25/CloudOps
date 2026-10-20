@@ -125,6 +125,16 @@ jobs:
           terraform -chdir=stacks/cluster validate
           terraform -chdir=stacks/platform validate
 
+      - name: Permissions boundary on every role
+        run: bash scripts/check-permissions-boundary.sh
+
+      - name: Terraform module tests
+        run: |
+          for dir in $(git ls-files 'modules/*/tests/*.tftest.hcl' | cut -d/ -f1-2 | sort -u); do
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" test
+          done
+
       - name: Setup tflint
         uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
 
