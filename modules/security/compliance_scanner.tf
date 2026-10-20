@@ -185,12 +185,13 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
     resources = ["*"]
   }
 
-  #EKS — describe cluster configuration
+  #EKS — describe cluster configuration, and which versions are in support
   statement {
     sid    = "EKSDescribeCluster"
     effect = "Allow"
     actions = [
       "eks:DescribeCluster",
+      "eks:DescribeClusterVersions",
     ]
     resources = ["*"]
   }

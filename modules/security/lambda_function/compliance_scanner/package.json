@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "CloudOps compliance scanner — scans AWS resources against a security baseline every 6 hours",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
   "license": "UNLICENSED",
   "private": true,
   "engines": {
