@@ -3,7 +3,7 @@
 
 const {
   S3Client,
-  PutBucketPublicAccessBlockCommand,
+  PutPublicAccessBlockCommand,
   PutBucketEncryptionCommand,
 } = require('@aws-sdk/client-s3');
 const {
@@ -301,7 +301,7 @@ async function remediateS3PublicAccess(finding) {
   log('info', { action: 'remediate_s3_public_access', bucket });
 
   if (!DRY_RUN) {
-    await s3.send(new PutBucketPublicAccessBlockCommand({
+    await s3.send(new PutPublicAccessBlockCommand({
       Bucket: bucket,
       PublicAccessBlockConfiguration: {
         BlockPublicAcls:       true,

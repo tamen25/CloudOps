@@ -20,7 +20,7 @@ const CLIENTS = {
 };
 
 const MUTATING_AWS = new Set([
-  'PutBucketPublicAccessBlockCommand', 'PutBucketEncryptionCommand', 'RevokeSecurityGroupIngressCommand',
+  'PutPublicAccessBlockCommand', 'PutBucketEncryptionCommand', 'RevokeSecurityGroupIngressCommand',
   'ModifyDBInstanceCommand', 'UpdateCommand',
 ]);
 
@@ -97,6 +97,22 @@ test('an open SSH rule is revoked, and only rules open to the world on that port
   const revoke = calls.find((c) => c.name === 'RevokeSecurityGroupIngressCommand');
   assert.deepEqual(revoke?.input, { GroupId: 'sg-0abc', IpPermissions: [rules[0]] });
   assert.ok(calls.some((c) => c.name === 'UpdateCommand'), 'finding marked remediated');
+});
+
+// The public-access fix used PutBucketPublicAccessBlockCommand, which the
+// SDK does not have: it threw before reaching S3, so a public bucket stayed
+// public. Each S3 fix must reach the client with the bucket it was given.
+test('S3 findings are fixed on the bucket named in the finding', async () => {
+  for (const [checkName, command] of [
+    ['s3_public_access_block_disabled', 'PutPublicAccessBlockCommand'],
+    ['s3_encryption_disabled', 'PutBucketEncryptionCommand'],
+  ]) {
+    const { handler, calls } = load();
+    await handler(finding({ checkName, resource: 's3:::logs-bucket' }));
+    const call = calls.find((c) => c.name === command);
+    assert.equal(call?.input.Bucket, 'logs-bucket', `${checkName} did not call ${command}`);
+    assert.ok(calls.some((c) => c.name === 'UpdateCommand'), `${checkName} not marked remediated`);
+  }
 });
 
 test('RDS deletion protection is switched on in prod only', async () => {
