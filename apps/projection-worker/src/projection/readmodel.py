@@ -44,14 +44,18 @@ class ReadModel:
 
 
 def decode_record(record: dict) -> dict | None:
-    """Decode a Kinesis record's base64 'Data' field into a JSON dict.
+    """Decode a Kinesis record's 'Data' field into a JSON dict.
 
-    Returns None on malformed data (caller counts it as skipped)."""
+    boto3's get_records returns Data as the record's bytes, already decoded;
+    a string is base64, as in a Lambda event. Bytes used to be base64-decoded
+    a second time, which turned every real record into garbage and counted
+    it as skipped. Returns None on malformed data (caller counts it as
+    skipped)."""
     data = record.get("Data")
     if data is None:
         return None
     try:
-        raw = base64.b64decode(data) if isinstance(data, (str, bytes)) else data
+        raw = base64.b64decode(data, validate=True) if isinstance(data, str) else data
         return json.loads(raw)
     except (ValueError, TypeError):
         return None

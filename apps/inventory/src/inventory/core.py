@@ -25,21 +25,25 @@ class InvalidReservation(ValueError):
 def reserve(lines: list[ReserveLine], stock: dict[str, int]) -> ReserveResult:
     """Reserve each line against available stock.
 
-    A line is fulfillable when stock[sku] >= qty. The reservation succeeds only
-    if every line is fulfillable (all-or-nothing). Unknown SKUs are treated as
-    zero stock. Returns per-line availability either way so callers can report
-    which line failed.
+    A line is fulfillable when stock[sku] covers it together with the lines
+    before it for the same SKU: two lines of 60 against 100 in stock cannot
+    both be met. The reservation succeeds only if every line is fulfillable
+    (all-or-nothing). Unknown SKUs are treated as zero stock. Returns per-line
+    availability either way so callers can report which line failed.
     """
     if not lines:
         raise InvalidReservation("no lines to reserve")
 
     result_lines: list[dict] = []
     all_ok = True
+    claimed: dict[str, int] = {}
     for line in lines:
         if line.qty <= 0:
             raise InvalidReservation(f"non-positive qty for sku {line.sku}")
-        available = stock.get(line.sku, 0)
+        available = stock.get(line.sku, 0) - claimed.get(line.sku, 0)
         ok = available >= line.qty
+        if ok:
+            claimed[line.sku] = claimed.get(line.sku, 0) + line.qty
         all_ok = all_ok and ok
         result_lines.append({"sku": line.sku, "qty": line.qty, "available": available, "ok": ok})
 

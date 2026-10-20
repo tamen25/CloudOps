@@ -18,7 +18,12 @@ export interface PaymentDeps {
   logger: PaymentLogger;
   fetchImpl?: typeof fetch;
   idGen?: () => string;
+  // Ledger call timeout. Without one a hung ledger held the authorization
+  // (and the gateway's request) open.
+  timeoutMs?: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 5000;
 
 // Amounts at or above this (cents) are declined, so the chaos/burst scenarios
 // can exercise the decline branch deterministically.
@@ -32,6 +37,7 @@ export function createApp(deps: PaymentDeps): Express {
   app.use(express.json({ limit: '32kb' }));
   const doFetch = deps.fetchImpl ?? fetch;
   const idGen = deps.idGen ?? randomUUID;
+  const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   app.get('/healthz', (_req: Request, res: Response) => { res.status(200).json({ status: 'ok' }); });
   app.get('/readyz', (_req: Request, res: Response) => { res.status(200).json({ status: 'ready' }); });
@@ -61,7 +67,12 @@ export function createApp(deps: PaymentDeps): Express {
     }
 
     try {
-      const lr = await doFetch(`${deps.ledgerUrl}/entries`, { method: 'POST', headers, body: ledgerBody });
+      const lr = await doFetch(`${deps.ledgerUrl}/entries`, {
+        method: 'POST',
+        headers,
+        body: ledgerBody,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
       if (!lr.ok) {
         deps.logger.error({ status: lr.status }, 'ledger post failed');
         res.status(502).json({ error: 'ledger_failed' });
@@ -71,6 +82,10 @@ export function createApp(deps: PaymentDeps): Express {
       res.status(200).json({ status: 'authorized', auth_id: authId, entry_id: entry.entry_id });
     } catch (err) {
       deps.logger.error({ err }, 'ledger unreachable');
+      if ((err as Error)?.name === 'TimeoutError') {
+        res.status(504).json({ error: 'ledger_timeout' });
+        return;
+      }
       res.status(502).json({ error: 'ledger_unavailable' });
     }
   });

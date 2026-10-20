@@ -23,6 +23,14 @@ def test_reserve_unknown_sku_is_zero_stock():
     assert res.lines[0]["available"] == 0
 
 
+def test_reserve_counts_repeated_skus_together():
+    # Two lines of 60 against 100 in stock used to both pass.
+    r = reserve([ReserveLine("A", 60), ReserveLine("A", 60)], {"A": 100})
+    assert r.reserved is False
+    assert [line["ok"] for line in r.lines] == [True, False]
+    assert r.lines[1]["available"] == 40
+
+
 def test_reserve_rejects_empty():
     with pytest.raises(InvalidReservation):
         reserve([], {"A": 1})

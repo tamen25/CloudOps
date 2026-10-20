@@ -7,6 +7,7 @@ always exercises both the ok and short-stock branches."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from fastapi import FastAPI
@@ -28,7 +29,8 @@ def _load_stock() -> dict[str, int]:
         return {}
     try:
         return {str(k): int(v) for k, v in json.loads(raw).items()}
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError) as exc:
+        logging.getLogger("inventory").warning("SEED_STOCK unreadable, using the default stock: %s", exc)
         return {}
 
 

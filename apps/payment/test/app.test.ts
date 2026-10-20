@@ -109,3 +109,21 @@ test('POST /authorize returns 502 when ledger fails', async () => {
     server.close();
   }
 });
+
+// A ledger that never answers used to hold the authorization open.
+test('a ledger that does not answer in time is a 504', async () => {
+  const hang = ((_url: string, init: RequestInit) =>
+    new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(init.signal?.reason)))) as unknown as typeof fetch;
+  const { server, baseUrl } = await startServer({ ledgerUrl: 'http://l', hmacSecret: 's', logger: silentLogger(), fetchImpl: hang, timeoutMs: 50 });
+  try {
+    const res = await fetch(`${baseUrl}/authorize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ amount_cents: 500, tenant_id: 't1' }),
+    });
+    assert.equal(res.status, 504);
+    assert.equal((await res.json()).error, 'ledger_timeout');
+  } finally {
+    server.close();
+  }
+});
