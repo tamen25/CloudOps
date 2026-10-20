@@ -831,3 +831,15 @@ variable "permissions_boundary_arn" {
   type        = string
   default     = null
 }
+
+variable "enable_image_signature_policy" {
+  description = "Require order-api images signed by this repository's app.yml on main (Sigstore policy-controller). docs/runbooks/image-signature-policy.md."
+  type        = bool
+  default     = false
+}
+
+variable "image_signature_policy_mode" {
+  description = "warn (report, admit) or enforce (refuse unsigned order-api images)"
+  type        = string
+  default     = "warn"
+}

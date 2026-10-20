@@ -12,8 +12,11 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 ## P1 — correctness, supply chain, process
 
 - [ ] **D02** — cosign-installer v4 installs cosign v3, which signs in the
-  new bundle format. Whether the in-cluster cosign-gatekeeper-provider
-  verifies it is unchecked; until then the installer pins cosign v2.
+  new Sigstore bundle format. app.yml pins cosign v2 until one v3-signed
+  image is admitted by the policy in enforce mode on a live cluster
+  (docs/runbooks/image-signature-policy.md). The archived
+  cosign-gatekeeper-provider it was going to be checked against is replaced
+  by Sigstore policy-controller (#45).
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).

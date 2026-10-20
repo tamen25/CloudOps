@@ -305,8 +305,8 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           # Installer v4 defaults to cosign v3, which signs in the new bundle
-          # format. Whether the in-cluster cosign-gatekeeper-provider verifies
-          # that is unchecked (BACKLOG D02); v2 keeps the format it does.
+          # format. Whether the cluster's policy-controller admits it is
+          # unchecked (BACKLOG D02); v2 keeps the format it is known to verify.
           cosign-release: v2.6.5
 
       - name: Sign image
@@ -859,8 +859,8 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           # Installer v4 defaults to cosign v3, which signs in the new bundle
-          # format. Whether the in-cluster cosign-gatekeeper-provider verifies
-          # that is unchecked (BACKLOG D02); v2 keeps the format it does.
+          # format. Whether the cluster's policy-controller admits it is
+          # unchecked (BACKLOG D02); v2 keeps the format it is known to verify.
           cosign-release: v2.6.5
 
       - name: Verify image signature

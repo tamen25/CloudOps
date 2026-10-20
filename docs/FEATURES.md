@@ -334,10 +334,11 @@ SECURITY` — table owner cannot bypass.
 
 ### 6.3 Supply chain
 
-- Cosign Gatekeeper provider deployed when
-  `var.enable_cosign_provider = true`
-  (`modules/security/gatekeeper.tf`). Precondition guard prevents
-  enabling the constraint without the provider.
+- Image signature admission with Sigstore policy-controller when
+  `enable_image_signature_policy = true`: order-api images must carry a
+  keyless signature from this repository's app.yml on main; warn first,
+  then enforce (`modules/security/image_signature_policy.tf`,
+  `docs/runbooks/image-signature-policy.md`).
 - ECR pull-through cache (`ecr-public/` prefix) — every `public.ecr.aws`
   image resolves through the cache because nodes have no NAT.
 
