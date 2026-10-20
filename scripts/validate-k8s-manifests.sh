@@ -76,14 +76,14 @@ render_mesh() {
     OTEL_ENDPOINT=https://otel.example.com \
     OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
     OTEL_OTLP_HEADERS="Authorization=Bearer placeholder" \
-    KINESIS_STREAM_NAME= \
+    KINESIS_STREAM_NAME='' \
     API_GATEWAY_REPLICAS=1 \
     API_GATEWAY_SERVICE_ACCOUNT=api-gateway \
     API_GATEWAY_IMAGE=example.com/api-gateway@${digest} \
     PRICING_REPLICAS=1 PRICING_SERVICE_ACCOUNT=pricing PRICING_IMAGE=example.com/pricing@${digest} \
     PRICING_URL=http://pricing.cloudops.svc.cluster.local \
     INVENTORY_REPLICAS=1 INVENTORY_SERVICE_ACCOUNT=inventory INVENTORY_IMAGE=example.com/inventory@${digest} \
-    INVENTORY_URL=http://inventory.cloudops.svc.cluster.local INVENTORY_SEED_STOCK= \
+    INVENTORY_URL=http://inventory.cloudops.svc.cluster.local INVENTORY_SEED_STOCK='' \
     FRAUD_REPLICAS=1 FRAUD_SERVICE_ACCOUNT=fraud FRAUD_IMAGE=example.com/fraud@${digest} \
     FRAUD_URL=http://fraud.cloudops.svc.cluster.local \
     PAYMENT_REPLICAS=1 PAYMENT_SERVICE_ACCOUNT=payment PAYMENT_IMAGE=example.com/payment@${digest} \
@@ -129,15 +129,15 @@ OTEL_ENDPOINT=https://otel.example.com \
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev \
 ACM_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/example \
 ORDER_API_HOST=api.example.com \
-API_KEY_SECRET_ARN= \
+API_KEY_SECRET_ARN='' \
 IMAGE_TAG=local \
 VPC_CIDR=10.0.0.0/16 \
-OIDC_ISSUER= \
-OIDC_AUDIENCE= \
-OIDC_JWKS_URL= \
-OIDC_REQUIRED_SCOPES= \
-KINESIS_STREAM_NAME= \
-ALLOWED_ORIGINS= \
+OIDC_ISSUER='' \
+OIDC_AUDIENCE='' \
+OIDC_JWKS_URL='' \
+OIDC_REQUIRED_SCOPES='' \
+KINESIS_STREAM_NAME='' \
+ALLOWED_ORIGINS='' \
   apps/order-api/node_modules/.bin/tsx apps/order-api/scripts/render-k8s.ts apps/order-api/k8s "$ORDER_OUT"
 
 #── 2b. Render apps/storefront/k8s ───────────────────────────────────────────
@@ -154,19 +154,19 @@ STOREFRONT_API_BASE_URL=https://api.example.com \
 STOREFRONT_SEARCH_BASE_URL=https://search.example.com \
 STOREFRONT_WS_BASE_URL=wss://ws.example.com \
 NEXT_PUBLIC_WS_BASE_URL=wss://ws.example.com \
-CART_TABLE_NAME= \
-REALTIME_CONNECTIONS_TABLE_NAME= \
-CHECKOUT_STATE_MACHINE_ARN= \
+CART_TABLE_NAME='' \
+REALTIME_CONNECTIONS_TABLE_NAME='' \
+CHECKOUT_STATE_MACHINE_ARN='' \
 ORDER_API_NAMESPACE=cloudops \
 AWS_REGION=us-east-1 \
 ACM_CERT_ARN=arn:aws:acm:us-east-1:123456789012:certificate/example \
 VPC_CIDR=10.0.0.0/16 \
-OIDC_ISSUER= \
-OIDC_AUDIENCE= \
-OIDC_JWKS_URL= \
-OIDC_HOSTED_UI= \
-OIDC_CLIENT_ID= \
-STOREFRONT_ORIGIN= \
+OIDC_ISSUER='' \
+OIDC_AUDIENCE='' \
+OIDC_JWKS_URL='' \
+OIDC_HOSTED_UI='' \
+OIDC_CLIENT_ID='' \
+STOREFRONT_ORIGIN='' \
 PRIVACY_CONTACT_EMAIL=privacy@example.com \
 STOREFRONT_API_RATE_LIMIT_WINDOW_MS=60000 \
 STOREFRONT_API_IP_RATE_LIMIT_MAX=120 \

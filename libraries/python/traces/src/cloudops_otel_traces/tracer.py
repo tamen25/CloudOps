@@ -246,7 +246,6 @@ def _trace_baggage_attrs() -> dict[str, str]:
 
 
 class TraceInstrumentation:
-    #Initializes the requested work.
     def __init__(self) -> None:
         self.resource_attributes = _runtime_resource_attributes()
         self.exporters_list = _parse_string_list(os.getenv("OTEL_BACKEND_EXPORTERS"), DEFAULT_EXPORTERS)
@@ -274,7 +273,6 @@ class TraceInstrumentation:
     def active_span(self) -> Any:
         return self._current_span
 
-    #Initializes the requested work.
     def _init(self) -> None:
         if not _otel_available():
             return

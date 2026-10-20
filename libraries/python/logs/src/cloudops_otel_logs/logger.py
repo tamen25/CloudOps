@@ -219,7 +219,6 @@ def _runtime_resource_attributes() -> dict[str, str]:
 
 
 class LogSampler:
-    #Initializes the requested work.
     def __init__(self, logger: CloudOpsLogger) -> None:
         self._logger = logger
         self._batch_map: dict[str, LogBatch] = {}
@@ -259,7 +258,6 @@ class LogSampler:
 
 
 class CloudOpsLogger:
-    #Initializes the requested work.
     def __init__(self, name: str | None = None) -> None:
         self.resource_attributes = _runtime_resource_attributes()
         self.enabled_levels = _parse_log_levels(os.getenv("OTEL_LOG_LEVEL"))
@@ -297,7 +295,6 @@ class CloudOpsLogger:
     def warn(self, message: Any = None, *optional_params: Any) -> None:
         self.log("warn", message, *optional_params)
 
-    #Logs the requested work.
     def log(self, level: LogLevel, message: Any = None, *optional_params: Any) -> None:
         current_trace_id = _current_trace_id()
         if current_trace_id != self._previous_trace_id:
@@ -338,7 +335,6 @@ class CloudOpsLogger:
             except TypeError:
                 self._logger_provider.force_flush()
 
-    #Initializes the requested work.
     def _init(self) -> None:
         if len(self.exporters_list) <= 1 and "console" in {item.lower() for item in self.exporters_list}:
             self._use_console = True

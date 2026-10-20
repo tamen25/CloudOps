@@ -182,7 +182,6 @@ class TraceInstrumentation {
     return this.instance;
   }
 
-  // Initializes the requested work.
   private init(): void {
     if (this.isInitialized) return;
 

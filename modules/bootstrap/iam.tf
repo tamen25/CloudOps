@@ -1,4 +1,3 @@
-#Defines the trust policy for the deployer role, allowing trusted principals to assume it
 data "aws_iam_policy_document" "deployer_assume_role" {
   statement {
     effect = "Allow"

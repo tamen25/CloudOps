@@ -19,7 +19,6 @@ locals {
   ])
 }
 
-#Wires the EKS module into this stack.
 module "eks" {
   source = "../../modules/eks"
 

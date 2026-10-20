@@ -81,7 +81,6 @@ public final class TraceInstrumentation {
     return propagationContext;
   }
 
-  // Initializes the requested work.
   private void init() {
     Sampler sampler = Sampler.parentBased(Sampler.traceIdRatioBased(TracesConfiguration.samplerRatio()));
 

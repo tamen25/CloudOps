@@ -12,7 +12,6 @@ data "aws_region" "current" {
   count = var.rotation_enabled && var.rotation_lambda_arn == "" && var.rotation_lambda_auto_deploy ? 1 : 0
 }
 
-#Groups local values used by this Terraform file.
 locals {
   #Default Secrets Manager endpoint when caller does not supply one. Public
   #AWS endpoint is fine when the Lambda has internet egress (NAT) or when a

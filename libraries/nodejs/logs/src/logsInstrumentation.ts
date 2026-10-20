@@ -242,7 +242,6 @@ export class LogsInstrumentation {
     return this.instance;
   }
 
-  // Initializes the requested work.
   private init(): void {
     if (this.isInitialized) return;
 
@@ -463,7 +462,6 @@ export class LogsInstrumentation {
     }
   }
 
-  // Logs the requested work.
   public log(level: LogLevel, message?: any, ...optionalParams: any[]): void {
     diag.debug(`LogsInstrumentation.log called with level: ${level}, message: ${message}`);
     const currentTraceID = process.env._X_AMZN_TRACE_ID || trace.getActiveSpan()?.spanContext().traceId || "unknown";

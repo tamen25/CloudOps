@@ -24,10 +24,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   resilience (R01-9); `docs/reviews/2026-10-20-storefront-review.md` — an
   identical cart bought again within 24 h replays the earlier order (SF-7),
   rate limits are per pod (SF-8).
-- [ ] **Q01** — shellcheck findings in `scripts/build-and-push.sh` and
-  `scripts/validate-k8s-manifests.sh`, and generated comments the C03 rules
-  did not cover (workflow headers "This manifest defines …", "Exposes the
-  … output value.").
 - [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
   per node (a DaemonSet-style job, or one Job per node group) so a
   finding is about a node, not whichever node ran that night.
@@ -68,6 +64,9 @@ prove. I03 comes first.
   no `<project>-*` buckets, no load balancers for the cluster.
 
 ## Done
+
+- [x] **Q01** — 185 more generated comments; shellcheck clean on every
+  script; the fraud image's OTel agent pinned by checksum (#43).
 
 - [x] **F02** — ECR repositories for every image in the foundation stack
   (immutable tags, scan on push, lifecycle), and a working

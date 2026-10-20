@@ -137,7 +137,6 @@ void CloudOpsLogger::debug(const std::string& m, std::vector<LogValue> p) { log(
 // Handles warn.
 void CloudOpsLogger::warn(const std::string& m, std::vector<LogValue> p)  { log(LogLevel::Warn,  m, std::move(p)); }
 
-// Logs the requested work.
 void CloudOpsLogger::log(LogLevel level, const std::string& message, std::vector<LogValue> params) {
   std::string trace = current_trace_id();
   std::string invocation;
@@ -221,7 +220,6 @@ const std::unordered_set<LogLevel>& CloudOpsLogger::enabled_levels() const noexc
   return enabled_levels_;
 }
 
-// Initializes the requested work.
 void CloudOpsLogger::init() {
   if (exporters_.size() == 1) {
     auto only = exporters_[0];

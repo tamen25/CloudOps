@@ -9,7 +9,6 @@ terraform {
   }
 }
 
-#Groups local values used by this Terraform file.
 locals {
   name = var.name_prefix
 }
