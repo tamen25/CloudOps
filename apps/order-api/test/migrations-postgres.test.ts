@@ -32,6 +32,11 @@ test('migrations apply to Postgres as a non-superuser owner, and the integration
   url.password = password;
   url.pathname = `/${database}`;
   const pool = new Pool({ connectionString: url.toString(), max: 1 });
+  // The pool emits 'error' only for idle connections. The one expected here
+  // is DROP DATABASE ... WITH (FORCE) below ending a connection the pool
+  // has not finished closing; without a listener it is an uncaught
+  // exception. A failing query still rejects, and fails the test.
+  pool.on('error', () => {});
 
   try {
     await runMigrations({ pool, logger });

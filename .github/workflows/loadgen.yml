@@ -1,10 +1,12 @@
 # Load generator pipeline.
-# - PR / push: test + build the loadgen image source.
-# - workflow_dispatch: fire an on-demand load run. The run itself executes
-#   INSIDE the cluster (the loadgen targets the private api-gateway), so the
-#   dispatch path creates a one-off k8s Job from the loadgen image with
-#   RUN_ON_START. That step is a commented activation block until the cluster
-#   prerequisites land (mirrors app.yml deploy gating + storefront.yml #121).
+# - PR / push: test and build the loadgen source. With AWS_DEPLOY_ENABLED, a
+#   push to main also builds the image, pushes it to ECR and prints the
+#   mesh_loadgen_image line for the platform tfvars (image-build.yml).
+# - workflow_dispatch: an on-demand load run. The loadgen targets the
+#   private api-gateway, so the run executes inside the cluster: a one-off
+#   Job cloned from the loadgen-trickle CronJob, with the requested
+#   scenario, rate and duration. Needs enable_loadgen and
+#   loadgen_enable_trickle (both default on with the mesh).
 
 name: Loadgen Pipeline
 
@@ -22,6 +24,12 @@ on:
       - '.github/workflows/loadgen.yml'
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Environment to run the load in'
+        required: true
+        type: choice
+        default: dev
+        options: [dev, staging, prod]
       scenario:
         description: 'Load scenario'
         required: true
@@ -45,6 +53,9 @@ permissions:
 concurrency:
   group: loadgen-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   test:
@@ -70,45 +81,120 @@ jobs:
       - name: Build
         run: npm run build
 
-  # ── On-demand run (ACTIVATION PENDING) ───────────────────────────────────---
-  # The load run executes in-cluster (gateway is private). Activate when the
-  # deploy path has cluster access (kubeconfig via OIDC + aws eks
-  # update-kubeconfig), then create a one-off Job from the loadgen image:
-  #
-  # run-load:
-  #   if: github.event_name == 'workflow_dispatch'
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     id-token: write
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
-  #     - run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME"
-  #     - run: |
-  #         kubectl -n cloudops create job "loadgen-adhoc-$GITHUB_RUN_ID" \
-  #           --image="$LOADGEN_IMAGE" -- node dist/server.js
-  #         # with env RUN_ON_START=${{ inputs.scenario }}
-  #         #          RUN_RPS=${{ inputs.rps }}
-  #         #          RUN_DURATION_SECONDS=${{ inputs.duration_seconds }}
-  #         #          GATEWAY_URL=http://api-gateway.cloudops.svc.cluster.local
-  #     - run: kubectl -n cloudops wait --for=condition=complete \
-  #         "job/loadgen-adhoc-$GITHUB_RUN_ID" --timeout=700s
-  echo-inputs:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+  image:
+    needs: test
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/image-build.yml
+    with:
+      image: loadgen
+      tfvar: mesh_loadgen_image
+      environment: dev
+    secrets: inherit
+
+  run-load:
+    if: vars.AWS_DEPLOY_ENABLED == 'true' && github.event_name == 'workflow_dispatch'
+    # In-VPC runner when DEPLOY_RUNNER is set (ADR 025,
+    # docs/runbooks/ci-runner.md); GitHub-hosted otherwise.
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
+    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      SCENARIO: ${{ inputs.scenario }}
+      RPS: ${{ inputs.rps }}
+      DURATION_SECONDS: ${{ inputs.duration_seconds }}
+      TF_VARS: ${{ secrets.TF_VARS }}
+      TF_VARS_DEV: ${{ secrets.TF_VARS_DEV }}
+      TF_VARS_STAGING: ${{ secrets.TF_VARS_STAGING }}
+      TF_VARS_PROD: ${{ secrets.TF_VARS_PROD }}
     steps:
-      - name: Echo requested run (activation pending)
-        env:
-          SCENARIO: ${{ inputs.scenario }}
-          RPS: ${{ inputs.rps }}
-          DURATION_SECONDS: ${{ inputs.duration_seconds }}
+      # The loadgen clamps both too; the deadline below needs a number.
+      - name: Validate inputs
         run: |
-          echo "Requested load run (in-cluster execution not yet activated):"
-          echo "  scenario=$SCENARIO"
-          echo "  rps=$RPS (clamped to 200 by loadgen)"
-          echo "  duration_seconds=$DURATION_SECONDS (clamped to 600)"
-          echo "Activate the run-load job above once the cluster deploy path exists."
+          for v in "$RPS" "$DURATION_SECONDS"; do
+            if ! printf '%s' "$v" | grep -Eq '^[0-9]{1,5}$'; then
+              echo "::error::rps and duration_seconds must be whole numbers"
+              exit 1
+            fi
+          done
+          echo "DURATION=$(( DURATION_SECONDS > 600 ? 600 : DURATION_SECONDS ))" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-session-name: github-actions-loadgen-run
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.11.0
+          terraform_wrapper: false
+
+      - name: Find the cluster and namespace
+        run: |
+          bash scripts/write-ci-tfvars.sh
+          STACKS=cluster bash scripts/terraform-stacks.sh init
+          NS=$(sed -nE 's/^mesh_namespace[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' terraform.tfvars | head -1)
+          {
+            echo "EKS_CLUSTER_NAME=$(terraform -chdir=stacks/cluster output -raw cluster_name)"
+            echo "NS=${NS:-cloudops}"
+          } >> "$GITHUB_ENV"
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      # A copy of the trickle Job with this run's scenario, rate and
+      # duration, and a deadline a minute past the run.
+      - name: Start the run
+        run: |
+          if ! kubectl -n "$NS" get cronjob loadgen-trickle >/dev/null 2>&1; then
+            echo "::error::no loadgen-trickle CronJob in $NS: enable_loadgen and loadgen_enable_trickle must be on"
+            exit 1
+          fi
+          JOB="loadgen-adhoc-${GITHUB_RUN_ID}"
+          echo "JOB=$JOB" >> "$GITHUB_ENV"
+          kubectl -n "$NS" create job "$JOB" --from=cronjob/loadgen-trickle --dry-run=client -o json \
+            | jq --arg s "$SCENARIO" --arg r "$RPS" --arg d "$DURATION" --argjson deadline $(( DURATION + 60 )) '
+                .spec.activeDeadlineSeconds = $deadline
+                | .spec.template.spec.containers[0].env |= map(
+                    if .name == "RUN_ON_START" then .value = $s
+                    elif .name == "RUN_RPS" then .value = $r
+                    elif .name == "RUN_DURATION_SECONDS" then .value = $d
+                    elif .name == "OTEL_SERVICE_NAME" then .value = "loadgen-adhoc"
+                    else . end)' \
+            | kubectl apply -f -
+          echo "Started $JOB: $SCENARIO at $RPS rps for ${DURATION}s"
+
+      - name: Wait for it
+        run: |
+          if ! kubectl -n "$NS" wait --for=condition=complete "job/$JOB" --timeout="$(( DURATION + 120 ))s"; then
+            kubectl -n "$NS" logs "job/$JOB" --tail=100 || true
+            echo "::error::$JOB did not complete"
+            exit 1
+          fi
+          kubectl -n "$NS" logs "job/$JOB" --tail=20
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Load run — ${{ job.status }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Environment** | \`$TARGET_ENVIRONMENT\` |"
+            echo "| **Scenario** | \`$SCENARIO\` |"
+            echo "| **Rate** | $RPS rps (the loadgen clamps to 200) |"
+            echo "| **Duration** | ${DURATION:-?}s |"
+            echo "| **Job** | \`${JOB:-not started}\` in \`${NS:-?}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

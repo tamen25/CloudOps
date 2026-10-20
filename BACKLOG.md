@@ -53,6 +53,10 @@ prove. I03 comes first.
 
 ## Done
 
+- [x] **C01** — CI/CD review (docs/reviews/2026-10-20-cicd-review.md): 16
+  findings in the AWS paths of the workflows, fixed across #52–#54; a
+  workflow checker and a real-Postgres migration test keep them fixed.
+
 - [x] **O02** (#76) — in-VPC runners: `modules/ci-runner` (ARC 0.14.2, off
   by default, egress DNS/HTTPS only), the runner image and its workflow,
   cluster jobs opt in through `DEPLOY_RUNNER`; ADR 025 accepted. Live check
