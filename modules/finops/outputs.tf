@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "lambda_arn" {
   description = "ARN of the cost ingestion Lambda function"
   value       = aws_lambda_function.cost_ingestion.arn

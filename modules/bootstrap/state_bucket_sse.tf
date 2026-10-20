@@ -1,4 +1,3 @@
-#This file defines state bucket SSE settings for CloudOps.
 #Backlog #53 — manage SSE on the existing Terraform state bucket from
 #Terraform itself, switching to SSE-KMS using the bootstrap KMS key when
 #one was created.

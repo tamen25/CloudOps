@@ -1,15 +1,12 @@
-// This file contains order validation test logic for order API test.
 // Validator is internal to app.ts — exercise it through POST /order.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp, validateOrderPayload } from '../src/app';
 
-// Handles silent logger.
 function silentLogger() {
   return { info() {}, warn() {}, error() {} };
 }
 
-// Handles start server.
 async function startServer() {
   const pool = {
     query: async (sql, params) => {
@@ -36,7 +33,6 @@ async function startServer() {
   });
 }
 
-// Handles post.
 async function post(baseUrl, body) {
   return fetch(`${baseUrl}/order`, {
     method: 'POST',

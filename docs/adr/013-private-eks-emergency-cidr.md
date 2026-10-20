@@ -1,4 +1,3 @@
-<!-- This document explains 013 private EKS emergency cidr for CloudOps. -->
 # ADR 013 — Private EKS Endpoint with Emergency CIDR Break-Glass
 
 **Status:** Accepted (interim — superseded by self-hosted runner once

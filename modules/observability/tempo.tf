@@ -1,4 +1,3 @@
-#This file defines tempo settings for CloudOps.
 #Tempo — distributed tracing backend with S3 storage and IRSA
 resource "helm_release" "tempo" {
   name       = "tempo"

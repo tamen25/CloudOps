@@ -1,4 +1,3 @@
-// This file contains trace instrumentation logic for traces src.
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import {
   SDKRegistrationConfig,
@@ -86,7 +85,6 @@ export function parseResourceAttributes(raw: string | undefined): Record<string,
   }, {});
 }
 
-// Handles auth headers.
 function authHeaders(apiKey: string | undefined): Record<string, string> {
   if (!apiKey) return {};
   return { authorization: `Bearer ${apiKey}` };
@@ -137,7 +135,6 @@ export function addRuntimeResourceAttributes(attributes: Record<string, string>)
   if (containerName) attributes[ATTR_CONTAINER_NAME] = containerName;
 }
 
-// Builds active baggage attributes.
 function traceBaggageAttrs(): Record<string, string> {
   const activeBaggage = propagation.getActiveBaggage();
   if (!activeBaggage) return {};

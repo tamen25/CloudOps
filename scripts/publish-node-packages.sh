@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-#This script runs publish node packages automation for CloudOps.
 set -euo pipefail
 
 MODE="publish"
@@ -24,7 +23,6 @@ if [[ "${#MANIFESTS[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-#Reads package field.
 read_package_field() {
   local field="$1"
   node -e "const p=require('./package.json'); const v=p['$field']; if (!v) process.exit(1); console.log(v)" \
@@ -32,20 +30,17 @@ read_package_field() {
     < /dev/null
 }
 
-#Reads package private.
 read_package_private() {
   node -e "const p=require('./package.json'); console.log(p.private === true ? 'true' : 'false')" \
     2>/dev/null \
     < /dev/null
 }
 
-#Handles package has source.
 package_has_source() {
   local dir="$1"
   [[ -f "$dir/src/index.ts" || -f "$dir/src/index.js" ]]
 }
 
-#Handles login codeartifact.
 login_codeartifact() {
   if [[ -z "${CODEARTIFACT_DOMAIN:-}" || -z "${CODEARTIFACT_REPOSITORY:-}" ]]; then
     echo "CODEARTIFACT_DOMAIN/CODEARTIFACT_REPOSITORY not set; using existing npm registry config"

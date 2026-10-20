@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # @cloudops/otel-logs
 
 Node.js/TypeScript OpenTelemetry logs helper for CloudOps services.

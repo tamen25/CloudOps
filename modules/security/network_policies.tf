@@ -1,4 +1,3 @@
-#This file defines network policies settings for CloudOps.
 #Kubernetes NetworkPolicies
 #
 #cloudops namespace:

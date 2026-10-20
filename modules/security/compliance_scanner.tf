@@ -1,4 +1,3 @@
-#This file defines compliance scanner settings for CloudOps.
 #Compliance Scanner Lambda
 #
 #Runs every 6 hours via EventBridge. Scans S3, RDS, EKS, security groups, IAM,
@@ -16,7 +15,6 @@ data "archive_file" "compliance_scanner" {
   output_path = "${path.module}/lambda_function/compliance_scanner.zip"
 }
 
-#Creates the AWS cloudwatch log group resource named compliance scanner.
 resource "aws_cloudwatch_log_group" "compliance_scanner" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-compliance-scanner"
@@ -25,7 +23,6 @@ resource "aws_cloudwatch_log_group" "compliance_scanner" {
   tags = var.tags
 }
 
-#Creates the AWS lambda function resource named compliance scanner.
 resource "aws_lambda_function" "compliance_scanner" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -90,14 +87,12 @@ resource "aws_cloudwatch_event_rule" "compliance_scanner" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch event target resource named compliance scanner.
 resource "aws_cloudwatch_event_target" "compliance_scanner" {
   rule      = aws_cloudwatch_event_rule.compliance_scanner.name
   target_id = "ComplianceScannerLambda"
   arn       = aws_lambda_function.compliance_scanner.arn
 }
 
-#Creates the AWS lambda permission resource named compliance scanner eventbridge.
 resource "aws_lambda_permission" "compliance_scanner_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
@@ -119,7 +114,6 @@ data "aws_iam_policy_document" "compliance_scanner_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named compliance scanner.
 resource "aws_iam_role" "compliance_scanner" {
   name                 = "${var.project_name}-compliance-scanner"
   permissions_boundary = var.permissions_boundary_arn
@@ -129,13 +123,11 @@ resource "aws_iam_role" "compliance_scanner" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named compliance scanner basic execution.
 resource "aws_iam_role_policy_attachment" "compliance_scanner_basic_execution" {
   role       = aws_iam_role.compliance_scanner.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-#Reads the AWS IAM policy document data source named compliance scanner permissions.
 data "aws_iam_policy_document" "compliance_scanner_permissions" {
   #checkov:skip=CKV_AWS_356:Compliance scanner requires read access across multiple AWS services
   #EC2 — describe security groups in the project VPC
@@ -251,7 +243,6 @@ data "aws_iam_policy_document" "compliance_scanner_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named compliance scanner permissions.
 resource "aws_iam_role_policy" "compliance_scanner_permissions" {
   name   = "${var.project_name}-compliance-scanner-permissions"
   role   = aws_iam_role.compliance_scanner.id

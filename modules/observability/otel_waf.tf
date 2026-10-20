@@ -1,4 +1,3 @@
-#This file defines OTel WAF settings for CloudOps.
 #OTel ingestion WAF — closes backlog #38.
 #
 #Independent of the public `cloudops` WAF (which protects api.<domain> +
@@ -15,7 +14,6 @@ locals {
   otel_waf_attach  = local.otel_waf_configured && var.otel_alb_dns_name != ""
 }
 
-#Creates the AWS wafv2 web acl resource named OTel.
 resource "aws_wafv2_web_acl" "otel" {
   count = local.otel_waf_enabled ? 1 : 0
 
@@ -97,7 +95,6 @@ resource "aws_wafv2_web_acl" "otel" {
   }
 }
 
-#Creates the AWS wafv2 ip set resource named OTel allow.
 resource "aws_wafv2_ip_set" "otel_allow" {
   count = length(var.otel_allowed_cidrs) > 0 ? 1 : 0
 
@@ -128,7 +125,6 @@ data "aws_lb" "otel" {
   ]
 }
 
-#Creates the AWS wafv2 web acl association resource named OTel.
 resource "aws_wafv2_web_acl_association" "otel" {
   count = local.otel_waf_attach ? 1 : 0
 

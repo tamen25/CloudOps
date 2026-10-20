@@ -1,4 +1,3 @@
-#This file defines VPC endpoints settings for CloudOps.
 #Interface endpoints allow pods in private subnets to reach AWS APIs without NAT Gateway
 
 #ECR API — image manifest retrieval

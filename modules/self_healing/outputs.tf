@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "lambda_arn" {
   description = "Self-healing controller Lambda ARN"
   value       = aws_lambda_function.self_healing_controller.arn

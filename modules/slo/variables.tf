@@ -1,4 +1,3 @@
-#This file defines variables settings for CloudOps.
 #SLO Module Variables
 
 variable "project_name" {
@@ -6,7 +5,6 @@ variable "project_name" {
   type        = string
 }
 
-#Defines the environment input value.
 variable "environment" {
   description = "Environment name (dev, staging, prod)"
   type        = string
@@ -17,7 +15,6 @@ variable "environment" {
   }
 }
 
-#Defines the prometheus URL input value.
 variable "prometheus_url" {
   description = <<-EOT
     Base URL for Prometheus HTTP API queries (no trailing slash).
@@ -28,21 +25,18 @@ variable "prometheus_url" {
   type        = string
 }
 
-#Defines the grafana URL input value.
 variable "grafana_url" {
   description = "Grafana base URL (e.g. https://grafana.example.com). Used for future Grafana API calls."
   type        = string
   default     = ""
 }
 
-#Defines the grafana API key secret arn input value.
 variable "grafana_api_key_secret_arn" {
   description = "Secrets Manager ARN for the Grafana service account API key. Required when prometheus_url points to the Grafana datasource proxy. Leave empty if using a direct (unauthenticated) Prometheus endpoint."
   type        = string
   default     = ""
 }
 
-#Defines the tags input value.
 variable "tags" {
   description = "Tags to apply to all resources in this module"
   type        = map(string)

@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "grafana_url" {
   description = "Grafana dashboard URL"
   value       = "https://grafana.${var.domain}"

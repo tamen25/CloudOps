@@ -1,4 +1,3 @@
-#This file defines the AWS Budgets hard-cap enforcement action for CloudOps.
 #FinOps Module — Budget hard-cap stop-loss (closes backlog #139)
 #
 #The notifications in budget.tf only EMAIL/SNS at 80% / 100%. A runaway script

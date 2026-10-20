@@ -97,7 +97,6 @@ resource "kubernetes_cluster_role" "kube_bench" {
   }
 }
 
-#Creates the kubernetes cluster role binding resource named kube bench.
 resource "kubernetes_cluster_role_binding" "kube_bench" {
   metadata {
     name = "kube-bench"
@@ -148,7 +147,6 @@ data "aws_iam_policy_document" "kube_bench_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named kube bench.
 resource "aws_iam_role" "kube_bench" {
   name                 = "${var.project_name}-kube-bench"
   permissions_boundary = var.permissions_boundary_arn
@@ -158,7 +156,6 @@ resource "aws_iam_role" "kube_bench" {
   tags = var.tags
 }
 
-#Reads the AWS IAM policy document data source named kube bench pod permissions.
 data "aws_iam_policy_document" "kube_bench_pod_permissions" {
   statement {
     sid    = "InvokeKubeBenchProcessor"
@@ -170,7 +167,6 @@ data "aws_iam_policy_document" "kube_bench_pod_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named kube bench pod.
 resource "aws_iam_role_policy" "kube_bench_pod" {
   name   = "${var.project_name}-kube-bench-pod"
   role   = aws_iam_role.kube_bench.id
@@ -205,7 +201,6 @@ data "archive_file" "kube_bench_processor" {
   output_path = "${path.module}/lambda_function/kube_bench_processor.zip"
 }
 
-#Creates the AWS cloudwatch log group resource named kube bench processor.
 resource "aws_cloudwatch_log_group" "kube_bench_processor" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${var.project_name}-kube-bench-processor"
@@ -214,7 +209,6 @@ resource "aws_cloudwatch_log_group" "kube_bench_processor" {
   tags = var.tags
 }
 
-#Reads the AWS IAM policy document data source named kube bench processor assume role.
 data "aws_iam_policy_document" "kube_bench_processor_assume_role" {
   statement {
     effect  = "Allow"
@@ -226,7 +220,6 @@ data "aws_iam_policy_document" "kube_bench_processor_assume_role" {
   }
 }
 
-#Creates the AWS IAM role resource named kube bench processor.
 resource "aws_iam_role" "kube_bench_processor" {
   name                 = "${var.project_name}-kube-bench-processor"
   permissions_boundary = var.permissions_boundary_arn
@@ -236,13 +229,11 @@ resource "aws_iam_role" "kube_bench_processor" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy attachment resource named kube bench processor basic execution.
 resource "aws_iam_role_policy_attachment" "kube_bench_processor_basic_execution" {
   role       = aws_iam_role.kube_bench_processor.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-#Reads the AWS IAM policy document data source named kube bench processor permissions.
 data "aws_iam_policy_document" "kube_bench_processor_permissions" {
   statement {
     sid    = "DynamoDBFindings"
@@ -274,14 +265,12 @@ data "aws_iam_policy_document" "kube_bench_processor_permissions" {
   }
 }
 
-#Creates the AWS IAM role policy resource named kube bench processor permissions.
 resource "aws_iam_role_policy" "kube_bench_processor_permissions" {
   name   = "${var.project_name}-kube-bench-processor-permissions"
   role   = aws_iam_role.kube_bench_processor.id
   policy = data.aws_iam_policy_document.kube_bench_processor_permissions.json
 }
 
-#Creates the AWS lambda function resource named kube bench processor.
 resource "aws_lambda_function" "kube_bench_processor" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only

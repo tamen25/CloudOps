@@ -1,4 +1,3 @@
-#This file defines provider settings for CloudOps.
 terraform {
   required_version = ">= 1.11.0"
 
@@ -32,7 +31,6 @@ terraform {
   }
 }
 
-#Configures the AWS provider.
 provider "aws" {
   region = var.region
 
@@ -46,12 +44,10 @@ provider "aws" {
   }
 }
 
-#Reads the AWS EKS cluster auth data source named this.
 data "aws_eks_cluster_auth" "this" {
   name = local.eks_cluster_name
 }
 
-#Configures the helm provider.
 provider "helm" {
   kubernetes {
     host                   = local.cluster_endpoint
@@ -60,7 +56,6 @@ provider "helm" {
   }
 }
 
-#Configures the kubernetes provider.
 provider "kubernetes" {
   host                   = local.cluster_endpoint
   cluster_ca_certificate = base64decode(local.cluster_ca_certificate)

@@ -1,4 +1,3 @@
-// This file contains tracer detail logic for OTel detail.
 // Internal helpers — exposed only for the .cpp implementation files and tests.
 
 #ifndef CLOUDOPS_OTEL_TRACES_DETAIL_TRACER_HPP

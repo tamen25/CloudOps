@@ -1,4 +1,3 @@
-// This file contains rls test logic for order API test.
 // Backlog #51 — verify the RLS transaction wrapper sets `app.tenant_id`
 // before issuing data queries and rolls back on error. The actual policy
 // is enforced by Postgres in deployed envs (see migrations/003_rls.sql);
@@ -8,10 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app';
 
-// Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
 
-// Builds recording pool.
 function makeRecordingPool() {
   const calls = [];
   let released = 0;
@@ -33,7 +30,6 @@ function makeRecordingPool() {
       }
       return { rows: [], rowCount: 0 };
     },
-    // Handles release.
     release() { released += 1; },
   };
   const pool = {
@@ -43,7 +39,6 @@ function makeRecordingPool() {
   return { pool, calls, releasedRef: () => released };
 }
 
-// Handles start app.
 async function startApp({ pool }) {
   const { app } = createApp({
     pool,

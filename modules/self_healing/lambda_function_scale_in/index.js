@@ -1,4 +1,3 @@
-// This file contains index logic for self healing lambda function scale in.
 'use strict';
 
 const { EKSClient, DescribeClusterCommand } = require('@aws-sdk/client-eks');
@@ -24,7 +23,6 @@ function log(level, data) {
   console.log(JSON.stringify({ level, timestamp: new Date().toISOString(), dryRun: DRY_RUN, ...data }));
 }
 
-// Gets eksbearer token.
 async function getEKSBearerToken(clusterName) {
   const credentials = await fromNodeProviderChain()();
   const signer      = new SignatureV4({ credentials, region: REGION, service: 'sts', sha256: Sha256 });

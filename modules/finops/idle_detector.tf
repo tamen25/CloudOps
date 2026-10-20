@@ -1,4 +1,3 @@
-#This file defines idle detector settings for CloudOps.
 #FinOps Module — Idle Resource Detector Lambda
 #
 #Runs every 6 hours and checks:
@@ -20,7 +19,6 @@ data "archive_file" "idle_detector" {
   output_path = "${path.module}/lambda_function/idle_detector.zip"
 }
 
-#Creates the AWS lambda function resource named idle detector.
 resource "aws_lambda_function" "idle_detector" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -67,7 +65,6 @@ resource "aws_lambda_function" "idle_detector" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch log group resource named idle detector.
 resource "aws_cloudwatch_log_group" "idle_detector" {
   #checkov:skip=CKV_AWS_158:AWS managed encryption is acceptable - KMS CMK adds cost for log data
   name              = "/aws/lambda/${aws_lambda_function.idle_detector.function_name}"
@@ -84,14 +81,12 @@ resource "aws_cloudwatch_event_rule" "idle_detector_schedule" {
   tags                = var.tags
 }
 
-#Creates the AWS cloudwatch event target resource named idle detector.
 resource "aws_cloudwatch_event_target" "idle_detector" {
   rule      = aws_cloudwatch_event_rule.idle_detector_schedule.name
   target_id = "IdleDetectorLambda"
   arn       = aws_lambda_function.idle_detector.arn
 }
 
-#Creates the AWS lambda permission resource named idle detector eventbridge.
 resource "aws_lambda_permission" "idle_detector_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
@@ -113,7 +108,6 @@ data "aws_iam_policy_document" "idle_detector_assume" {
   }
 }
 
-#Creates the AWS IAM role resource named idle detector.
 resource "aws_iam_role" "idle_detector" {
   name                 = "${var.project_name}-idle-detector-role"
   permissions_boundary = var.permissions_boundary_arn
@@ -121,7 +115,6 @@ resource "aws_iam_role" "idle_detector" {
   tags                 = var.tags
 }
 
-#Reads the AWS IAM policy document data source named idle detector.
 data "aws_iam_policy_document" "idle_detector" {
   #checkov:skip=CKV_AWS_356:Idle detector requires read access across EC2/EKS/RDS services
   #CloudWatch Logs
@@ -193,7 +186,6 @@ data "aws_iam_policy_document" "idle_detector" {
   }
 }
 
-#Creates the AWS IAM role policy resource named idle detector.
 resource "aws_iam_role_policy" "idle_detector" {
   name   = "${var.project_name}-idle-detector-policy"
   role   = aws_iam_role.idle_detector.id

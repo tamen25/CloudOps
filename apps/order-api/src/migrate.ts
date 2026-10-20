@@ -1,4 +1,3 @@
-// This file contains migrate logic for order API src.
 // Standalone migration entrypoint — invoked as a Kubernetes Job before each
 // deploy so application pods never race each other on schema changes.
 // Closes backlog #21.
@@ -18,7 +17,6 @@ const DB_SSL_DISABLED = process.env.DB_SSL_DISABLED === 'true';
 
 const logger = createLogger();
 
-// Runs the main workflow for the requested work.
 async function main(): Promise<void> {
   if (!DB_SECRET_ARN) {
     throw new Error('DB_SECRET_ARN is required');

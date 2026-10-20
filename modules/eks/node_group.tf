@@ -1,4 +1,3 @@
-#This file defines node group settings for CloudOps.
 resource "aws_launch_template" "nodes" {
   name_prefix = "${local.name}-nodes-lt-"
 
@@ -32,7 +31,6 @@ resource "aws_launch_template" "nodes" {
   tags = local.common_tags
 }
 
-#Creates the AWS EKS node group resource named main.
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${local.name}-nodes"

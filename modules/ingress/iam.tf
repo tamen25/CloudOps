@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #IRSA role for the AWS Load Balancer Controller
 resource "aws_iam_role" "lb_controller" {
   name                 = "${local.name}-lb-controller"
@@ -229,7 +228,6 @@ resource "aws_iam_policy" "lb_controller" {
   tags = local.common_tags
 }
 
-#Creates the AWS IAM role policy attachment resource named lb controller.
 resource "aws_iam_role_policy_attachment" "lb_controller" {
   role       = aws_iam_role.lb_controller.name
   policy_arn = aws_iam_policy.lb_controller.arn

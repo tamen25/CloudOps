@@ -1,10 +1,8 @@
-#This file defines variables settings for CloudOps.
 variable "domain_name" {
   description = "CodeArtifact domain name for internal CloudOps packages."
   type        = string
 }
 
-#Defines the repository names input value.
 variable "repository_names" {
   description = "CodeArtifact repository names to create inside the domain."
   type        = list(string)
@@ -16,14 +14,12 @@ variable "repository_names" {
   }
 }
 
-#Defines the KMS key arn input value.
 variable "kms_key_arn" {
   description = "Optional KMS key ARN for CodeArtifact domain encryption. Empty uses the AWS-managed key."
   type        = string
   default     = ""
 }
 
-#Defines the tags input value.
 variable "tags" {
   description = "Common tags applied to CodeArtifact resources."
   type        = map(string)

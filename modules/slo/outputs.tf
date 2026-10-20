@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 output "lambda_arn" {
   description = "ARN of the error-budget-tracker Lambda function"
   value       = aws_lambda_function.error_budget_tracker.arn

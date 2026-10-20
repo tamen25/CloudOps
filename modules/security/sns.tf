@@ -1,4 +1,3 @@
-#This file defines sns settings for CloudOps.
 #SNS topic and subscriptions for compliance scanner alerts.
 #
 #Two subscriptions use two different email addresses:

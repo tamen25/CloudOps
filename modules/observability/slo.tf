@@ -1,4 +1,3 @@
-#This file defines SLO settings for CloudOps.
 #SLI/SLO PrometheusRule CRDs for order-api
 #Implements the Google SRE Workbook multi-window multi-burn-rate alerting pattern.
 #

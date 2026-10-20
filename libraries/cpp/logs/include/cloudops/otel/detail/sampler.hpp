@@ -1,4 +1,3 @@
-// This file contains sampler logic for OTel detail.
 // Internal sampler — exposed only for the .cpp implementation files.
 
 #ifndef CLOUDOPS_OTEL_LOGS_DETAIL_SAMPLER_HPP

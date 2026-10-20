@@ -1,4 +1,3 @@
-<!-- This document explains 007 multi window burn rate slos for CloudOps. -->
 # ADR 007 — Multi-Window Burn Rate SLO Alerting
 
 **Status:** Accepted

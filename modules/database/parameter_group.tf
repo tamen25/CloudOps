@@ -1,4 +1,3 @@
-#This file defines parameter group settings for CloudOps.
 #DB parameter group — logging knobs are tunable per environment to avoid
 #leaking customer payloads in production. Closes backlog #41.
 #

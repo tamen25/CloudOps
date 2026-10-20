@@ -1,4 +1,3 @@
-#This file defines OTel collector settings for CloudOps.
 #OpenTelemetry Collector in GATEWAY mode (Deployment, not DaemonSet)
 #All SDK clients send telemetry to this central collector inside the cluster
 resource "helm_release" "otel_collector" {

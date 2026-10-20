@@ -1,4 +1,3 @@
-#This file defines IAM settings for CloudOps.
 #FinOps Module — IAM role for cost ingestion Lambda
 
 data "aws_iam_policy_document" "cost_ingestion_assume" {
@@ -12,7 +11,6 @@ data "aws_iam_policy_document" "cost_ingestion_assume" {
   }
 }
 
-#Creates the AWS IAM role resource named cost ingestion.
 resource "aws_iam_role" "cost_ingestion" {
   name                 = "${var.project_name}-cost-ingestion-role"
   permissions_boundary = var.permissions_boundary_arn
@@ -20,7 +18,6 @@ resource "aws_iam_role" "cost_ingestion" {
   tags                 = var.tags
 }
 
-#Reads the AWS IAM policy document data source named cost ingestion.
 data "aws_iam_policy_document" "cost_ingestion" {
   #checkov:skip=CKV_AWS_356:FinOps Lambda requires Cost Explorer access - no resource-level restrictions available
   #CloudWatch Logs
@@ -87,7 +84,6 @@ data "aws_iam_policy_document" "cost_ingestion" {
   }
 }
 
-#Creates the AWS IAM role policy resource named cost ingestion.
 resource "aws_iam_role_policy" "cost_ingestion" {
   name   = "${var.project_name}-cost-ingestion-policy"
   role   = aws_iam_role.cost_ingestion.id

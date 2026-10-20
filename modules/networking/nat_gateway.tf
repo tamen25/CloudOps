@@ -1,4 +1,3 @@
-#This file defines nat gateway settings for CloudOps.
 #Elastic IPs for NAT Gateways (one per AZ for HA)
 resource "aws_eip" "nat" {
   count = var.enable_nat_gateway ? local.az_count : 0

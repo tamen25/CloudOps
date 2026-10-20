@@ -1,4 +1,3 @@
-#This file defines VPC settings for CloudOps.
 #VPC with DNS support for ECS and RDS
 resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr

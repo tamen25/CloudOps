@@ -1,4 +1,3 @@
-<!-- This document explains 015 order API idempotency for CloudOps. -->
 # ADR 015 — order-api Idempotency Semantics
 
 **Status:** Accepted

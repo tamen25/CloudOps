@@ -1,4 +1,3 @@
-#This file defines outputs settings for CloudOps.
 #Networking Module Outputs
 #Required by compute module for resource references
 

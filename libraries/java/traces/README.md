@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # com.cloudops:otel-traces
 
 Java OpenTelemetry traces helper for CloudOps services.

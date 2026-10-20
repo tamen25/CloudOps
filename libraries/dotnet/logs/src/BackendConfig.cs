@@ -1,4 +1,3 @@
-// This file contains backend config logic for logs src.
 using System.Text.Json.Serialization;
 
 namespace CloudOps.Otel.Logs;

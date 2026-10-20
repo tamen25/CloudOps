@@ -1,4 +1,3 @@
-#This file defines lambda settings for CloudOps.
 #Error budget tracker Lambda — queries Prometheus SLO recording rules every 5 minutes,
 #calculates error budgets and burn rates, and publishes to CloudWatch + DynamoDB.
 #
@@ -29,7 +28,6 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags = var.tags
 }
 
-#Creates the AWS lambda function resource named error budget tracker.
 resource "aws_lambda_function" "error_budget_tracker" {
   #checkov:skip=CKV_AWS_117:Lambda intentionally runs outside VPC - calls global AWS APIs (Cost Explorer, EKS, CloudWatch)
   #checkov:skip=CKV_AWS_173:No sensitive data in environment variables - values are resource names and ARNs only
@@ -91,7 +89,6 @@ resource "aws_cloudwatch_event_rule" "every_five_minutes" {
   tags = var.tags
 }
 
-#Creates the AWS cloudwatch event target resource named lambda.
 resource "aws_cloudwatch_event_target" "lambda" {
   rule      = aws_cloudwatch_event_rule.every_five_minutes.name
   target_id = "ErrorBudgetTrackerLambda"

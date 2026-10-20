@@ -1,4 +1,3 @@
-#This file defines alarms settings for CloudOps.
 #Self-Healing Controller — CloudWatch Alarms
 #
 #All alarms publish to the cloudops-healing-triggers SNS topic.

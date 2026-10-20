@@ -1,4 +1,3 @@
-<!-- This document explains 017 Lambda+EKS hybrid search for CloudOps. -->
 # ADR 017 — Lambda + EKS Hybrid Search
 
 **Status:** Accepted

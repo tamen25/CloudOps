@@ -1,4 +1,3 @@
-<!-- This document explains demo bringup automation for CloudOps. -->
 # Demo Bring-Up Runbook
 
 Closes backlog #90. Targets a clean AWS account with no prior CloudOps

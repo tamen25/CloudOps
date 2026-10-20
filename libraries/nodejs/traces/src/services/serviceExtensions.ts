@@ -1,4 +1,3 @@
-// This file contains the service extension registry for traces services.
 import { Span } from "@opentelemetry/api";
 
 import { ServiceAttributes } from "../interface";

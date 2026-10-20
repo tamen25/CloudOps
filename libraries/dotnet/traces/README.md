@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # CloudOps.Otel.Traces
 
 .NET OpenTelemetry traces helper for CloudOps services.

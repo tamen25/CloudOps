@@ -1,4 +1,3 @@
-<!-- This document explains demo teardown automation for CloudOps. -->
 # Demo Tear-Down Runbook
 
 Closes backlog #90. Reverses the demo bring-up cleanly so the AWS bill

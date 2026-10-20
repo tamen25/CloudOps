@@ -1,4 +1,3 @@
-// This file contains runtime resource attributes logic for OTel logs.
 package com.cloudops.otel.logs;
 
 import java.util.Collections;
@@ -16,10 +15,8 @@ public final class RuntimeResourceAttributes {
   private static final String ATTR_K8S_NODE_NAME = "k8s.node.name";
   private static final String ATTR_K8S_POD_NAME = "k8s.pod.name";
 
-  // Handles runtime resource attributes.
   private RuntimeResourceAttributes() {}
 
-  // Creates the requested work.
   public static Map<String, String> create() {
     Map<String, String> attributes = new LinkedHashMap<>(parseResourceAttributes(env("OTEL_RESOURCE_ATTRIBUTES")));
     attributes.put(
@@ -85,7 +82,6 @@ public final class RuntimeResourceAttributes {
     return attributes;
   }
 
-  // Handles put if present.
   private static void putIfPresent(Map<String, String> attributes, String key, String value) {
     if (hasValue(value)) attributes.put(key, value);
   }
@@ -109,12 +105,10 @@ public final class RuntimeResourceAttributes {
     return hasValue(second) ? second : fallback;
   }
 
-  // Handles env.
   private static String env(String name) {
     return System.getenv(name);
   }
 
-  // Handles has value.
   private static boolean hasValue(String value) {
     return value != null && !value.isBlank();
   }

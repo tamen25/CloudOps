@@ -1,4 +1,3 @@
-// This file contains audit test logic for order API test.
 // Backlog #73 — verify the audit log write is wired into the order create
 // path and uses the same tenant transaction. The actual RLS policy is
 // enforced by Postgres in deployed envs (see migrations/005_audit_events.sql).
@@ -6,10 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app';
 
-// Handles silent logger.
 function silentLogger() { return { info() {}, warn() {}, error() {} }; }
 
-// Builds recording pool.
 function makeRecordingPool({ failOrderInsert = false } = {}) {
   const calls = [];
   let released = 0;
@@ -29,14 +26,12 @@ function makeRecordingPool({ failOrderInsert = false } = {}) {
       if (/^INSERT INTO audit_events/i.test(sql)) return { rows: [], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     },
-    // Handles release.
     release() { released += 1; },
   };
   const pool = { connect: async () => client, query: client.query };
   return { pool, calls, releasedRef: () => released };
 }
 
-// Handles start app.
 async function startApp({ pool }) {
   const { app } = createApp({ pool, logger: silentLogger(), nodeEnv: 'test', apiKey: 'shared', rateLimitMax: 1000 });
   return new Promise((r) => {

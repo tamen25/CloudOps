@@ -1,4 +1,3 @@
-#This file defines external secrets settings for CloudOps.
 #External Secrets Operator (ESO) — pulls AWS Secrets Manager values into k8s
 #Secret resources without ever putting plaintext in TF state or git.
 #
@@ -29,7 +28,6 @@ resource "aws_iam_role" "external_secrets" {
   tags = var.tags
 }
 
-#Creates the AWS IAM role policy resource named external secrets.
 resource "aws_iam_role_policy" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
 
@@ -69,7 +67,6 @@ resource "aws_iam_role_policy" "external_secrets" {
   }
 }
 
-#Creates the helm release resource named external secrets.
 resource "helm_release" "external_secrets" {
   count = var.enable_external_secrets ? 1 : 0
 

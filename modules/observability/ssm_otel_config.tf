@@ -1,4 +1,3 @@
-#This file defines SSM OTel config settings for CloudOps.
 #Backlog #61 — publish OTel ingestion config to SSM Parameter Store so
 #producer accounts (custom SDK clients, off-cluster shipping pipelines,
 #operator scripts) have a single, discoverable contract for endpoint URLs
@@ -26,7 +25,6 @@ locals {
   ssm_otel_base_path = "/${var.name_prefix}/${var.environment}/otel"
 }
 
-#Creates the AWS SSM parameter resource named OTel endpoint.
 resource "aws_ssm_parameter" "otel_endpoint" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -38,7 +36,6 @@ resource "aws_ssm_parameter" "otel_endpoint" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
-#Creates the AWS SSM parameter resource named OTel endpoint metrics.
 resource "aws_ssm_parameter" "otel_endpoint_metrics" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -50,7 +47,6 @@ resource "aws_ssm_parameter" "otel_endpoint_metrics" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
-#Creates the AWS SSM parameter resource named OTel endpoint traces.
 resource "aws_ssm_parameter" "otel_endpoint_traces" {
   count = var.publish_otel_ssm_config ? 1 : 0
 
@@ -62,7 +58,6 @@ resource "aws_ssm_parameter" "otel_endpoint_traces" {
   tags = merge(local.common_tags, { Component = "otel-ssm-config" })
 }
 
-#Creates the AWS SSM parameter resource named OTel endpoint logs.
 resource "aws_ssm_parameter" "otel_endpoint_logs" {
   count = var.publish_otel_ssm_config ? 1 : 0
 

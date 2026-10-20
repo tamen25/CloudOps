@@ -1,4 +1,3 @@
-#This file defines main settings for CloudOps.
 #Foundation stack — closes backlog #16 (layer 1 of 3).
 #
 #Owns: bootstrap, dns, codeartifact, networking, database, compliance, backup.

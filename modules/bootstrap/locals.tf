@@ -1,4 +1,3 @@
-#This file defines locals settings for CloudOps.
 #Retrieves the AWS account ID and ARN for the current AWS account
 data "aws_caller_identity" "current" {}
 

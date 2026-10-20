@@ -1,4 +1,3 @@
-#This file defines variables settings for CloudOps.
 #CloudOps Networking Module - Variables
 #Input variables for VPC and networking configuration
 
@@ -14,7 +13,6 @@ variable "environment" {
   }
 }
 
-#Defines the name prefix input value.
 variable "name_prefix" {
   description = "Prefix for resource names (e.g., cloudops-dev, myapp-prod)"
   type        = string
@@ -58,7 +56,6 @@ variable "vpc_cidr" {
   }
 }
 
-#Defines the public subnet cidrs input value.
 variable "public_subnet_cidrs" {
   description = "List of CIDR blocks for public subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -72,7 +69,6 @@ variable "public_subnet_cidrs" {
   }
 }
 
-#Defines the private subnet cidrs input value.
 variable "private_subnet_cidrs" {
   description = "List of CIDR blocks for private subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -86,7 +82,6 @@ variable "private_subnet_cidrs" {
   }
 }
 
-#Defines the database subnet cidrs input value.
 variable "db_subnet_cidrs" {
   description = "List of CIDR blocks for database subnets. If null, will be auto-generated from vpc_cidr"
   type        = list(string)
@@ -120,7 +115,6 @@ variable "enable_flow_logs" {
   default     = false
 }
 
-#Defines the flow logs destination input value.
 variable "flow_logs_destination" {
   description = "Where to send VPC flow logs. \"cloudwatch\" = quick + queryable, more expensive at scale. \"s3\" = cheaper, parquet + Athena partitioning."
   type        = string
@@ -132,21 +126,18 @@ variable "flow_logs_destination" {
   }
 }
 
-#Defines the AWS account ID input value.
 variable "aws_account_id" {
   description = "AWS account ID — used for globally unique flow-logs S3 bucket name."
   type        = string
   default     = ""
 }
 
-#Defines the buckets force destroy input value.
 variable "buckets_force_destroy" {
   description = "Allow `terraform destroy` to nuke flow-logs S3 bucket even if it contains objects. Set true in test envs only."
   type        = bool
   default     = true
 }
 
-#Defines the flow logs retention days input value.
 variable "flow_logs_retention_days" {
   description = "Number of days to retain VPC Flow Logs in CloudWatch"
   type        = number
@@ -173,21 +164,18 @@ variable "allowed_cidr_blocks" {
   }
 }
 
-#Defines the enable HTTPS input value.
 variable "enable_https" {
   description = "Enable HTTPS (port 443) on the ALB security group"
   type        = bool
   default     = true
 }
 
-#Defines the enable HTTP input value.
 variable "enable_http" {
   description = "Enable HTTP (port 80) on the ALB security group"
   type        = bool
   default     = true
 }
 
-#Defines the custom alb ports input value.
 variable "custom_alb_ports" {
   description = "Additional custom ports to open on the ALB security group"
   type        = list(number)
@@ -201,7 +189,6 @@ variable "custom_alb_ports" {
   }
 }
 
-#Defines the RDS port input value.
 variable "rds_port" {
   description = "Port for RDS database (default 5432 for PostgreSQL)"
   type        = number

@@ -1,4 +1,3 @@
-<!-- This document explains quality gate for CloudOps. -->
 # Static Quality Gate
 
 Backlog #70 source of truth. Every PR runs the same set of checks below

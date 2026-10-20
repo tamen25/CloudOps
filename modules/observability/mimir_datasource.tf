@@ -1,4 +1,3 @@
-#This file defines mimir datasource settings for CloudOps.
 #Grafana Prometheus-compatible datasource pointing at Mimir's query-frontend.
 #Picked up by the sidecar via grafana_datasource=1 label.
 #When Mimir is enabled, this datasource is the long-term backend; the existing

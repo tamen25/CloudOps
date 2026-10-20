@@ -1,4 +1,3 @@
-// This file contains test resource attributes logic for logs tests.
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -9,7 +8,6 @@
 namespace logs = cloudops::otel::logs;
 
 namespace {
-// Checks the requested work.
 int check(bool condition, const char* msg) {
   if (!condition) {
     std::fprintf(stderr, "FAIL: %s\n", msg);

@@ -1,4 +1,3 @@
-#This file defines route53 settings for CloudOps.
 #DNS ownership (closes backlog #17):
 #api.<domain>      → cloudops ALB        (alb_dns_name)
 #grafana.<domain>  → cloudops ALB        (alb_dns_name)        — shared with order-api
@@ -22,7 +21,6 @@ resource "aws_route53_record" "api" {
   }
 }
 
-#Creates the AWS route53 record resource named grafana.
 resource "aws_route53_record" "grafana" {
   count = var.alb_dns_name != "" ? 1 : 0
 
@@ -37,7 +35,6 @@ resource "aws_route53_record" "grafana" {
   }
 }
 
-#Creates the AWS route53 record resource named OTel.
 resource "aws_route53_record" "otel" {
   count = var.otel_alb_dns_name != "" ? 1 : 0
 

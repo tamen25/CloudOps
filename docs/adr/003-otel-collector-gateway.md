@@ -1,4 +1,3 @@
-<!-- This document explains 003 OTel collector gateway for CloudOps. -->
 # ADR 003 — OTel Collector in Gateway Mode with Bearer Auth
 
 **Status:** Accepted

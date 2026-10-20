@@ -1,4 +1,3 @@
-<!-- This document explains error budget exhausted for CloudOps. -->
 # Runbook: Error Budget Exhausted
 
 ## Overview

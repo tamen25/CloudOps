@@ -1,4 +1,3 @@
-#This file defines yace settings for CloudOps.
 #yace — Yet Another CloudWatch Exporter.
 #Scrapes AWS/RDS, AWS/ApplicationELB, AWS/NATGateway, AWS/Lambda, etc., and
 #exposes them as Prometheus metrics so the existing Prom + Grafana + alerting
@@ -36,7 +35,6 @@ resource "aws_iam_role" "yace" {
   tags = merge(local.common_tags, { Name = "${local.name}-yace-irsa" })
 }
 
-#Creates the AWS IAM role policy resource named yace.
 resource "aws_iam_role_policy" "yace" {
   count = var.enable_yace ? 1 : 0
 

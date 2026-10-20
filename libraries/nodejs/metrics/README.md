@@ -1,4 +1,3 @@
-<!-- This document explains readme for CloudOps. -->
 # @cloudops/otel-metrics
 
 Placeholder for the Node.js/TypeScript metrics library.
