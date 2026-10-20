@@ -97,7 +97,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.22'
+          # The version each service's go.mod asks for. A fixed '1.22' only
+          # worked while setup-go let the toolchain download a newer Go;
+          # setup-go v6 sets GOTOOLCHAIN=local.
+          go-version-file: apps/${{ matrix.service }}/go.mod
       - name: Vet
         run: go vet ./...
       - name: Test (race + coverage)
@@ -105,7 +108,7 @@ jobs:
       - name: Coverage gate (>=70%)
         run: |
           pct=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
-          echo "pricing coverage: ${pct}%"
+          echo "${{ matrix.service }} coverage: ${pct}%"
           awk -v p="$pct" 'BEGIN { exit (p+0 >= 70) ? 0 : 1 }' || {
             echo "::error::coverage ${pct}% is below the 70% gate"; exit 1; }
       - name: Build (static linux)
