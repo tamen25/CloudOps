@@ -39,6 +39,18 @@ class FraudControllerTest {
             .andExpect(jsonPath("$.decision").value("deny"));
     }
 
+    // A malformed or missing amount used to be read as 0 and approved.
+    @Test
+    void scoreRejectsAnAmountThatIsNotANumber() throws Exception {
+        for (String body : new String[] {
+                "{\"amount_cents\":\"abc\",\"item_count\":1}",
+                "{\"item_count\":1}",
+                "{\"amount_cents\":5000,\"item_count\":\"many\"}"}) {
+            mvc.perform(post("/score").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        }
+    }
+
     @Test
     void scoreRejectsNegative() throws Exception {
         mvc.perform(post("/score").contentType(MediaType.APPLICATION_JSON)

@@ -37,3 +37,10 @@ def test_decode_record_base64_json():
 def test_decode_record_malformed_returns_none():
     assert decode_record({"Data": "!!!not-base64-json!!!"}) is None
     assert decode_record({}) is None
+
+
+def test_decode_record_boto3_bytes():
+    # boto3's get_records hands back Data as the raw bytes, not base64. They
+    # used to be base64-decoded again, so the worker skipped every record.
+    payload = {"tenantId": "t1", "type": "order.created", "payload": {"total_cents": 100}}
+    assert decode_record({"Data": json.dumps(payload).encode()}) == payload

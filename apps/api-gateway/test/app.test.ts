@@ -33,8 +33,8 @@ function routingFetch(overrides: Record<string, { status: number; body: unknown 
   }) as unknown as typeof fetch;
 }
 
-async function startServer(fetchImpl: typeof fetch) {
-  const app = createApp({ ...URLS, logger: silentLogger(), fetchImpl });
+async function startServer(fetchImpl: typeof fetch, timeoutMs?: number) {
+  const app = createApp({ ...URLS, logger: silentLogger(), fetchImpl, timeoutMs });
   return new Promise<{ server: import('http').Server; baseUrl: string }>((resolve) => {
     const server = app.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo;
@@ -206,6 +206,25 @@ test('fraud hop 500 is fail-open and decision defaults to unknown', async () => 
     const res = await placeOrder(baseUrl, { items: [{ sku: 'A', qty: 1 }] });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).fraud_decision, 'unknown');
+  } finally {
+    server.close();
+  }
+});
+
+// A hop that never answers used to hold the request open indefinitely.
+test('a hop that does not answer in time is a 504 naming it', async () => {
+  const fallback = routingFetch();
+  const hangOnFraud = ((url: string, init: RequestInit) => {
+    if (!url.includes('/score')) return fallback(url, init);
+    return new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(init.signal?.reason)));
+  }) as unknown as typeof fetch;
+  const { server, baseUrl } = await startServer(hangOnFraud, 50);
+  try {
+    const res = await placeOrder(baseUrl, { items: [{ sku: 'A', price_cents: 100, qty: 1 }], tenant_id: 't1' });
+    assert.equal(res.status, 504);
+    const body = await res.json();
+    assert.equal(body.failed_hop, 'fraud');
+    assert.equal(body.hops.inventory.ok, true);
   } finally {
     server.close();
   }
