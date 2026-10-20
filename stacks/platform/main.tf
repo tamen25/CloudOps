@@ -304,6 +304,9 @@ module "security" {
   chaos_mesh_namespace     = var.enable_chaos_mesh ? local.chaos_mesh_namespace : ""
   permissions_boundary_arn = local.permissions_boundary_arn
 
+  enable_image_signature_policy = var.enable_image_signature_policy
+  image_signature_policy_mode   = var.image_signature_policy_mode
+
   eks_cluster_name = local.eks_cluster_name
   otel_api_key     = var.enable_observability ? module.observability[0].otel_api_key : ""
   environment      = var.environment
