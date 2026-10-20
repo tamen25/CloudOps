@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "CloudOps FinOps cost ingestion Lambda — queries Cost Explorer, detects anomalies, publishes metrics",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
   "engines": {
     "node": ">=22.0.0"
   },
