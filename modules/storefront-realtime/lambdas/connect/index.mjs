@@ -66,6 +66,10 @@ async function verifyWsTicket(token) {
       issuer: WS_TICKET_ISSUER,
       audience: WS_TICKET_AUDIENCE,
       algorithms: ["HS256"],
+      // jose checks exp only when present. The storefront always sets it;
+      // requiring it means a ticket minted without one is refused, not
+      // valid forever.
+      requiredClaims: ["exp", "sub"],
     }
   );
   return payload;
