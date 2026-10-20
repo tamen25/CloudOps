@@ -88,7 +88,9 @@ jobs:
   detect-drift:
     if: vars.AWS_DEPLOY_ENABLED == 'true'
     needs: plan-matrix
-    runs-on: ubuntu-latest
+    # In-VPC runner when DEPLOY_RUNNER is set (ADR 025,
+    # docs/runbooks/ci-runner.md); GitHub-hosted otherwise.
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:

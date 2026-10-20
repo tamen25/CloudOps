@@ -1,6 +1,7 @@
 # ADR 025 — Self-hosted GitHub runner in VPC (design)
 
-**Status:** Proposed (design only; no runner deployed yet)
+**Status:** Accepted; implemented 2026-10-20, not yet run on a live cluster
+(see *Implementation* at the end)
 **Date:** 2026-05-14
 **Closes:** backlog #76 (design portion)
 **Related:** ADR 013 (private-EKS emergency CIDR — kept as break-glass)
@@ -182,3 +183,38 @@ No long-lived AWS keys.
 - Compliance forbids long-lived cluster control-plane access from
   GitHub-hosted networks even for plans → already covered, but the
   break-glass widening would also need to go.
+
+## Implementation (2026-10-20)
+
+Built as `modules/ci-runner` (platform stack, `enable_ci_runner`, off by
+default), `ci/runner/Dockerfile`, `.github/workflows/runner-image.yml` and
+the runbook `docs/runbooks/ci-runner.md`. Where it departs from the design
+above, and why:
+
+- **No IRSA role.** Jobs on these runners assume their AWS role through
+  GitHub's OIDC token, exactly as on hosted runners, so the role's trust
+  policy and permissions stay the single source of what CI may do. An IRSA
+  role would have been a second, broader path to the same permissions.
+- **Scale-set charts, not `kubernetes_manifest`.** ARC's
+  `gha-runner-scale-set` chart (0.14.2) creates the `AutoscalingRunnerSet`;
+  a hand-written manifest would need the CRDs at plan time.
+- **Workflows opt in through `DEPLOY_RUNNER`.** `runs-on` is
+  `${{ vars.DEPLOY_RUNNER || 'ubuntu-latest' }}` on app `deploy`, infra
+  `plan`/`apply`, `detect-drift` and storefront `deploy`, so nothing moves
+  until the runners exist. The scale set's name (`cloudops-vpc`) is the
+  label, not `[self-hosted, vpc]`.
+- **Destroy stays on hosted runners.** Destroying the platform stack
+  removes the runners, and the job with them.
+- **Smaller image.** AWS CLI, kubectl and envsubst only; Terraform and Node
+  come from the setup actions per job, and no job here runs helm or
+  actionlint.
+- **Added: egress policy.** The repository is public, so a fork PR's
+  workflow can request these runners. Approval for external contributors
+  is the gate; a NetworkPolicy on `arc-runners` (DNS and TCP 443 only, no
+  ingress) limits what such a job could reach.
+- **Secret by hand.** The GitHub App key is created in Secrets Manager by
+  the operator, not by Terraform, so it never has to pass through a tfvars
+  file.
+
+Acceptance criteria above still apply; none has been met on a live
+cluster yet (BACKLOG V03).

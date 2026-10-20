@@ -206,3 +206,8 @@ output "mimir_url" {
   description = "In-cluster Mimir gateway, for the storefront console; empty without Mimir"
   value       = var.enable_observability ? module.observability[0].mimir_url : ""
 }
+
+output "ci_runner_set_name" {
+  description = "Value for the DEPLOY_RUNNER repository variable; empty while enable_ci_runner is off"
+  value       = var.enable_ci_runner ? module.ci_runner[0].runner_set_name : ""
+}

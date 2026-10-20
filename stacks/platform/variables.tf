@@ -849,3 +849,27 @@ variable "storefront_subdomain" {
   type        = string
   default     = "shop"
 }
+
+variable "enable_ci_runner" {
+  description = "Run GitHub Actions runners in the cluster (ARC, ADR 025). Needs security_github_repo, ci_runner_image and ci_runner_github_app_secret_arn. docs/runbooks/ci-runner.md."
+  type        = bool
+  default     = false
+}
+
+variable "ci_runner_image" {
+  description = "Runner image by digest, as printed by the Runner Image workflow (<repository>@sha256:...)"
+  type        = string
+  default     = ""
+}
+
+variable "ci_runner_github_app_secret_arn" {
+  description = "Secrets Manager secret with the runner GitHub App's id, installation id and private key (JSON)"
+  type        = string
+  default     = ""
+}
+
+variable "ci_runner_max_runners" {
+  description = "Most runner pods at once"
+  type        = number
+  default     = 3
+}
