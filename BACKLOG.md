@@ -9,37 +9,34 @@ ones still open are carried over below as O-items.
 
 Nothing is applied to AWS without a cost estimate and an explicit yes.
 
-## P0 — security
+## P1 — security
 
-- [ ] **S01** — CI could become account admin from any branch. Done on
-  GitHub (environments limited to `main`, `production` needs a reviewer,
-  `main` ruleset) and in code (#13: IAM and S3 write scoped to the
-  project's names, one policy for both bootstrap paths, oidc.sh trust
-  matches Terraform).
-  Open: verify on the first apply (AWS phase), and check whether a role
-  created by the old oidc.sh still exists with its any-branch trust.
-- [ ] **S08** — Permissions boundary on the roles the deployer creates.
-  Name-scoped IAM still lets a `<project>-*` role be given broad rights.
-  In code behind a switch (#25, stacked on #13); open: switch it on and
-  verify in the AWS phase (docs/runbooks/security/permissions-boundary.md).
+- [ ] **S09** — The internal request signature (search-gateway, order-api,
+  ledger, the admin server, loadgen) is `sha256(ts.tenant.body.secret)`, a
+  secret-suffix hash, not an HMAC. Low risk as built (the secret is the
+  suffix; tenants are `[a-zA-Z0-9_-]`), but non-standard. Move to
+  HMAC-SHA256 with a dual-accept window, all five services together.
 
 ## P1 — correctness, supply chain, process
 
 - [ ] **A01** — Two Terraform layouts (root `main.tf` and `stacks/`) manage
   the same modules. Retire the root layout (ADR, state-migration runbook).
   Includes old #16 (layered-stack runbook not validated on a live env).
-- [ ] **T01** — 13 Lambdas had no tests. The three write paths
-  (self-healing, scale-in, auto-remediation) are covered, with four bugs
-  fixed (#23); 10 remain. Unit tests with the AWS SDK stubbed; dry-run
-  behaviour covered.
-- [ ] **D01** — Review Dependabot's actions bump (#12): 20 updates, some
-  majors.
+- [ ] **D01** — Dependabot's actions bump (#12): 20 updates, most majors.
+  Reviewed against each action's release notes; setup-go v6 broke the mesh
+  Go jobs (fixed in #31). Open: merge with cosign pinned to v2 (see D02).
+- [ ] **D02** — cosign-installer v4 installs cosign v3, which signs in the
+  new bundle format. Whether the in-cluster cosign-gatekeeper-provider
+  verifies it is unchecked; until then the installer pins cosign v2.
 - [ ] **F01** — The storefront pipeline builds and deploys nothing: needs
   the storefront ECR repository, IRSA role and certificate, then build,
   scan and deploy jobs like app.yml's (placeholders removed in #16).
 - [ ] **R01** — Finish the code review: storefront, loadgen, api-gateway,
-  payment, fraud (Java), inventory and projection-worker (Python), the
-  Lambdas.
+  payment, fraud (Java), inventory and projection-worker (Python). The
+  Lambdas are done (T01).
+- [ ] **K01** — kube-bench checks the one node its pod lands on. Run it
+  per node (a DaemonSet-style job, or one Job per node group) so a
+  finding is about a node, not whichever node ran that night.
 
 ## P2 — carried over from the old backlog
 
@@ -54,30 +51,48 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [ ] **O05** (#140) — CSAM/NCMEC hash scan on the storefront upload
   pipeline.
 
-## P3 — Argus integration (after the above)
+## AWS phase — checks that need a live environment
 
-- [ ] **I01** — Mimir cardinality analysis on, for Argus's MET-001 backend
-  check and cost attribution.
-- [ ] **I02** — Chaos Mesh behind an `enable_chaos` toggle, off by default;
-  Gatekeeper exemption only while it is on.
-- [ ] **I03** — Capacity and cost check for running Argus here, before any
-  apply.
+Everything above the line is code; these are the parts only an apply can
+prove. I03 comes first.
+
+- [ ] **I03** — Capacity and cost estimate for running Argus here, before
+  any apply.
+- [ ] **S01** — First apply with the scoped deployer policy; check whether
+  a role created by the old oidc.sh still exists with its any-branch trust.
+- [ ] **S08** — Switch the permissions boundary on and run its runbook's
+  verify list (docs/runbooks/security/permissions-boundary.md).
+- [ ] **V01** — Run once and read the output of: the kube-bench job (#32;
+  eks-1.8.0 on the node mounts), the compliance scanner
+  (`DescribeClusterVersions`), the idle detector (Container Insights metric
+  and dynamic label), and the SLO deploy gate (finds its metric).
+- [ ] **I02** — First Chaos Mesh experiment: check the Falco rules against
+  the chaos daemon (docs/runbooks/chaos-mesh.md).
 
 ## In review
 
-- **S01** — IAM and S3 write scoped to the project; MFA default (#13).
-- **S08** — permissions boundary, off by default (#25).
-- **S05** — self-healing resizes only this cluster's node groups (#14).
-- **T01** (part) — tests for the three write-path Lambdas, four fixes (#23).
+- **S10** — kube-bench can run: own namespace, node mounts, pinned images,
+  no run-time npm install (#32).
 - **C03** — 1,419 machine-written comments removed (#17).
-- **L01** — shellcheck findings; jobs that cannot run on a PR removed;
-  manifests validated after rendering (#16 merged, #18).
-- **SC1** — Trivy config findings: read-only init containers, tracked EKS
-  suppressions; the Trivy gates filter by severity again (SARIF output had
-  turned the filter off) and tfsec authenticates its release lookup (#20).
+- **D01** — actions bump (#12).
 
 ## Done
 
+- [x] **S01** — deployer and CI IAM scoped to the project's roles,
+  policies and buckets; one policy for both bootstrap paths; MFA default
+  (#13). Live check under AWS phase.
+- [x] **S05** — self-healing resizes only this cluster's node groups (#14).
+- [x] **S08** — permissions boundary on every workload role, off by
+  default, with a Terraform test (#29). Switch-on under AWS phase.
+- [x] **T01** — every Lambda has tests that CI runs (15 packages); they
+  found defects in eleven (#23, #30).
+- [x] **SC1** — read-only init containers, tracked EKS suppressions; the
+  Trivy gates filter by severity again; tfsec authenticates its release
+  lookup (#20).
+- [x] **L01** — shellcheck findings; jobs that cannot run on a PR removed;
+  manifests validated after rendering (#16, #18).
+- [x] **I01, I02** — Mimir cardinality analysis on; Chaos Mesh behind a
+  switch, its Gatekeeper exemption only while on (#27).
 - [x] **S03** — every action pinned to a commit SHA, Dependabot keeps them
   current (#10).
 - [x] **S04** — npm advisories: critical `proxy-addr` and all high ones in
@@ -96,4 +111,4 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 - [x] **P04** — Node traces library on OpenTelemetry 2.x; exporter key no
   longer logged (#21).
 - [x] **P05** — no AI tooling in tracked files; specs to docs/design (#22).
-- [x] **P06** — this file.
+- [x] **P06** — this file, and the audit report (#26).
