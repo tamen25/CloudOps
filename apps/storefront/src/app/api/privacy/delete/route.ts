@@ -42,6 +42,7 @@ export async function POST() {
   }
 
   const upstream = await fetch(`${API_BASE_URL}/privacy/erase`, {
+    signal: AbortSignal.timeout(10_000),
     method: "POST",
     headers: { authorization: `Bearer ${session}` },
     cache: "no-store",

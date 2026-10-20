@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/bff-auth";
+import { requireAdmin } from "@/lib/bff-auth";
 import { fetchRecentTraces, fetchTraceById } from "@/lib/observe";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Recent-traces list, or a single trace when ?id= is given (Tempo).
+// Recent-traces list, or a single trace when ?id= is given (Tempo). Admin
+// only: traces are raw spans from every tenant (attributes, URLs, tenant
+// IDs), and the list hands out their IDs. Aggregate service metrics and the
+// topology carry no tenant data and stay open to any signed-in user.
 export async function GET(req: NextRequest) {
-  const claims = await requireSession();
-  if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
 
   const id = req.nextUrl.searchParams.get("id");
   try {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/bff-auth";
-import { isAdmin } from "@/lib/auth";
+import { requireAdmin } from "@/lib/bff-auth";
 import { startRun } from "@/lib/loadgen-client";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +7,8 @@ export const runtime = "nodejs";
 
 // Start a load run. Cognito-gated + admin-only (it generates real traffic).
 export async function POST(req: NextRequest) {
-  const claims = await requireSession();
-  if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!isAdmin(claims)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
 
   const baseUrl = process.env.LOADGEN_URL || "";
   const secret = process.env.INTERNAL_HMAC_SECRET || "";

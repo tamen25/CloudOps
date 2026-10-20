@@ -34,6 +34,11 @@ async function authHeader(): Promise<HeadersInit> {
   return { authorization: `Bearer ${token}` };
 }
 
+
+// Every call to order-api and search is bounded: a hung upstream turns into
+// an error page instead of a request that never finishes.
+const UPSTREAM_TIMEOUT_MS = 10_000;
+
 export async function listProducts(opts: { limit?: number; offset?: number } = {}): Promise<{
   products: Product[];
   limit: number;
@@ -44,6 +49,7 @@ export async function listProducts(opts: { limit?: number; offset?: number } = {
   params.set("limit", String(opts.limit ?? 20));
   params.set("offset", String(opts.offset ?? 0));
   const res = await fetch(`${API_BASE_URL}/products?${params}`, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     headers: await authHeader(),
     next: { revalidate: 0 },
   });
@@ -55,6 +61,7 @@ export async function listProducts(opts: { limit?: number; offset?: number } = {
 export async function getProduct(id: number): Promise<Product | null> {
   if (!API_BASE_URL) throw new Error("API_BASE_URL missing");
   const res = await fetch(`${API_BASE_URL}/products/${id}`, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     headers: await authHeader(),
     next: { revalidate: 0 },
   });
@@ -71,6 +78,7 @@ export async function searchProducts(
   if (!SEARCH_BASE_URL) throw new Error("SEARCH_BASE_URL missing");
   const params = new URLSearchParams({ q, limit: String(opts.limit ?? 20) });
   const res = await fetch(`${SEARCH_BASE_URL}/search?${params}`, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     headers: await authHeader(),
     next: { revalidate: 0 },
   });
@@ -86,6 +94,7 @@ export async function searchProducts(
 export async function listOrders(): Promise<{ orders: Order[]; count: number }> {
   if (!API_BASE_URL) throw new Error("API_BASE_URL missing");
   const res = await fetch(`${API_BASE_URL}/orders`, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     headers: await authHeader(),
     next: { revalidate: 0 },
   });
@@ -96,6 +105,7 @@ export async function listOrders(): Promise<{ orders: Order[]; count: number }> 
 export async function getOrder(orderId: string): Promise<Order | null> {
   if (!API_BASE_URL) throw new Error("API_BASE_URL missing");
   const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}`, {
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     headers: await authHeader(),
     next: { revalidate: 0 },
   });
