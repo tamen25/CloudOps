@@ -1,6 +1,6 @@
 name: EKS Emergency Public Access
 
-#Backlog #52 — break-glass path for reaching the prod EKS API server when the
+#Backlog #52 — break-glass path for reaching the EKS API server when the
 #private endpoint is the only normally-routable interface and the situation
 #does not allow waiting for a private runner / bastion.
 #
@@ -8,6 +8,9 @@ name: EKS Emergency Public Access
 #(NOT Terraform — state intentionally stays unchanged so the next regular
 #apply re-asserts the private-only configuration). The runner records who
 #opened the window, when, the CIDR, and the reason in the run summary.
+#
+#Inputs reach the scripts through env, never as ${{ }} inside run:, so a
+#reason containing shell syntax stays text.
 
 on:
   workflow_dispatch:
@@ -16,7 +19,7 @@ on:
         description: Target environment
         required: true
         type: choice
-        options: [staging, prod]
+        options: [dev, staging, prod]
       action:
         description: open (widen) or close (revert)
         required: true
@@ -39,21 +42,26 @@ permissions:
 jobs:
   emergency-access:
     runs-on: ubuntu-latest
-    #Production approval gate (closes backlog #52). Staging reuses its own
-    #approval path so the same workflow works for both.
+    #Production approval gate (closes backlog #52). Dev and staging use their
+    #own environments, so the same workflow works for all three.
     environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
+      CLUSTER: ${{ secrets.EKS_CLUSTER_NAME }}
+      ACTION: ${{ inputs.action }}
+      CIDR: ${{ inputs.cidr }}
+      REASON: ${{ inputs.reason }}
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
     steps:
       - name: Validate inputs
         run: |
           set -euo pipefail
-          if [ "${{ inputs.action }}" = "open" ] && [ -z "${{ inputs.cidr }}" ]; then
-            echo "::error::cidr is required when action=open"; exit 1
+          if [ -z "$CLUSTER" ]; then
+            echo "::error::secrets.EKS_CLUSTER_NAME is empty"; exit 1
           fi
-          if [ "${{ inputs.action }}" = "open" ]; then
-            if ! echo "${{ inputs.cidr }}" | grep -Eq '^[0-9.]+/(3[0-2]|2[0-9]|1[0-9]|[0-9])$'; then
-              echo "::error::cidr must be valid IPv4 CIDR (e.g. 203.0.113.5/32)"; exit 1
+          if [ "$ACTION" = "open" ]; then
+            if ! printf '%s' "$CIDR" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}/(3[0-2]|[12][0-9]|[0-9])$'; then
+              echo "::error::cidr must be an IPv4 CIDR, e.g. 203.0.113.5/32"; exit 1
             fi
           fi
 
@@ -64,54 +72,53 @@ jobs:
           role-session-name: eks-emergency-access-${{ inputs.action }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Resolve cluster name
-        id: resolve
+      #Closing turns the public endpoint off; the CIDR list only applies
+      #while it is on, so it is left as it was.
+      - name: Update the endpoint and wait for it
         run: |
           set -euo pipefail
-          #Convention: <project>-<env>-cluster (matches modules/eks naming).
-          CLUSTER="${{ secrets.EKS_CLUSTER_NAME }}"
-          if [ -z "$CLUSTER" ]; then
-            echo "::error::secrets.EKS_CLUSTER_NAME is empty"; exit 1
+          if [ "$ACTION" = "open" ]; then
+            CONFIG="endpointPrivateAccess=true,endpointPublicAccess=true,publicAccessCidrs=$CIDR"
+          else
+            CONFIG="endpointPrivateAccess=true,endpointPublicAccess=false"
           fi
-          echo "cluster=$CLUSTER" >> "$GITHUB_OUTPUT"
+          UPDATE=$(aws eks update-cluster-config --name "$CLUSTER" \
+            --resources-vpc-config "$CONFIG" --query 'update.id' --output text)
+          echo "Update $UPDATE started"
+          STATUS=InProgress
+          for _ in $(seq 1 60); do
+            STATUS=$(aws eks describe-update --name "$CLUSTER" --update-id "$UPDATE" \
+              --query 'update.status' --output text)
+            case "$STATUS" in
+              Successful) echo "Applied."; exit 0 ;;
+              Failed|Cancelled) echo "::error::endpoint update $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::endpoint update still $STATUS after 15 minutes"
+          exit 1
 
-      - name: Open emergency window
-        if: inputs.action == 'open'
+      - name: Record it
+        if: always()
         run: |
-          set -euo pipefail
-          aws eks update-cluster-config \
-            --name "${{ steps.resolve.outputs.cluster }}" \
-            --resources-vpc-config "endpointPrivateAccess=true,endpointPublicAccess=true,publicAccessCidrs=${{ inputs.cidr }}"
-
           {
-            echo "## EKS emergency public access — OPENED"
+            if [ "$ACTION" = "open" ]; then
+              echo "## EKS emergency public access — OPENED"
+            else
+              echo "## EKS emergency public access — CLOSED"
+            fi
             echo
-            echo "- Environment: ${{ inputs.environment }}"
-            echo "- Cluster: ${{ steps.resolve.outputs.cluster }}"
-            echo "- CIDR: \`${{ inputs.cidr }}\`"
-            echo "- Opened by: @${{ github.actor }}"
-            echo "- Reason: ${{ inputs.reason }}"
+            echo "- Result: ${{ job.status }}"
+            echo "- Environment: $TARGET_ENVIRONMENT"
+            echo "- Cluster: $CLUSTER"
+            [ "$ACTION" = "open" ] && echo "- CIDR: \`$CIDR\`"
+            echo "- By: @${{ github.actor }}"
+            echo "- Reason: $REASON"
             echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo
-            echo "Close it as soon as the work is done by re-running this workflow with action=close."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Close emergency window
-        if: inputs.action == 'close'
-        run: |
-          set -euo pipefail
-          aws eks update-cluster-config \
-            --name "${{ steps.resolve.outputs.cluster }}" \
-            --resources-vpc-config "endpointPrivateAccess=true,endpointPublicAccess=false,publicAccessCidrs=[]"
-
-          {
-            echo "## EKS emergency public access — CLOSED"
-            echo
-            echo "- Environment: ${{ inputs.environment }}"
-            echo "- Cluster: ${{ steps.resolve.outputs.cluster }}"
-            echo "- Closed by: @${{ github.actor }}"
-            echo "- Reason: ${{ inputs.reason }}"
-            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo
-            echo "Next regular Terraform apply will re-assert this state from tfvars."
+            if [ "$ACTION" = "open" ]; then
+              echo "Close it as soon as the work is done: re-run this workflow with action=close."
+            else
+              echo "The next regular Terraform apply re-asserts the endpoint settings from tfvars."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

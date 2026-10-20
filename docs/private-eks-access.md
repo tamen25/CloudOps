@@ -8,22 +8,17 @@ strategies, in order of preference.
 
 ## 1. Self-hosted runners in the VPC (recommended)
 
-Run a small autoscaling group of GitHub Actions self-hosted runners on EC2
-inside the EKS-private subnets. They reach the API server over the same
-private route as the cluster nodes.
+Actions Runner Controller on the platform cluster runs one ephemeral runner
+pod per job, inside the VPC, so jobs reach the private API server the way
+the nodes do. Built as `modules/ci-runner` (ADR 025), off by default; the
+cluster jobs move onto it when the `DEPLOY_RUNNER` repository variable is
+set. Setup, limits and the outage path: `docs/runbooks/ci-runner.md`.
 
-- **Pros**: no internet exposure, no manual approval each deploy, the same
-  workflow path works in dev/staging/prod.
-- **Cons**: ~$15-30/month per always-on runner; lifecycle management
-  (registration tokens, autoscaling on workflow demand).
-- **Sketch**: launch template + ASG (1 instance min, 4 max), AWS-managed
-  AMI, user-data that registers the runner with `gh` CLI using a registration
-  token from a Secrets Manager secret. Tag runners with the env name; the
-  workflow picks them up via `runs-on: [self-hosted, prod]`.
-
-This is the right long-term fix. It is not yet implemented as Terraform in
-this repo — track as a follow-up to #52 if/when prod traffic justifies the
-spend.
+- **Pros**: no internet exposure, no manual approval per deploy, one
+  workflow path for every environment; a clean pod per job.
+- **Cons**: the runners live on the cluster they deploy to. Destroy, and
+  changes that replace the nodes or the runners themselves, run on
+  GitHub-hosted runners with emergency access (3).
 
 ## 2. SSM Session Manager + bastion
 
@@ -39,8 +34,13 @@ Not a CI deploy path.
 ## 3. Emergency public CIDR (break-glass only)
 
 `.github/workflows/eks-emergency-access.yml` opens a temporary public access
-window scoped to a single caller CIDR. Gated by the `production` GitHub
-environment approval. Closes via the same workflow with `action=close`.
+window scoped to a single caller CIDR, in dev, staging or prod, and waits
+until EKS has applied it. Prod is gated by the `production` GitHub
+environment approval. Closes via the same workflow with `action=close`,
+which turns the public endpoint off.
+
+The Destroy workflow opens the endpoint to its own runner by itself before
+destroying the platform stack, so a teardown needs no emergency window.
 
 The window is intentionally **not** Terraform-managed:
 
@@ -69,6 +69,6 @@ this one runs without Terraform state, so it takes it from the secret.
 ## Approval policy
 
 The emergency workflow targets the `production` GitHub environment when
-`environment=prod`, which forces required reviewer approval. For staging it
-binds to the `staging` environment; configure that to either auto-approve or
-require approval per your team's policy.
+`environment=prod`, which forces required reviewer approval. For dev and
+staging it binds to the `dev` and `staging` environments; configure those to
+either auto-approve or require approval per your team's policy.

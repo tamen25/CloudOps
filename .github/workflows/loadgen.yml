@@ -102,9 +102,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Echo requested run (activation pending)
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          RPS: ${{ inputs.rps }}
+          DURATION_SECONDS: ${{ inputs.duration_seconds }}
         run: |
           echo "Requested load run (in-cluster execution not yet activated):"
-          echo "  scenario=${{ inputs.scenario }}"
-          echo "  rps=${{ inputs.rps }} (clamped to 200 by loadgen)"
-          echo "  duration_seconds=${{ inputs.duration_seconds }} (clamped to 600)"
+          echo "  scenario=$SCENARIO"
+          echo "  rps=$RPS (clamped to 200 by loadgen)"
+          echo "  duration_seconds=$DURATION_SECONDS (clamped to 600)"
           echo "Activate the run-load job above once the cluster deploy path exists."
