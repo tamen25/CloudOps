@@ -123,6 +123,20 @@ resource "kubernetes_cron_job_v1" "trickle" {
                 name  = "OTEL_SERVICE_NAME"
                 value = "loadgen-trickle"
               }
+              # The collector refuses OTLP without this bearer token; the
+              # control Deployment gets it from the mesh module. Without it
+              # the trickle's root spans were dropped and every gateway span
+              # pointed at a parent that never arrived.
+              env {
+                name = "OTEL_API_KEY"
+                value_from {
+                  secret_key_ref {
+                    name     = "otel-auth"
+                    key      = "api-key"
+                    optional = true
+                  }
+                }
+              }
             }
           }
         }

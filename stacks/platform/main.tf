@@ -185,9 +185,11 @@ locals {
     Stack       = "platform"
   }
 
-  #OTLP endpoint the mesh services export to. Same ALB-fronted collector the
-  #apps use; empty when observability is off so the SDKs no-op (no retry storm).
-  mesh_otel_endpoint = var.enable_observability ? "https://otel.${var.domain_name}" : ""
+  #OTLP endpoint the mesh services export to: the collector's in-cluster
+  #Service. The public otel.<domain> address needs the ingress module (ALB and
+  #DNS); without it the mesh exported into nothing. Empty when observability
+  #is off so the SDKs no-op (no retry storm).
+  mesh_otel_endpoint = var.enable_observability ? module.observability[0].otel_internal_endpoint : ""
 }
 
 module "ingress" {

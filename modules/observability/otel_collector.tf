@@ -14,6 +14,12 @@ resource "helm_release" "otel_collector" {
     mode         = "deployment"
     replicaCount = 2
 
+    #The chart has no default image and refuses to render without one. The
+    #contrib distribution, because this config needs the bearertokenauth
+    #extension and the loki exporter, which the core and k8s ones lack. The
+    #tag defaults to the chart's appVersion (0.104.0).
+    image = { repository = "otel/opentelemetry-collector-contrib" }
+
     #Expose OTLP gRPC (4317) and HTTP (4318) as named service ports
     ports = {
       otlp = {

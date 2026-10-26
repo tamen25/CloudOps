@@ -14,6 +14,11 @@ output "otel_endpoint" {
   value       = "https://otel.${var.domain}"
 }
 
+output "otel_internal_endpoint" {
+  description = "OTel Collector OTLP/HTTP endpoint inside the cluster, for workloads running on it (no ALB, no ingress needed)"
+  value       = "http://opentelemetry-collector.monitoring.svc:4318"
+}
+
 output "otel_api_key" {
   description = "Bearer token required by the OTel Collector bearertokenauth extension"
   value       = random_password.otel_api_key.result

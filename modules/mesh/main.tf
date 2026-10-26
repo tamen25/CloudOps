@@ -118,6 +118,19 @@ resource "kubernetes_deployment_v1" "this" {
               }
             }
           }
+          #The Node, Go and Python services add OTEL_API_KEY as a header in
+          #code. The Java services run the OTel Java agent, which takes
+          #headers only from this variable; without it the collector refuses
+          #their telemetry. $(OTEL_API_KEY) is expanded by Kubernetes from the
+          #entry above; %20 is the space in "Bearer <token>", percent-encoded
+          #as the variable's format requires.
+          dynamic "env" {
+            for_each = var.lang == "java" ? [1] : []
+            content {
+              name  = "OTEL_EXPORTER_OTLP_HEADERS"
+              value = "Authorization=Bearer%20$(OTEL_API_KEY)"
+            }
+          }
 
           dynamic "volume_mount" {
             for_each = var.needs_tmp_volume ? [1] : []
