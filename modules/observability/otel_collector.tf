@@ -1,5 +1,25 @@
 #OpenTelemetry Collector in GATEWAY mode (Deployment, not DaemonSet)
 #All SDK clients send telemetry to this central collector inside the cluster
+
+locals {
+  #With argus_otlp_endpoint set, every signal is also mirrored to the Argus
+  #engine (modules/argus). Its own exporter and queue: when the engine is down
+  #only the mirror's data is dropped; Tempo, Prometheus and Loki are unaffected.
+  argus_mirror   = var.argus_otlp_endpoint != ""
+  argus_exporter = local.argus_mirror ? ["otlp/argus"] : []
+  argus_exporter_cf = local.argus_mirror ? {
+    "otlp/argus" = {
+      endpoint      = var.argus_otlp_endpoint
+      tls           = { insecure = true }
+      sending_queue = { enabled = true, queue_size = 1000 }
+      retry_on_failure = {
+        enabled          = true
+        max_elapsed_time = "60s"
+      }
+    }
+  } : {}
+}
+
 resource "helm_release" "otel_collector" {
   name       = "opentelemetry-collector"
   repository = "https://open-telemetry.github.io/opentelemetry-helm-charts"
@@ -94,7 +114,7 @@ resource "helm_release" "otel_collector" {
         }
       }
 
-      exporters = {
+      exporters = merge(local.argus_exporter_cf, {
         #Traces → Tempo via OTLP HTTP
         "otlphttp/tempo" = {
           endpoint = "http://tempo.tempo.svc:4318"
@@ -124,7 +144,7 @@ resource "helm_release" "otel_collector" {
             }
           }
         }
-      }
+      })
 
       service = {
         extensions = ["bearertokenauth"]
@@ -132,17 +152,17 @@ resource "helm_release" "otel_collector" {
           traces = {
             receivers  = ["otlp"]
             processors = ["memory_limiter", "resource", "batch"]
-            exporters  = ["otlphttp/tempo"]
+            exporters  = concat(["otlphttp/tempo"], local.argus_exporter)
           }
           metrics = {
             receivers  = ["otlp"]
             processors = ["memory_limiter", "resource", "batch"]
-            exporters  = ["prometheusremotewrite"]
+            exporters  = concat(["prometheusremotewrite"], local.argus_exporter)
           }
           logs = {
             receivers  = ["otlp"]
             processors = ["memory_limiter", "resource", "batch"]
-            exporters  = ["loki"]
+            exporters  = concat(["loki"], local.argus_exporter)
           }
         }
       }
