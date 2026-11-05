@@ -47,8 +47,9 @@ variable "cpu_request" {
 }
 
 variable "memory_request" {
-  type    = string
-  default = "32Mi"
+  description = "Memory request; empty picks a default for the language (node 64Mi, others 32Mi)."
+  type        = string
+  default     = ""
 }
 
 variable "cpu_limit" {
@@ -57,8 +58,9 @@ variable "cpu_limit" {
 }
 
 variable "memory_limit" {
-  type    = string
-  default = "64Mi"
+  description = "Memory limit; empty picks a default for the language (node 128Mi, others 64Mi)."
+  type        = string
+  default     = ""
 }
 
 variable "run_as_user" {

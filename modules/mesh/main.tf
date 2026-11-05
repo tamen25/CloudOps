@@ -90,11 +90,11 @@ resource "kubernetes_deployment_v1" "this" {
           resources {
             requests = {
               cpu    = var.cpu_request
-              memory = var.memory_request
+              memory = local.memory_request
             }
             limits = {
               cpu    = var.cpu_limit
-              memory = var.memory_limit
+              memory = local.memory_limit
             }
           }
 
@@ -259,4 +259,12 @@ resource "kubernetes_network_policy_v1" "this" {
       }
     }
   }
+}
+
+# A Node process with the OTel SDK is OOM-killed under 64 MiB (the loadgen
+# control API was, on its first EKS run); the Go and Python services fit in
+# 32/64 MiB.
+locals {
+  memory_request = var.memory_request != "" ? var.memory_request : (var.lang == "node" ? "64Mi" : "32Mi")
+  memory_limit   = var.memory_limit != "" ? var.memory_limit : (var.lang == "node" ? "128Mi" : "64Mi")
 }
