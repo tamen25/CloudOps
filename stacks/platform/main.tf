@@ -233,6 +233,11 @@ module "observability" {
 
   permissions_boundary_arn = local.permissions_boundary_arn
 
+  # A fixed address rather than module.argus's output: the engine installs
+  # after this module (it needs the ServiceMonitor CRD), and the mirror
+  # retries until it is up.
+  argus_otlp_endpoint = var.enable_argus ? "argus.${local.argus_namespace}.svc:4317" : ""
+
   name_prefix    = local.name_prefix
   environment    = var.environment
   region         = var.region
@@ -795,4 +800,22 @@ module "ci_runner" {
   # Gatekeeper's no-root constraint must be in place before the pods start,
   # so a pod spec that breaks it fails here rather than admitting silently.
   depends_on = [module.security]
+}
+
+# Argus engine: scores this cluster's telemetry from the collector's mirror
+# (docs/runbooks/argus.md). Needs observability (the mirror and the
+# ServiceMonitor CRD).
+locals {
+  argus_namespace = "argus"
+}
+
+module "argus" {
+  count  = var.enable_argus && var.enable_observability ? 1 : 0
+  source = "../../modules/argus"
+
+  chart     = var.argus_chart
+  namespace = local.argus_namespace
+  image_tag = var.argus_image_tag
+
+  depends_on = [module.observability]
 }

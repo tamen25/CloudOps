@@ -288,3 +288,9 @@ variable "permissions_boundary_arn" {
   type        = string
   default     = null
 }
+
+variable "argus_otlp_endpoint" {
+  description = "OTLP gRPC address of an Argus engine (host:port) to mirror every signal to; empty for none (modules/argus)"
+  type        = string
+  default     = ""
+}

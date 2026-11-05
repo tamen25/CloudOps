@@ -873,3 +873,21 @@ variable "ci_runner_max_runners" {
   type        = number
   default     = 3
 }
+
+variable "enable_argus" {
+  description = "Run the Argus engine in the cluster and mirror the collector's telemetry to it (needs enable_observability). See docs/runbooks/argus.md."
+  type        = bool
+  default     = false
+}
+
+variable "argus_chart" {
+  description = "Path to deploy/helm/argus in an Argus checkout (chart 0.3.0 or later), relative to stacks/platform or absolute"
+  type        = string
+  default     = ""
+}
+
+variable "argus_image_tag" {
+  description = "Argus engine image tag; empty uses the chart's appVersion"
+  type        = string
+  default     = ""
+}

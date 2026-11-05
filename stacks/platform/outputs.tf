@@ -211,3 +211,8 @@ output "ci_runner_set_name" {
   description = "Value for the DEPLOY_RUNNER repository variable; empty while enable_ci_runner is off"
   value       = var.enable_ci_runner ? module.ci_runner[0].runner_set_name : ""
 }
+
+output "argus_api_url" {
+  description = "The Argus engine's API inside the cluster; empty while enable_argus is off"
+  value       = length(module.argus) > 0 ? module.argus[0].api_url : ""
+}

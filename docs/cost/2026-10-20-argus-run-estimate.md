@@ -8,13 +8,15 @@ writing; check them on the day.
 
 | Where | What |
 |---|---|
-| **AWS (EKS)** | networking (2 AZs, NAT), EKS, the observability stack with Mimir, the mesh (9 services), loadgen, Chaos Mesh |
-| **Your machine** | Argus (CLI and engine), its Postgres, the bench agents and the local Ollama server |
+| **AWS (EKS)** | networking (2 AZs, NAT), EKS, the observability stack with Mimir, the mesh (7 services), loadgen, Chaos Mesh, the Argus engine (scoring) |
+| **Your machine** | the Argus CLI (cost, backtest, bench), the bench agents and the local Ollama server |
 
-Argus reaches Mimir, Loki and Tempo through `kubectl port-forward`, as it does
-on kind. Nothing in AWS calls back to your machine, so no tunnel is needed and
-the model never leaves it. Argus's bench runs Chaos Mesh experiments through
-the same kubeconfig.
+Scoring runs in the cluster: Argus scores the telemetry the OTel Collector
+mirrors to it, and nothing in AWS can reach your machine
+(docs/runbooks/argus.md). Everything else Argus does reads Mimir, Loki and
+Tempo through `kubectl port-forward`, as on kind, so no tunnel is needed and
+the model never leaves your machine. Argus's bench runs Chaos Mesh
+experiments through the same kubeconfig.
 
 Off for this run: database, storefront and its serverless pieces, ingress
 (no load balancer, no certificate, no public DNS records), security, FinOps,
@@ -34,6 +36,8 @@ metrics_long_term_storage  = "mimir"
 enable_mesh                = true
 enable_loadgen             = true
 enable_chaos_mesh          = true
+enable_argus               = true
+argus_chart                = "../../../Argus/deploy/helm/argus"   # an Argus checkout beside CloudOps
 # The API endpoint is public for the run (it is applied from your machine);
 # only your address may reach it. Find it with: curl -s https://checkip.amazonaws.com
 eks_endpoint_public_access_cidrs = ["<your ip>/32"]
@@ -102,7 +106,8 @@ chart sizes, to be checked with `kubectl describe nodes` on the first run.
 | Mimir (distributor, ingester, querier, query-frontend, store-gateway, compactor, gateway) | ~4 GiB |
 | Mesh (9 services) + loadgen | ~1.5 GiB |
 | Chaos Mesh (controller + daemon per node) | ~0.5 GiB |
-| **Total** | **~13 GiB** |
+| Argus engine | 0.25 GiB (limit 1 GiB) |
+| **Total** | **~13.5 GiB** |
 
 Two t3.large nodes give ~14 GiB allocatable: too tight, and a chaos experiment
 that kills a pod needs room to reschedule it. Three give ~21 GiB. Hence
