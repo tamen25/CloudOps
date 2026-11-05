@@ -179,3 +179,18 @@ run "logs_go_to_loki_over_otlp" {
     error_message = "The logs pipeline must use the OTLP exporter."
   }
 }
+
+# The collector refuses a batch max below the batch size, whose default
+# (8192) is above the max this module sets; found by `otelcol-contrib
+# validate` on the rendered config.
+run "the_batch_limits_are_consistent" {
+  command = plan
+
+  assert {
+    condition = (
+      try(yamldecode(helm_release.otel_collector.values[0]).config.processors.batch.send_batch_size, 8192) <=
+      yamldecode(helm_release.otel_collector.values[0]).config.processors.batch.send_batch_max_size
+    )
+    error_message = "send_batch_max_size must be at least send_batch_size (default 8192)."
+  }
+}

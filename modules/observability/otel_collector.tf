@@ -108,8 +108,11 @@ resource "helm_release" "otel_collector" {
           ]
         }
 
+        # send_batch_size defaults to 8192, and the collector refuses a
+        # max below it: both are set.
         batch = {
           timeout             = "5s"
+          send_batch_size     = 1000
           send_batch_max_size = 1000
         }
       }
