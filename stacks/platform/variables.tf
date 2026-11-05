@@ -368,8 +368,9 @@ variable "tempo_ingester_replicas" {
 }
 
 variable "tempo_metrics_generator_enabled" {
-  type    = bool
-  default = false
+  description = "Tempo's metrics generator (service graph and span metrics, remote-written to Prometheus); always on with enable_mesh"
+  type        = bool
+  default     = false
 }
 
 variable "metrics_long_term_storage" {

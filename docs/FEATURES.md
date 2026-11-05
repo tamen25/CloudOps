@@ -393,6 +393,11 @@ SECURITY` — table owner cannot bypass.
   their traces. It reads each file from the start and keeps checkpoints on
   the node, so a restart neither loses nor repeats lines.
 - Loki (logs), Tempo (traces), Mimir (metrics). Per-signal KMS CMKs.
+- Tempo's metrics generator (on with the mesh, or `tempo_metrics_generator_enabled`)
+  derives a service graph (`traces_service_graph_request_total`) and span
+  metrics (`traces_spanmetrics_*`) from traces and remote-writes them to
+  Prometheus, so the traces-only services (pricing, ledger, inventory) have
+  request rate, errors and duration, and Grafana's service map has edges.
 - Grafana with sidecar-driven config:
   - `grafana_dashboard=1` — dashboards.
   - `grafana_alert=1` — alert rules + contact points + policies.
