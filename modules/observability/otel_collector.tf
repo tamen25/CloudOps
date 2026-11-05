@@ -147,7 +147,9 @@ resource "helm_release" "otel_collector" {
       })
 
       service = {
-        extensions = ["bearertokenauth"]
+        # health_check serves the chart's probes; the chart refuses to
+        # install without it, and this list replaces its default one.
+        extensions = ["health_check", "bearertokenauth"]
         pipelines = {
           traces = {
             receivers  = ["otlp"]

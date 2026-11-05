@@ -208,8 +208,13 @@ resource "aws_secretsmanager_secret_version" "grafana_api_key_placeholder" {
 #tokens in Grafana.
 #- The trigger is now a fixed string ("v1") so re-applies do NOT rotate the
 #token by default. To force rotation: `terraform apply
-#-replace=module.observability.null_resource.grafana_service_account`.
+#-replace=module.observability.null_resource.grafana_service_account[0]`.
 resource "null_resource" "grafana_service_account" {
+  # It reaches Grafana at https://grafana.<domain>, which only the ingress
+  # serves; without one there is no URL to wait for, and no Lambda to use
+  # the token.
+  count = var.acm_cert_arn != "" ? 1 : 0
+
   triggers = {
     #Bump this string to force a token rotation on the next apply.
     rotation_marker = "v1"
@@ -328,4 +333,9 @@ except Exception:
     helm_release.grafana,
     aws_secretsmanager_secret_version.grafana_api_key_placeholder,
   ]
+}
+
+moved {
+  from = null_resource.grafana_service_account
+  to   = null_resource.grafana_service_account[0]
 }

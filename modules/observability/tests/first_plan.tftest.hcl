@@ -58,6 +58,11 @@ run "ingresses_exist_with_a_certificate" {
     condition     = yamldecode(helm_release.grafana.values[0]).ingress.enabled
     error_message = "With a certificate, Grafana keeps its ingress."
   }
+
+  assert {
+    condition     = length(null_resource.grafana_service_account) == 1
+    error_message = "With Grafana's public URL, the Lambda reader's service account is still created."
+  }
 }
 
 run "no_ingresses_without_a_certificate" {
@@ -75,6 +80,13 @@ run "no_ingresses_without_a_certificate" {
   assert {
     condition     = !yamldecode(helm_release.grafana.values[0]).ingress.enabled
     error_message = "With ingress off, Grafana must get no ALB ingress."
+  }
+
+  # It waits for https://grafana.<domain>, which does not exist without the
+  # ingress, and failed the apply after six minutes.
+  assert {
+    condition     = length(null_resource.grafana_service_account) == 0
+    error_message = "Without an ingress, nothing may wait for Grafana's public URL."
   }
 }
 
@@ -132,5 +144,17 @@ run "loki_and_mimir_configs_start" {
       yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.ruler_storage.storage_prefix != yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.alertmanager_storage.storage_prefix
     )
     error_message = "Mimir's ruler and Alertmanager need their own prefixes in the shared bucket."
+  }
+}
+
+# The chart refuses to install (its NOTES.txt fails) unless health_check is
+# in the service's extensions; `helm template` does not render NOTES.txt, so
+# only an install shows it.
+run "the_collector_keeps_the_health_check_extension" {
+  command = plan
+
+  assert {
+    condition     = contains(yamldecode(helm_release.otel_collector.values[0]).config.service.extensions, "health_check")
+    error_message = "The collector's service.extensions must include health_check."
   }
 }
