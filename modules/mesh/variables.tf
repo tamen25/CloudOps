@@ -88,7 +88,7 @@ variable "otel_endpoint" {
 }
 
 variable "otel_resource_attributes" {
-  description = "Value for OTEL_RESOURCE_ATTRIBUTES (e.g. deployment.environment=dev)."
+  description = "Resource attributes for OTEL_RESOURCE_ATTRIBUTES (e.g. deployment.environment.name=dev); service.version is added from the image."
   type        = string
   default     = ""
 }

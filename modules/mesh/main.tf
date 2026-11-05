@@ -10,12 +10,26 @@ locals {
     "app.kubernetes.io/managed-by" = "terraform"
   }, var.tags)
 
+  # service.version names the build each span, metric and log came from, so
+  # a regression can be tied to a rollout (Argus ARG-RES-002). The image tag
+  # is the build's commit (scripts/build-and-push.sh); a digest-only image
+  # gives the digest's first 12 hex characters.
+  service_version = (
+    can(regex("@sha256:", var.image))
+    ? substr(regex("@sha256:([0-9a-f]+)", var.image)[0], 0, 12)
+    : try(regex(":([^:/]+)$", var.image)[0], "unknown")
+  )
+  resource_attributes = join(",", compact([
+    var.otel_resource_attributes,
+    "service.version=${local.service_version}",
+  ]))
+
   base_env = merge({
     PORT                        = tostring(var.container_port)
     OTEL_EXPORTER_OTLP_ENDPOINT = var.otel_endpoint
     OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
     OTEL_SERVICE_NAME           = var.name
-    OTEL_RESOURCE_ATTRIBUTES    = var.otel_resource_attributes
+    OTEL_RESOURCE_ATTRIBUTES    = local.resource_attributes
   }, var.env)
 }
 

@@ -579,7 +579,7 @@ module "mesh_pricing" {
   needs_tmp_volume         = false
   replicas                 = var.mesh_replicas
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
   ingress_from_labels      = { app = "api-gateway" }
 
   tags = local.common_tags
@@ -599,7 +599,7 @@ module "mesh_inventory" {
   needs_tmp_volume         = true
   replicas                 = var.mesh_replicas
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
   ingress_from_labels      = { app = "api-gateway" }
 
   tags = local.common_tags
@@ -623,7 +623,7 @@ module "mesh_fraud" {
   cpu_limit                = "500m"
   memory_limit             = "512Mi"
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
   ingress_from_labels      = { app = "api-gateway" }
 
   tags = local.common_tags
@@ -675,7 +675,7 @@ module "mesh_ledger" {
   replicas                 = var.mesh_replicas
   secret_env               = local.mesh_hmac_env
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
   ingress_from_labels      = { app = "payment" }
 
   tags = local.common_tags
@@ -704,7 +704,7 @@ module "mesh_payment" {
   secret_env = local.mesh_hmac_env
 
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
   ingress_from_labels      = { app = "api-gateway" }
 
   tags = local.common_tags
@@ -746,7 +746,7 @@ module "mesh_projection" {
   }
 
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
 
   tags = local.common_tags
 }
@@ -778,7 +778,7 @@ module "mesh_gateway" {
   }
 
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
 
   tags = local.common_tags
 }
@@ -794,7 +794,7 @@ module "loadgen" {
   environment              = var.environment
   replicas                 = var.mesh_replicas
   otel_endpoint            = local.mesh_otel_endpoint
-  otel_resource_attributes = "deployment.environment=${var.environment}"
+  otel_resource_attributes = "deployment.environment.name=${var.environment}"
 
   enable_trickle           = var.loadgen_enable_trickle
   trickle_rps              = var.loadgen_trickle_rps

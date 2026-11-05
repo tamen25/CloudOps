@@ -51,10 +51,15 @@ func initTracer(serviceName string) func() {
 		return func() {}
 	}
 
-	res, _ := resource.Merge(resource.Default(), resource.NewWithAttributes(
+	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(serviceName),
 	))
+	if err != nil {
+		// A schema-URL conflict still returns every attribute, without a
+		// schema URL; the telemetry stays attributable, so say so and go on.
+		log.Printf("otel resource: %v — using the merged attributes", err)
+	}
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),

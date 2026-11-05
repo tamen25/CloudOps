@@ -25,3 +25,21 @@ run "the_trickle_sends_the_otel_token" {
     error_message = "The trickle CronJob must carry OTEL_API_KEY, or the collector refuses its spans."
   }
 }
+
+# The trickle runs outside the mesh module; it needs the same attributes
+# (Argus ARG-RES-002/003 found neither on it).
+run "the_trickle_names_its_version_and_environment" {
+  command = plan
+
+  variables {
+    otel_resource_attributes = "deployment.environment.name=dev"
+  }
+
+  assert {
+    condition = contains(
+      [for e in kubernetes_cron_job_v1.trickle[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].env : e.value if e.name == "OTEL_RESOURCE_ATTRIBUTES"],
+      "deployment.environment.name=dev,service.version=4ffadc0002b2",
+    )
+    error_message = "The trickle must carry deployment.environment.name and service.version."
+  }
+}
