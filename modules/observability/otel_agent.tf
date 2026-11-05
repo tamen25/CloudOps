@@ -29,8 +29,14 @@ locals {
 
     #filelog with the container parser and /var/log/pods mounted, and the
     #k8sattributes processor with its RBAC.
+    #storeCheckpoints keeps each file's read offset in a hostPath
+    #(/var/lib/otelcol), so the agent can start at the beginning of a file
+    #without re-reading it after a restart: from the end, every line a pod
+    #wrote before the agent started was lost (pricing's startup errors on
+    #the first EKS run). Writing the hostPath runs the agent as root, as the
+    #chart does for this preset.
     presets = {
-      logsCollection       = { enabled = true, includeCollectorLogs = false }
+      logsCollection       = { enabled = true, includeCollectorLogs = false, storeCheckpoints = true }
       kubernetesAttributes = { enabled = true }
     }
 
@@ -71,8 +77,9 @@ locals {
 
       receivers = {
         filelog = {
-          include = local.log_include
-          exclude = local.log_exclude
+          include  = local.log_include
+          exclude  = local.log_exclude
+          start_at = "beginning"
         }
       }
 

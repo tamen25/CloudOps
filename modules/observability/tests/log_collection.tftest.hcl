@@ -84,3 +84,22 @@ run "the_agent_reads_the_namespace_but_not_the_otlp_services" {
     error_message = "The chart refuses to install without health_check in the extensions."
   }
 }
+
+# From the end of each file, lines written before the agent started were
+# lost; from the beginning without checkpoints, a restart would send every
+# line again.
+run "the_agent_reads_from_the_start_and_keeps_its_place" {
+  command = plan
+
+  variables {
+    log_collection_namespaces = ["cloudops"]
+  }
+
+  assert {
+    condition = (
+      yamldecode(helm_release.otel_agent[0].values[0]).config.receivers.filelog.start_at == "beginning" &&
+      yamldecode(helm_release.otel_agent[0].values[0]).presets.logsCollection.storeCheckpoints
+    )
+    error_message = "The agent must start at the beginning of each file and store checkpoints."
+  }
+}
