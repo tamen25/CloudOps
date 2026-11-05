@@ -175,6 +175,8 @@ resource "helm_release" "otel_collector" {
 #Ingress for OTel Collector HTTP endpoint (OTLP/HTTP, port 4318)
 #TLS is terminated at the ALB; backend is plain HTTP.
 resource "kubernetes_ingress_v1" "otel_http" {
+  count = var.acm_cert_arn != "" ? 1 : 0
+
   metadata {
     name      = "otel-collector-http"
     namespace = "monitoring"
@@ -217,6 +219,8 @@ resource "kubernetes_ingress_v1" "otel_http" {
 #ALB backend-protocol GRPC uses HTTP/2 to forward to the collector pod.
 #NOTE: ALB requires the backend to accept clear-text HTTP/2 (h2c) on port 4317.
 resource "kubernetes_ingress_v1" "otel_grpc" {
+  count = var.acm_cert_arn != "" ? 1 : 0
+
   metadata {
     name      = "otel-collector-grpc"
     namespace = "monitoring"
@@ -252,4 +256,15 @@ resource "kubernetes_ingress_v1" "otel_grpc" {
   }
 
   depends_on = [helm_release.otel_collector]
+}
+
+# The OTel ingresses gained a count (none without a certificate).
+moved {
+  from = kubernetes_ingress_v1.otel_http
+  to   = kubernetes_ingress_v1.otel_http[0]
+}
+
+moved {
+  from = kubernetes_ingress_v1.otel_grpc
+  to   = kubernetes_ingress_v1.otel_grpc[0]
 }

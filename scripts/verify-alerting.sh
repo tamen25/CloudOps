@@ -66,7 +66,7 @@ fi
 
 #── 2. SLO PrometheusRule CRDs present ────────────────────────────────────────
 info "2. SLO PrometheusRule CRDs (slo.tf)"
-for rule in order-api-slo-availability order-api-slo-latency order-api-slo-throughput; do
+for rule in kube-prometheus-stack-order-api-slo-availability kube-prometheus-stack-order-api-slo-latency kube-prometheus-stack-order-api-slo-throughput; do
   if kubectl get prometheusrule "$rule" -n "$NAMESPACE_MONITORING" >/dev/null 2>&1; then
     ok "$rule"
   else
@@ -76,10 +76,10 @@ done
 
 #── 2b. Alertmanager self-monitor PrometheusRule (closes backlog #99) ────────
 info "2b. Alertmanager self-monitor PrometheusRule"
-if kubectl get prometheusrule alertmanager-self-monitor -n "$NAMESPACE_MONITORING" >/dev/null 2>&1; then
+if kubectl get prometheusrule kube-prometheus-stack-alertmanager-self-monitor -n "$NAMESPACE_MONITORING" >/dev/null 2>&1; then
   ok "alertmanager-self-monitor"
   #Confirm the three alert names the rule should expose.
-  am_alerts=$(kubectl get prometheusrule alertmanager-self-monitor \
+  am_alerts=$(kubectl get prometheusrule kube-prometheus-stack-alertmanager-self-monitor \
     -n "$NAMESPACE_MONITORING" \
     -o jsonpath='{.spec.groups[0].rules[*].alert}' 2>/dev/null || echo "")
   for expected in AlertmanagerDown AlertmanagerConfigSyncFailing AlertmanagerNotificationsFailing; do

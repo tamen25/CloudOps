@@ -30,11 +30,6 @@ resource "terraform_data" "toggle_guard" {
 
   lifecycle {
     precondition {
-      condition     = !var.enable_observability || var.enable_ingress
-      error_message = "enable_observability=true requires enable_ingress=true in the platform stack."
-    }
-
-    precondition {
       condition     = !var.enable_security || var.enable_observability
       error_message = "enable_security=true requires enable_observability=true."
     }

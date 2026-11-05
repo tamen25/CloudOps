@@ -58,4 +58,12 @@ run "an_existing_bootstrap_is_left_alone" {
     condition     = output.github_actions_role_arn == null && output.bootstrap_kms_key_arn == null
     error_message = "Bootstrap outputs must be null when this stack does not manage bootstrap."
   }
+
+  # The bucket exists before any stack does (create-s3-bucket.sh), and the
+  # platform stack reads its name from this output; a null output is left
+  # out of the remote state, and the platform plan fails on the attribute.
+  assert {
+    condition     = output.bootstrap_bucket_name == "cloudops-tfstate-example"
+    error_message = "The state bucket's name must stay in the outputs without bootstrap."
+  }
 }

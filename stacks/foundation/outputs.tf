@@ -3,7 +3,7 @@
 
 #── Bootstrap ────────────────────────────────────────────────────────────────
 output "bootstrap_bucket_name" {
-  value = try(module.bootstrap[0].bucket_name, null)
+  value = var.destroy_all ? null : try(module.bootstrap[0].bucket_name, var.bootstrap_bucket_name)
 }
 
 output "bootstrap_kms_key_arn" {

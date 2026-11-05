@@ -20,67 +20,55 @@
 #
 #Verification: extended in scripts/verify-alerting.sh — checks that this
 #PrometheusRule loads and that the rule names are visible in the operator.
-resource "kubernetes_manifest" "alertmanager_self_monitor" {
-  count = var.enable_alertmanager ? 1 : 0
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "PrometheusRule"
-    metadata = {
-      name      = "alertmanager-self-monitor"
-      namespace = "monitoring"
-      labels = {
-        release = "prometheus" # must match the operator's ruleSelector
-        app     = "alertmanager"
-      }
-    }
-    spec = {
-      groups = [
+#PrometheusRule alertmanager-self-monitor: kube-prometheus-stack creates it from
+#additionalPrometheusRulesMap (prometheus.tf), in the release that
+#installs the PrometheusRule CRD.
+locals {
+  alertmanager_self_monitor_rule_groups = [
+    {
+      name     = "alertmanager.self-monitor"
+      interval = "30s"
+      rules = [
         {
-          name     = "alertmanager.self-monitor"
-          interval = "30s"
-          rules = [
-            {
-              alert = "AlertmanagerDown"
-              expr  = "up{job=~\".*alertmanager.*\"} == 0"
-              for   = "5m"
-              labels = {
-                severity = "critical"
-                service  = "alertmanager"
-              }
-              annotations = {
-                summary     = "Alertmanager is down"
-                description = "Alertmanager instance {{ $labels.instance }} has been unreachable for 5+ minutes. Alerts will not be delivered. Check the alertmanager pod and Prometheus targets page."
-              }
-            },
-            {
-              alert = "AlertmanagerConfigSyncFailing"
-              expr  = "alertmanager_config_last_reload_successful == 0"
-              for   = "10m"
-              labels = {
-                severity = "warning"
-                service  = "alertmanager"
-              }
-              annotations = {
-                summary     = "Alertmanager config reload is failing"
-                description = "Alertmanager on {{ $labels.instance }} has had a failed config reload for 10+ minutes. Check `kubectl logs -n monitoring alertmanager-prometheus-kube-prometheus-alertmanager-0`."
-              }
-            },
-            {
-              alert = "AlertmanagerNotificationsFailing"
-              expr  = "rate(alertmanager_notifications_failed_total[5m]) > 0"
-              for   = "10m"
-              labels = {
-                severity = "warning"
-                service  = "alertmanager"
-              }
-              annotations = {
-                summary     = "Alertmanager is failing to deliver notifications"
-                description = "Alertmanager on {{ $labels.instance }} has been failing notifications for 10+ minutes (integration {{ $labels.integration }}). Check contact-point credentials and downstream service health."
-              }
-            },
-          ]
+          alert = "AlertmanagerDown"
+          expr  = "up{job=~\".*alertmanager.*\"} == 0"
+          for   = "5m"
+          labels = {
+            severity = "critical"
+            service  = "alertmanager"
+          }
+          annotations = {
+            summary     = "Alertmanager is down"
+            description = "Alertmanager instance {{ $labels.instance }} has been unreachable for 5+ minutes. Alerts will not be delivered. Check the alertmanager pod and Prometheus targets page."
+          }
+        },
+        {
+          alert = "AlertmanagerConfigSyncFailing"
+          expr  = "alertmanager_config_last_reload_successful == 0"
+          for   = "10m"
+          labels = {
+            severity = "warning"
+            service  = "alertmanager"
+          }
+          annotations = {
+            summary     = "Alertmanager config reload is failing"
+            description = "Alertmanager on {{ $labels.instance }} has had a failed config reload for 10+ minutes. Check `kubectl logs -n monitoring alertmanager-prometheus-kube-prometheus-alertmanager-0`."
+          }
+        },
+        {
+          alert = "AlertmanagerNotificationsFailing"
+          expr  = "rate(alertmanager_notifications_failed_total[5m]) > 0"
+          for   = "10m"
+          labels = {
+            severity = "warning"
+            service  = "alertmanager"
+          }
+          annotations = {
+            summary     = "Alertmanager is failing to deliver notifications"
+            description = "Alertmanager on {{ $labels.instance }} has been failing notifications for 10+ minutes (integration {{ $labels.integration }}). Check contact-point credentials and downstream service health."
+          }
         },
       ]
-    }
-  }
+    },
+  ]
 }
