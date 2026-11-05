@@ -15,6 +15,13 @@ resource "kubernetes_namespace" "application" {
       name = var.application_namespace
     }
   }
+
+  # Other modules annotate this namespace (chaos-mesh adds
+  # chaos-mesh.org/inject through kubernetes_annotations); without this,
+  # every apply strips their annotations and the next one plans them back.
+  lifecycle {
+    ignore_changes = [metadata[0].annotations]
+  }
 }
 
 #OTel API key — 32-char alphanumeric bearer token.
