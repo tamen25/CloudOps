@@ -25,7 +25,7 @@ variables {
 run "the_collector_runs_the_contrib_image" {
   command = plan
 
-  # bearertokenauth and the loki exporter exist only in contrib.
+  # bearertokenauth exists only in contrib.
   assert {
     condition     = yamldecode(helm_release.otel_collector.values[0]).image.repository == "otel/opentelemetry-collector-contrib"
     error_message = "The collector must set image.repository to the contrib distribution; the chart has no default."

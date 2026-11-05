@@ -158,3 +158,24 @@ run "the_collector_keeps_the_health_check_extension" {
     error_message = "The collector's service.extensions must include health_check."
   }
 }
+
+# The contrib loki exporter refuses its `labels` block from 0.104 (the
+# collector crashlooped on it); logs go to Loki's OTLP endpoint instead.
+run "logs_go_to_loki_over_otlp" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(yamldecode(helm_release.otel_collector.values[0]).config.exporters), "loki")
+    error_message = "The deprecated loki exporter must not be configured."
+  }
+
+  assert {
+    condition     = yamldecode(helm_release.otel_collector.values[0]).config.exporters["otlphttp/loki"].endpoint == "http://loki-gateway.loki.svc/otlp"
+    error_message = "Logs must go to the Loki gateway's OTLP endpoint."
+  }
+
+  assert {
+    condition     = contains(yamldecode(helm_release.otel_collector.values[0]).config.service.pipelines.logs.exporters, "otlphttp/loki")
+    error_message = "The logs pipeline must use the OTLP exporter."
+  }
+}
