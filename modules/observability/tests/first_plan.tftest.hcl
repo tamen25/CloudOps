@@ -209,3 +209,17 @@ run "the_mimir_url_names_a_service_that_exists" {
     error_message = "mimir_url must name the chart's nginx entry point."
   }
 }
+
+# fraud's Java agent sends its exporter counters without a unit (Argus
+# MET-002 on the EKS run); the metrics pipeline gives them {item}.
+run "unitless_sdk_counters_get_a_unit" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(yamldecode(helm_release.otel_collector.values[0]).config.service.pipelines.metrics.processors, "transform/sdk-units") &&
+      strcontains(yamldecode(helm_release.otel_collector.values[0]).config.processors["transform/sdk-units"].metric_statements[0].statements[0], "otlp.exporter.seen")
+    )
+    error_message = "The metrics pipeline must set a unit on the Java agent's unitless exporter counters."
+  }
+}
