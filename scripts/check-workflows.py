@@ -13,6 +13,9 @@ Each rule is one that a workflow here broke, unnoticed until read:
               as `${{ ... }}`; pass them through env instead
   var-file    a direct `terraform -chdir=stacks/... plan` passes -var-file
               (drift detection planned against variable defaults)
+  tf-version  every workflow pins the same Terraform (CI ran 1.11 while
+              the stacks were applied with 1.13; a test that relied on
+              1.12's short-circuit && passed locally and failed in CI)
 
 Usage: scripts/check-workflows.py [workflow.yml ...]   (default: all)
 """
@@ -102,9 +105,33 @@ def check(path: pathlib.Path) -> list[str]:
     return problems
 
 
+TF_VERSION_PIN = re.compile(r"^\s*(?:TF_VERSION|terraform_version):\s*['\"]?(\d+\.\d+\.\d+)", re.M)
+
+
+def terraform_versions(paths: list[pathlib.Path]) -> list[str]:
+    """One problem per workflow whose Terraform pin differs from the most
+    common one."""
+    pins = {}
+    for path in paths:
+        found = set(TF_VERSION_PIN.findall(path.read_text(encoding="utf-8")))
+        if found:
+            pins[path] = found
+    counts: dict[str, int] = {}
+    for found in pins.values():
+        for v in found:
+            counts[v] = counts.get(v, 0) + 1
+    if len(counts) <= 1:
+        return []
+    common = max(counts, key=counts.get)
+    return [
+        f"{path.name}: [tf-version] pins Terraform {', '.join(sorted(found - {common}))}; the others pin {common}"
+        for path, found in pins.items() if found - {common}
+    ]
+
+
 def main() -> int:
     paths = [pathlib.Path(p) for p in sys.argv[1:]] or sorted((ROOT / ".github/workflows").glob("*.yml"))
-    problems = [p for path in paths for p in check(path)]
+    problems = [p for path in paths for p in check(path)] + terraform_versions(paths)
     for p in problems:
         print(p)
     print(f"{len(paths)} workflows checked, {len(problems)} problems")
