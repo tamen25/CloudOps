@@ -53,9 +53,11 @@ run "secret_env_reads_from_the_secret" {
   }
 
   assert {
+    # try(): Terraform 1.11 (CI) does not short-circuit &&, and env
+    # entries without value_from would error on the index.
     condition = anytrue([
       for e in kubernetes_deployment_v1.this.spec[0].template[0].spec[0].container[0].env :
-      e.name == "INTERNAL_HMAC_SECRET" && e.value_from[0].secret_key_ref[0].name == "mesh-internal-hmac"
+      e.name == "INTERNAL_HMAC_SECRET" && try(e.value_from[0].secret_key_ref[0].name, "") == "mesh-internal-hmac"
     ])
     error_message = "INTERNAL_HMAC_SECRET must come from the mesh-internal-hmac Secret."
   }
