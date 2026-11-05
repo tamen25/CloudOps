@@ -24,6 +24,11 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   ambient (no CNI swap, no sidecars) after the first AWS run, or accept
   the risk (NetworkPolicy and request signatures only) and close.
 
+- [ ] **I05** — The platform destroy times out on the `monitoring` namespace
+  (`context deadline exceeded`) and finishes on a re-run: twice on
+  2026-11-05. The namespace waits on its finalizers while Terraform's
+  timeout runs out. Find what holds it (the operator's CRs or the agent's
+  DaemonSet) and order or time the destroy so one run completes.
 - [ ] **I04** — The dev account's bootstrap (GitHub OIDC provider, the
   github-actions and deployer roles, the state KMS key, the ECR cache rule)
   lives only in the retired root states `dev/` and `main/terraform.tfstate`
