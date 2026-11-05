@@ -1217,7 +1217,7 @@
         {
           "datasource": { "type": "loki", "uid": "loki" },
           "editorMode": "code",
-          "expr": "sum by (rule) (count_over_time({namespace=\"falco\"} | json | rule != \"\" [$__interval]))",
+          "expr": "sum by (rule) (count_over_time({k8s_namespace_name=\"falco\"} | json | rule != \"\" [$__interval]))",
           "legendFormat": "{{rule}}",
           "queryType": "range",
           "refId": "A"

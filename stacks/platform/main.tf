@@ -237,7 +237,9 @@ module "observability" {
   # (pricing and ledger in Go, inventory in Python). The others already send
   # theirs: the gateway, payment and loadgen through the Node SDK, fraud
   # through the Java agent.
-  log_collection_namespaces     = var.enable_mesh ? [var.mesh_namespace] : []
+  # Falco's alerts (JSON on stdout) feed the security dashboards' Loki
+  # panels when security is on.
+  log_collection_namespaces     = compact([var.enable_mesh ? var.mesh_namespace : "", var.enable_security ? "falco" : ""])
   log_collection_skip_workloads = ["api-gateway", "payment", "fraud", "loadgen"]
 
   name_prefix    = local.name_prefix
