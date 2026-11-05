@@ -294,3 +294,15 @@ variable "argus_otlp_endpoint" {
   type        = string
   default     = ""
 }
+
+variable "log_collection_namespaces" {
+  description = "Namespaces whose containers' stdout an otel-agent DaemonSet collects and forwards to the gateway collector (Loki, the Argus mirror); empty for none"
+  type        = list(string)
+  default     = []
+}
+
+variable "log_collection_skip_workloads" {
+  description = "Workloads (Deployment, StatefulSet or CronJob name prefixes) in those namespaces whose logs already arrive over OTLP; their stdout is not collected, or each line would arrive twice"
+  type        = list(string)
+  default     = []
+}

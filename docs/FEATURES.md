@@ -376,7 +376,16 @@ SECURITY` — table owner cannot bypass.
 - OpenTelemetry Collector (gateway pattern) on the cluster.
   - OTLP/gRPC 4317, OTLP/HTTP 4318.
   - `bearertokenauth` for both.
-  - Public ingress at `https://otel.<domain>`.
+  - Public ingress at `https://otel.<domain>` (only with `enable_ingress`).
+  - Logs go to Loki's OTLP endpoint; with `argus_otlp_endpoint`, every
+    signal is also mirrored to the Argus engine.
+- Pod log collection: an `otel-agent` DaemonSet (`otel_agent.tf`) reads
+  containers' stdout in `log_collection_namespaces`, names each line after
+  its workload (`service.name`), and forwards it to the gateway over
+  OTLP/HTTP with the bearer token. Workloads in
+  `log_collection_skip_workloads`, which export OTLP logs themselves, are
+  not read, or each line would arrive twice. The platform stack collects the
+  mesh namespace and skips api-gateway, payment, loadgen and fraud.
 - Loki (logs), Tempo (traces), Mimir (metrics). Per-signal KMS CMKs.
 - Grafana with sidecar-driven config:
   - `grafana_dashboard=1` — dashboards.

@@ -233,6 +233,13 @@ module "observability" {
   # retries until it is up.
   argus_otlp_endpoint = var.enable_argus ? "argus.${local.argus_namespace}.svc:4317" : ""
 
+  # The mesh's stdout, for the services that do not export OTLP logs
+  # (pricing and ledger in Go, inventory in Python). The others already send
+  # theirs: the gateway, payment and loadgen through the Node SDK, fraud
+  # through the Java agent.
+  log_collection_namespaces     = var.enable_mesh ? [var.mesh_namespace] : []
+  log_collection_skip_workloads = ["api-gateway", "payment", "fraud", "loadgen"]
+
   name_prefix    = local.name_prefix
   environment    = var.environment
   region         = var.region
