@@ -3,6 +3,13 @@
 #service map is never empty. The trickle is intentionally low-rps and bounded.
 
 locals {
+  # The trickle runs the loadgen image; same attributes as the control API
+  # (the mesh module adds service.version there).
+  trickle_resource_attributes = join(",", compact([
+    var.otel_resource_attributes,
+    "service.version=${can(regex("@sha256:", var.image)) ? substr(regex("@sha256:([0-9a-f]+)", var.image)[0], 0, 12) : try(regex(":([^:/]+)$", var.image)[0], "unknown")}",
+  ]))
+
   common_labels = merge({
     app                            = "loadgen"
     "mesh.cloudops/lang"           = "node"
@@ -122,6 +129,10 @@ resource "kubernetes_cron_job_v1" "trickle" {
               env {
                 name  = "OTEL_SERVICE_NAME"
                 value = "loadgen-trickle"
+              }
+              env {
+                name  = "OTEL_RESOURCE_ATTRIBUTES"
+                value = local.trickle_resource_attributes
               }
               # The collector refuses OTLP without this bearer token; the
               # control Deployment gets it from the mesh module. Without it
