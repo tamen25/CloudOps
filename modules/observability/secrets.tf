@@ -6,6 +6,15 @@ resource "kubernetes_namespace" "monitoring" {
       name = "monitoring"
     }
   }
+
+  # Its deletion outlives the provider's default 5m: on both 2026-11-05
+  # EKS teardowns it was still terminating at 5m and gone about a minute
+  # later, so every destroy failed once and needed a re-run (I05). What
+  # holds it that long was not identified; 15m covers what was seen with
+  # room to spare.
+  timeouts {
+    delete = "15m"
+  }
 }
 
 resource "kubernetes_namespace" "application" {
