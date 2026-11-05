@@ -50,7 +50,9 @@ resource "helm_release" "loki" {
           from         = "2024-01-01"
           store        = "tsdb"
           object_store = "s3"
-          schema       = "v12"
+          # v13: Loki 3 refuses to start on v12 while structured metadata
+          # (needed by OTLP ingestion) is on.
+          schema = "v13"
           index = {
             prefix = "index_"
             period = "24h"
@@ -64,8 +66,11 @@ resource "helm_release" "loki" {
         ingestion_burst_size_mb = 32
       }
 
+      # Retention deletes through delete requests, which need a store;
+      # without one Loki 3 refuses to start.
       compactor = {
-        retention_enabled = true
+        retention_enabled    = true
+        delete_request_store = "s3"
       }
     }
 
@@ -90,6 +95,13 @@ resource "helm_release" "loki" {
     #Disable built-in MinIO
     minio = {
       enabled = false
+    }
+
+    # The chart's memcached chunk cache requests ~9.8 GiB by default
+    # (allocatedMemory 8192 MB plus overhead), more than any node here has
+    # free, so it never schedules. 512 MB is plenty at this volume.
+    chunksCache = {
+      allocatedMemory = 512
     }
   })]
 

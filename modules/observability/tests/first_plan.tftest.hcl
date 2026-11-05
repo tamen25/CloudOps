@@ -77,3 +77,60 @@ run "no_ingresses_without_a_certificate" {
     error_message = "With ingress off, Grafana must get no ALB ingress."
   }
 }
+
+# Each of these made a component refuse to start (or never schedule) on the
+# first real apply; the charts validate their config only at runtime.
+run "loki_and_mimir_configs_start" {
+  command = plan
+
+  variables {
+    metrics_long_term_storage = "mimir"
+  }
+
+  # The values embed the buckets' and roles' identifiers, unknown at plan
+  # under a mock unless given.
+  override_resource {
+    target          = aws_s3_bucket.loki
+    override_during = plan
+    values          = { id = "cloudops-dev-loki" }
+  }
+  override_resource {
+    target          = aws_iam_role.loki
+    override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:role/loki" }
+  }
+  override_resource {
+    target          = aws_s3_bucket.mimir
+    override_during = plan
+    values          = { id = "cloudops-dev-mimir" }
+  }
+  override_resource {
+    target          = aws_iam_role.mimir
+    override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:role/mimir" }
+  }
+
+  assert {
+    condition     = yamldecode(helm_release.loki.values[0]).loki.schemaConfig.configs[0].schema == "v13"
+    error_message = "Loki 3 refuses schema v12 while structured metadata is on."
+  }
+
+  assert {
+    condition     = yamldecode(helm_release.loki.values[0]).loki.compactor.delete_request_store != ""
+    error_message = "Loki with retention needs a delete_request_store."
+  }
+
+  assert {
+    condition     = yamldecode(helm_release.loki.values[0]).chunksCache.allocatedMemory <= 1024
+    error_message = "The chunk cache must fit on a t3.large (the chart default asks for ~9.8 GiB)."
+  }
+
+  assert {
+    condition = (
+      yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.ruler_storage.storage_prefix != "" &&
+      yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.alertmanager_storage.storage_prefix != "" &&
+      yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.ruler_storage.storage_prefix != yamldecode(helm_release.mimir[0].values[0]).mimir.structuredConfig.alertmanager_storage.storage_prefix
+    )
+    error_message = "Mimir's ruler and Alertmanager need their own prefixes in the shared bucket."
+  }
+}
