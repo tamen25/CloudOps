@@ -124,6 +124,20 @@ resource "kubernetes_deployment_v1" "this" {
           #their telemetry. $(OTEL_API_KEY) is expanded by Kubernetes from the
           #entry above; %20 is the space in "Bearer <token>", percent-encoded
           #as the variable's format requires.
+          #Secrets (e.g. the internal HMAC key). Not optional: a service that
+          #needs one should fail to start rather than run and refuse every call.
+          dynamic "env" {
+            for_each = var.secret_env
+            content {
+              name = env.key
+              value_from {
+                secret_key_ref {
+                  name = env.value.secret
+                  key  = env.value.key
+                }
+              }
+            }
+          }
           dynamic "env" {
             for_each = var.lang == "java" ? [1] : []
             content {

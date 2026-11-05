@@ -40,6 +40,29 @@ run "a_java_service_sends_the_token_as_an_otlp_header" {
   }
 }
 
+# payment and ledger read INTERNAL_HMAC_SECRET from a Secret. Without it
+# payment cannot sign and ledger refuses every post, so no order completes.
+run "secret_env_reads_from_the_secret" {
+  command = plan
+
+  variables {
+    lang = "go"
+    secret_env = {
+      INTERNAL_HMAC_SECRET = { secret = "mesh-internal-hmac", key = "secret" }
+    }
+  }
+
+  assert {
+    # try(): Terraform 1.11 (CI) does not short-circuit &&, and env
+    # entries without value_from would error on the index.
+    condition = anytrue([
+      for e in kubernetes_deployment_v1.this.spec[0].template[0].spec[0].container[0].env :
+      e.name == "INTERNAL_HMAC_SECRET" && try(e.value_from[0].secret_key_ref[0].name, "") == "mesh-internal-hmac"
+    ])
+    error_message = "INTERNAL_HMAC_SECRET must come from the mesh-internal-hmac Secret."
+  }
+}
+
 # The Node, Go and Python services add the header in code; the variable would
 # only duplicate it.
 run "other_services_leave_the_header_to_their_code" {

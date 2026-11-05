@@ -627,6 +627,37 @@ module "mesh_fraud" {
   tags = local.common_tags
 }
 
+#The key payment signs its ledger posts with and ledger verifies (ADR 029).
+#Without it payment refused to sign, ledger refused every post, and no order
+#could complete. Generated here and kept in state, like the OTel API key.
+resource "random_password" "mesh_internal_hmac" {
+  count   = var.enable_mesh ? 1 : 0
+  length  = 48
+  special = false
+}
+
+resource "kubernetes_secret_v1" "mesh_internal_hmac" {
+  count = var.enable_mesh ? 1 : 0
+
+  metadata {
+    name      = "mesh-internal-hmac"
+    namespace = var.mesh_namespace
+  }
+
+  data = {
+    secret = random_password.mesh_internal_hmac[0].result
+  }
+
+  # The namespace is created by the observability module.
+  depends_on = [module.observability]
+}
+
+locals {
+  mesh_hmac_env = {
+    INTERNAL_HMAC_SECRET = { secret = "mesh-internal-hmac", key = "secret" }
+  }
+}
+
 #ledger (Go) — double-entry append. Reachable only from payment.
 module "mesh_ledger" {
   count  = var.enable_mesh ? 1 : 0
@@ -640,11 +671,14 @@ module "mesh_ledger" {
   run_as_user              = 65532
   needs_tmp_volume         = false
   replicas                 = var.mesh_replicas
+  secret_env               = local.mesh_hmac_env
   otel_endpoint            = local.mesh_otel_endpoint
   otel_resource_attributes = "deployment.environment=${var.environment}"
   ingress_from_labels      = { app = "payment" }
 
   tags = local.common_tags
+
+  depends_on = [kubernetes_secret_v1.mesh_internal_hmac]
 }
 
 #payment (Node) — authorize + post to ledger. Reachable only from the gateway.
@@ -665,6 +699,7 @@ module "mesh_payment" {
     NODE_ENV   = var.environment
     LEDGER_URL = var.enable_mesh ? module.mesh_ledger[0].service_url : ""
   }
+  secret_env = local.mesh_hmac_env
 
   otel_endpoint            = local.mesh_otel_endpoint
   otel_resource_attributes = "deployment.environment=${var.environment}"
