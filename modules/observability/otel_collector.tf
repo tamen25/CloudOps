@@ -108,21 +108,6 @@ resource "helm_release" "otel_collector" {
           ]
         }
 
-        # The Java agent's own exporter counters (otlp.exporter.seen and
-        # otlp.exporter.exported, counts of spans, logs or metric points)
-        # carry no unit, and a unitless metric cannot be read (Argus MET-002
-        # on fraud). They count items, so they get {item}; a unit the SDK
-        # does set is left alone. Remove once the agent's newer, unit-bearing
-        # self-metrics replace these.
-        "transform/sdk-units" = {
-          metric_statements = [{
-            context = "metric"
-            statements = [
-              "set(unit, \"{item}\") where (name == \"otlp.exporter.seen\" or name == \"otlp.exporter.exported\") and unit == \"\"",
-            ]
-          }]
-        }
-
         # send_batch_size defaults to 8192, and the collector refuses a
         # max below it: both are set.
         batch = {
@@ -168,7 +153,7 @@ resource "helm_release" "otel_collector" {
           }
           metrics = {
             receivers  = ["otlp"]
-            processors = ["memory_limiter", "resource", "transform/sdk-units", "batch"]
+            processors = ["memory_limiter", "resource", "batch"]
             exporters  = concat(["prometheusremotewrite"], local.argus_exporter)
           }
           logs = {

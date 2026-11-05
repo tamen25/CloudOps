@@ -210,20 +210,6 @@ run "the_mimir_url_names_a_service_that_exists" {
   }
 }
 
-# fraud's Java agent sends its exporter counters without a unit (Argus
-# MET-002 on the EKS run); the metrics pipeline gives them {item}.
-run "unitless_sdk_counters_get_a_unit" {
-  command = plan
-
-  assert {
-    condition = (
-      contains(yamldecode(helm_release.otel_collector.values[0]).config.service.pipelines.metrics.processors, "transform/sdk-units") &&
-      strcontains(yamldecode(helm_release.otel_collector.values[0]).config.processors["transform/sdk-units"].metric_statements[0].statements[0], "otlp.exporter.seen")
-    )
-    error_message = "The metrics pipeline must set a unit on the Java agent's unitless exporter counters."
-  }
-}
-
 # The bench agent on the CloudOps model run looked for service-graph
 # metrics and found none: the generator was off. On, it must remote-write
 # to the Prometheus that accepts remote write (and forwards to Mimir).
