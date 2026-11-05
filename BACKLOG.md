@@ -33,10 +33,6 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   change: docs/reviews/2026-11-05-i04-bootstrap-adoption.md (IAM and S3
   narrower, more services, three documents to render first).
 
-- [ ] **M02** — fraud's OTel Java agent is v2.10. Its exporter self-metrics
-  (`otlp.exporter.seen`/`exported`) carry no unit, which the collector
-  patches (`transform/sdk-units`, Argus MET-002). Upgrade the agent and
-  drop that transform once its self-metrics carry units.
 - [ ] **M03** — Exemplars on the Node services' histograms (Argus ARG-MET-001
   on api-gateway, payment, loadgen). `@opentelemetry/sdk-metrics` 2.12 ships
   exemplar classes but does not wire them into aggregation or export, so
@@ -74,6 +70,11 @@ prove. I03 comes first.
   private and run it again.
 
 ## Done
+
+- [x] **M02** — fraud's Java agent is 2.33.1 with
+  `OTEL_EXPERIMENTAL_SDK_TELEMETRY_VERSION=latest`: its own metrics are the
+  `otel.sdk.*` ones, each with a unit, and the collector's unit patch is
+  gone. Its request and JVM metrics are unchanged.
 
 - [x] **I05** — the platform destroy no longer fails on the `monitoring`
   namespace: its delete timeout is 15m (it needed just over 5m twice). Why
