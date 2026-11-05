@@ -194,3 +194,18 @@ run "the_batch_limits_are_consistent" {
     error_message = "send_batch_max_size must be at least send_batch_size (default 8192)."
   }
 }
+
+# The output named mimir-gateway, a Service the 5.x chart does not create
+# (its entry point is mimir-nginx); found querying Mimir on EKS.
+run "the_mimir_url_names_a_service_that_exists" {
+  command = plan
+
+  variables {
+    metrics_long_term_storage = "mimir"
+  }
+
+  assert {
+    condition     = output.mimir_url == "http://mimir-nginx.mimir.svc"
+    error_message = "mimir_url must name the chart's nginx entry point."
+  }
+}

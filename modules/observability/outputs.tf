@@ -78,6 +78,8 @@ output "grafana_api_key_secret_arn" {
 }
 
 output "mimir_url" {
-  description = "In-cluster Mimir gateway (Prometheus API under /prometheus); empty unless metrics_long_term_storage is mimir"
-  value       = var.metrics_long_term_storage == "mimir" ? "http://mimir-gateway.mimir.svc" : ""
+  # mimir-distributed 5.x fronts the components with nginx (mimir-nginx);
+  # mimir-gateway exists only when its gateway is enabled, which it is not.
+  description = "In-cluster Mimir entry point (Prometheus API under /prometheus); empty unless metrics_long_term_storage is mimir"
+  value       = var.metrics_long_term_storage == "mimir" ? "http://mimir-nginx.mimir.svc" : ""
 }
