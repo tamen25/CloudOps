@@ -223,3 +223,33 @@ run "unitless_sdk_counters_get_a_unit" {
     error_message = "The metrics pipeline must set a unit on the Java agent's unitless exporter counters."
   }
 }
+
+# The bench agent on the CloudOps model run looked for service-graph
+# metrics and found none: the generator was off. On, it must remote-write
+# to the Prometheus that accepts remote write (and forwards to Mimir).
+run "the_tempo_generator_writes_to_prometheus" {
+  command = plan
+
+  variables {
+    tempo_metrics_generator_enabled = true
+  }
+
+  override_resource {
+    target          = aws_s3_bucket.tempo
+    override_during = plan
+    values          = { id = "cloudops-dev-tempo" }
+  }
+  override_resource {
+    target          = aws_iam_role.tempo
+    override_during = plan
+    values          = { arn = "arn:aws:iam::123456789012:role/tempo" }
+  }
+
+  assert {
+    condition = (
+      yamldecode(helm_release.tempo.values[0]).tempo.metricsGenerator.enabled &&
+      yamldecode(helm_release.tempo.values[0]).tempo.metricsGenerator.remoteWriteUrl == "http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/write"
+    )
+    error_message = "The generator must be on and remote-write to the in-cluster Prometheus."
+  }
+}

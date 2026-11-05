@@ -276,13 +276,16 @@ module "observability" {
   buckets_glacier_transition_days     = var.buckets_glacier_transition_days
   buckets_expiration_days             = var.buckets_expiration_days
 
-  loki_replication_factor         = var.loki_replication_factor
-  loki_write_replicas             = var.loki_write_replicas
-  loki_read_replicas              = var.loki_read_replicas
-  prometheus_replicas             = var.prometheus_replicas
-  prometheus_retention            = var.prometheus_retention
-  tempo_ingester_replicas         = var.tempo_ingester_replicas
-  tempo_metrics_generator_enabled = var.tempo_metrics_generator_enabled
+  loki_replication_factor = var.loki_replication_factor
+  loki_write_replicas     = var.loki_write_replicas
+  loki_read_replicas      = var.loki_read_replicas
+  prometheus_replicas     = var.prometheus_replicas
+  prometheus_retention    = var.prometheus_retention
+  tempo_ingester_replicas = var.tempo_ingester_replicas
+  # The mesh needs it: the generator turns spans into a service graph and
+  # request metrics, the only metrics the traces-only services (pricing,
+  # ledger, inventory) have, and the edges a bench agent looks for.
+  tempo_metrics_generator_enabled = var.tempo_metrics_generator_enabled || var.enable_mesh
 
   metrics_long_term_storage = var.metrics_long_term_storage
 
