@@ -29,7 +29,9 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   lives only in the retired root states `dev/` and `main/terraform.tfstate`
   (ADR 028, correction), so the stacks run with `enable_bootstrap = false`.
   Import it into `dev/foundation`, then delete the two root states. Until
-  then the Destroy workflow keeps the state bucket.
+  then the Destroy workflow keeps the state bucket. What an import would
+  change: docs/reviews/2026-11-05-i04-bootstrap-adoption.md (IAM and S3
+  narrower, more services, three documents to render first).
 
 ## AWS phase — checks that need a live environment
 
