@@ -234,6 +234,12 @@ resource "helm_release" "mimir" {
           )
         }
 
+        # One bucket for everything: the ruler and Alertmanager keep their
+        # objects under their own prefixes, or Mimir refuses to start them
+        # ("cannot be the same as the one used in blocks storage").
+        ruler_storage        = { storage_prefix = "ruler" }
+        alertmanager_storage = { storage_prefix = "alertmanager" }
+
         #Multi-tenant disabled — single-tenant via X-Scope-OrgID = "anonymous"
         multitenancy_enabled = false
 
