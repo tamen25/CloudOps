@@ -41,7 +41,7 @@ variable "oidc_provider_url" {
 }
 
 variable "acm_cert_arn" {
-  description = "ACM wildcard certificate ARN for HTTPS ingresses (from ingress module)"
+  description = "ACM wildcard certificate ARN for the Grafana and OTel ingresses (from the ingress module); empty creates no ingresses, and the collector is reached in-cluster only"
   type        = string
 }
 

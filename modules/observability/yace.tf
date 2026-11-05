@@ -251,168 +251,153 @@ resource "helm_release" "yace" {
 #alerts the user originally wanted in backlog #3 (RDS CPU credits, ALB 5xx)
 #are evaluated by the Prom operator alongside the SLO rules.
 
-resource "kubernetes_manifest" "yace_alerts" {
-  count = var.enable_yace ? 1 : 0
-
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "PrometheusRule"
-    metadata = {
-      name      = "cloudwatch-yace-alerts"
-      namespace = "monitoring"
-      labels = {
-        release = "prometheus"
-        source  = "yace"
-      }
-    }
-    spec = {
-      groups = [
+#PrometheusRule cloudwatch-yace-alerts: kube-prometheus-stack creates it from
+#additionalPrometheusRulesMap (prometheus.tf), in the release that
+#installs the PrometheusRule CRD.
+locals {
+  yace_alerts_rule_groups = [
+    {
+      name = "cloudwatch.rds"
+      rules = [
         {
-          name = "cloudwatch.rds"
-          rules = [
-            {
-              alert = "RDSCPUCreditBalanceLow"
-              expr  = "aws_rds_cpucredit_balance_average < 60"
-              for   = "10m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "RDS burstable credit balance < 60 ({{ $labels.dbinstance_identifier }})"
-                description = "Burstable RDS instance about to throttle to baseline. Current balance: {{ $value }}."
-                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/master-runbook.md"
-              }
-            },
-            {
-              alert = "RDSFreeStorageLow"
-              expr  = "aws_rds_free_storage_space_average < 2e9"
-              for   = "5m"
-              labels = {
-                severity = "critical"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "RDS free storage < 2 GB ({{ $labels.dbinstance_identifier }})"
-                description = "Free storage: {{ $value | humanize1024 }}B. Resize before write traffic causes a hard stop."
-              }
-            },
-          ]
+          alert = "RDSCPUCreditBalanceLow"
+          expr  = "aws_rds_cpucredit_balance_average < 60"
+          for   = "10m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "RDS burstable credit balance < 60 ({{ $labels.dbinstance_identifier }})"
+            description = "Burstable RDS instance about to throttle to baseline. Current balance: {{ $value }}."
+            runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/master-runbook.md"
+          }
         },
         {
-          name = "cloudwatch.alb"
-          rules = [
-            {
-              alert = "ALB5xxRateHigh"
-              expr  = "sum by (load_balancer) (rate(aws_applicationelb_httpcode_elb_5_xx_count_sum[5m])) > 5"
-              for   = "5m"
-              labels = {
-                severity = "critical"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "ALB 5xx rate > 5/s ({{ $labels.load_balancer }})"
-                description = "Public ALB returning >5 5xx responses/s sustained for 5m. Likely upstream target failure or LB misconfig."
-                runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-fast-burn.md"
-              }
-            },
-            {
-              alert = "ALBUnhealthyHosts"
-              expr  = "max by (target_group) (aws_applicationelb_un_healthy_host_count_maximum) > 0"
-              for   = "5m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "ALB target group has unhealthy hosts ({{ $labels.target_group }})"
-                description = "{{ $value }} unhealthy host(s) sustained for 5m."
-              }
-            },
-          ]
-        },
-        {
-          name = "cloudwatch.storefront"
-          rules = [
-            {
-              alert = "KinesisLagHigh"
-              expr  = "max by (stream_name) (aws_kinesis_get_records_iteratorage_milliseconds_maximum) > 60000"
-              for   = "5m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "Kinesis iterator age >60s ({{ $labels.stream_name }})"
-                description = "WS fanout is falling behind. Real-time updates will lag."
-              }
-            },
-            {
-              alert = "KinesisLagCritical"
-              expr  = "max by (stream_name) (aws_kinesis_get_records_iteratorage_milliseconds_maximum) > 300000"
-              for   = "5m"
-              labels = {
-                severity = "critical"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "Kinesis iterator age >5m ({{ $labels.stream_name }})"
-                description = "WS fanout cannot keep up; consumer rebalancing or scale-up required."
-              }
-            },
-            {
-              alert = "SFExecutionFailureHigh"
-              expr  = "sum(rate(aws_states_executions_failed_sum[10m])) / clamp_min(sum(rate(aws_states_executions_started_sum[10m])), 1) > 0.05"
-              for   = "10m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "Step Functions failure rate >5%"
-                description = "Checkout saga executions failing — investigate upstream order-api or compensation logic."
-              }
-            },
-            {
-              alert = "WSFanoutErrorHigh"
-              expr  = "sum(rate(aws_lambda_errors_sum{function_name=~\".+ws-fanout\"}[5m])) / clamp_min(sum(rate(aws_lambda_invocations_sum{function_name=~\".+ws-fanout\"}[5m])), 1) > 0.01"
-              for   = "5m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "ws-fanout error rate >1%"
-                description = "Realtime updates are being dropped. Check Dynamo throttles or stale conns."
-              }
-            },
-            {
-              alert = "CloudFront5xxHigh"
-              expr  = "avg(aws_cloudfront_5xx_error_rate_average) > 1"
-              for   = "5m"
-              labels = {
-                severity = "warning"
-                team     = "cloudops"
-                source   = "cloudwatch"
-              }
-              annotations = {
-                summary     = "CloudFront 5xx error rate >1%"
-                description = "Asset CDN is returning errors. Check origin bucket policy + image-resize Lambda."
-              }
-            },
-          ]
+          alert = "RDSFreeStorageLow"
+          expr  = "aws_rds_free_storage_space_average < 2e9"
+          for   = "5m"
+          labels = {
+            severity = "critical"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "RDS free storage < 2 GB ({{ $labels.dbinstance_identifier }})"
+            description = "Free storage: {{ $value | humanize1024 }}B. Resize before write traffic causes a hard stop."
+          }
         },
       ]
-    }
-  }
-
-  depends_on = [helm_release.yace]
+    },
+    {
+      name = "cloudwatch.alb"
+      rules = [
+        {
+          alert = "ALB5xxRateHigh"
+          expr  = "sum by (load_balancer) (rate(aws_applicationelb_httpcode_elb_5_xx_count_sum[5m])) > 5"
+          for   = "5m"
+          labels = {
+            severity = "critical"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "ALB 5xx rate > 5/s ({{ $labels.load_balancer }})"
+            description = "Public ALB returning >5 5xx responses/s sustained for 5m. Likely upstream target failure or LB misconfig."
+            runbook_url = "https://github.com/your-org/your-repo/blob/main/docs/runbooks/slo-fast-burn.md"
+          }
+        },
+        {
+          alert = "ALBUnhealthyHosts"
+          expr  = "max by (target_group) (aws_applicationelb_un_healthy_host_count_maximum) > 0"
+          for   = "5m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "ALB target group has unhealthy hosts ({{ $labels.target_group }})"
+            description = "{{ $value }} unhealthy host(s) sustained for 5m."
+          }
+        },
+      ]
+    },
+    {
+      name = "cloudwatch.storefront"
+      rules = [
+        {
+          alert = "KinesisLagHigh"
+          expr  = "max by (stream_name) (aws_kinesis_get_records_iteratorage_milliseconds_maximum) > 60000"
+          for   = "5m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "Kinesis iterator age >60s ({{ $labels.stream_name }})"
+            description = "WS fanout is falling behind. Real-time updates will lag."
+          }
+        },
+        {
+          alert = "KinesisLagCritical"
+          expr  = "max by (stream_name) (aws_kinesis_get_records_iteratorage_milliseconds_maximum) > 300000"
+          for   = "5m"
+          labels = {
+            severity = "critical"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "Kinesis iterator age >5m ({{ $labels.stream_name }})"
+            description = "WS fanout cannot keep up; consumer rebalancing or scale-up required."
+          }
+        },
+        {
+          alert = "SFExecutionFailureHigh"
+          expr  = "sum(rate(aws_states_executions_failed_sum[10m])) / clamp_min(sum(rate(aws_states_executions_started_sum[10m])), 1) > 0.05"
+          for   = "10m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "Step Functions failure rate >5%"
+            description = "Checkout saga executions failing — investigate upstream order-api or compensation logic."
+          }
+        },
+        {
+          alert = "WSFanoutErrorHigh"
+          expr  = "sum(rate(aws_lambda_errors_sum{function_name=~\".+ws-fanout\"}[5m])) / clamp_min(sum(rate(aws_lambda_invocations_sum{function_name=~\".+ws-fanout\"}[5m])), 1) > 0.01"
+          for   = "5m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "ws-fanout error rate >1%"
+            description = "Realtime updates are being dropped. Check Dynamo throttles or stale conns."
+          }
+        },
+        {
+          alert = "CloudFront5xxHigh"
+          expr  = "avg(aws_cloudfront_5xx_error_rate_average) > 1"
+          for   = "5m"
+          labels = {
+            severity = "warning"
+            team     = "cloudops"
+            source   = "cloudwatch"
+          }
+          annotations = {
+            summary     = "CloudFront 5xx error rate >1%"
+            description = "Asset CDN is returning errors. Check origin bucket policy + image-resize Lambda."
+          }
+        },
+      ]
+    },
+  ]
 }

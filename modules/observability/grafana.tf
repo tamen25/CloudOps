@@ -99,9 +99,10 @@ resource "helm_release" "grafana" {
       }
     }
 
-    #Ingress — ALB terminates TLS; Grafana runs plain HTTP inside the cluster
+    #Ingress — ALB terminates TLS; Grafana runs plain HTTP inside the cluster.
+    #None without a certificate (ingress off): Grafana is port-forwarded.
     ingress = {
-      enabled = true
+      enabled = var.acm_cert_arn != ""
       annotations = {
         "kubernetes.io/ingress.class"               = "alb"
         "alb.ingress.kubernetes.io/scheme"          = "internet-facing"

@@ -14,52 +14,40 @@
 #The companion `jwt_verify_total{outcome="ok"}` rate provides a green
 #baseline; if both are 0 the service has no real auth traffic and the
 #alert is naturally silent.
-resource "kubernetes_manifest" "jwks_reachability_alerts" {
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "PrometheusRule"
-    metadata = {
-      name      = "order-api-jwks-reachability"
-      namespace = "monitoring"
-      labels = {
-        release = "prometheus" # must match the operator's ruleSelector
-        app     = "order-api"
-        slo     = "auth"
-      }
-    }
-    spec = {
-      groups = [
+#PrometheusRule order-api-jwks-reachability: kube-prometheus-stack creates it from
+#additionalPrometheusRulesMap (prometheus.tf), in the release that
+#installs the PrometheusRule CRD.
+locals {
+  jwks_reachability_alerts_rule_groups = [
+    {
+      name     = "order-api.auth.jwks"
+      interval = "30s"
+      rules = [
         {
-          name     = "order-api.auth.jwks"
-          interval = "30s"
-          rules = [
-            {
-              alert = "OIDCJWKSUnreachable"
-              expr  = "rate(jwt_verify_total{outcome=\"jwks_unreachable\"}[2m]) > 0.1"
-              for   = "2m"
-              labels = {
-                severity = "critical"
-                service  = "order-api"
-                slo      = "auth"
-              }
-              annotations = {
-                summary     = "Order-api cannot reach the OIDC JWKS endpoint"
-                description = "{{ $value | printf \"%.2f\" }} JWKS-fetch failures/sec for 2+ minutes. Every Bearer-auth request is failing 401. Check the IdP (Cognito User Pool) JWKS URL reachability and DNS resolution from the order-api pods."
-                runbook     = "kubectl exec -n cloudops deploy/order-api -- wget -qO- $OIDC_JWKS_URL  # should return JSON keys[]"
-              }
-            },
-            #Sanity counter — JWT auth is being exercised at all. Useful
-            #for confirming the OIDCJWKSUnreachable rule has live traffic
-            #to alert on; if this is flat the cluster is in API-key-only
-            #mode and the JWKS alert is benignly silent.
-            {
-              record = "order_api:jwt_verify_rate5m"
-              expr   = "sum by (outcome) (rate(jwt_verify_total[5m]))"
-              labels = { service = "order-api" }
-            },
-          ]
+          alert = "OIDCJWKSUnreachable"
+          expr  = "rate(jwt_verify_total{outcome=\"jwks_unreachable\"}[2m]) > 0.1"
+          for   = "2m"
+          labels = {
+            severity = "critical"
+            service  = "order-api"
+            slo      = "auth"
+          }
+          annotations = {
+            summary     = "Order-api cannot reach the OIDC JWKS endpoint"
+            description = "{{ $value | printf \"%.2f\" }} JWKS-fetch failures/sec for 2+ minutes. Every Bearer-auth request is failing 401. Check the IdP (Cognito User Pool) JWKS URL reachability and DNS resolution from the order-api pods."
+            runbook     = "kubectl exec -n cloudops deploy/order-api -- wget -qO- $OIDC_JWKS_URL  # should return JSON keys[]"
+          }
+        },
+        #Sanity counter — JWT auth is being exercised at all. Useful
+        #for confirming the OIDCJWKSUnreachable rule has live traffic
+        #to alert on; if this is flat the cluster is in API-key-only
+        #mode and the JWKS alert is benignly silent.
+        {
+          record = "order_api:jwt_verify_rate5m" # gitleaks:allow (a recording-rule name, not a key)
+          expr   = "sum by (outcome) (rate(jwt_verify_total[5m]))"
+          labels = { service = "order-api" }
         },
       ]
-    }
-  }
+    },
+  ]
 }

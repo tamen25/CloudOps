@@ -26,6 +26,23 @@ resource "kubernetes_storage_class" "gp3" {
 
 #kube-prometheus-stack — Prometheus + Alertmanager + node-exporter + kube-state-metrics
 #Grafana is disabled here; deployed separately in grafana.tf with datasources and dashboards
+#PrometheusRules go through the chart, not kubernetes_manifest: a
+#kubernetes_manifest needs its CRD at plan time, and on a new cluster this
+#release is what installs the CRD, so the stack could not be planned. The
+#chart names each rule kube-prometheus-stack-<key>.
+locals {
+  prometheus_rules_map = merge(
+    {
+      "order-api-slo-availability"  = { groups = local.slo_availability_rule_groups, additionalLabels = { slo = "true" } }
+      "order-api-slo-latency"       = { groups = local.slo_latency_rule_groups, additionalLabels = { slo = "true" } }
+      "order-api-slo-throughput"    = { groups = local.slo_throughput_rule_groups, additionalLabels = { slo = "true" } }
+      "order-api-jwks-reachability" = { groups = local.jwks_reachability_alerts_rule_groups }
+    },
+    var.enable_alertmanager ? { "alertmanager-self-monitor" = { groups = local.alertmanager_self_monitor_rule_groups } } : {},
+    var.enable_yace ? { "cloudwatch-yace-alerts" = { groups = local.yace_alerts_rule_groups } } : {},
+  )
+}
+
 resource "helm_release" "prometheus" {
   name       = "prometheus"
   repository = "https://prometheus-community.github.io/helm-charts"
@@ -36,6 +53,8 @@ resource "helm_release" "prometheus" {
   timeout = 600
 
   values = [yamlencode({
+    additionalPrometheusRulesMap = local.prometheus_rules_map
+
     grafana = {
       enabled = false
     }

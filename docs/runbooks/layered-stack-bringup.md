@@ -132,6 +132,14 @@ kubectl get pods -A | grep -E 'ingress|observability|gatekeeper|monitoring'
 curl -sf "https://otel.${DOMAIN}/v1/metrics" -H "Authorization: Bearer ${TOKEN}" -X POST -d '{}' | jq .
 ```
 
+The `otel.` and `grafana.` hosts exist only with `enable_ingress = true`.
+Observability no longer requires ingress: without it there are no ALB
+ingresses, workloads reach the collector in-cluster, and Grafana is
+`kubectl -n monitoring port-forward svc/grafana 3000:80`. The SLO, JWKS,
+Alertmanager and YACE rules are PrometheusRules created by
+kube-prometheus-stack (`kube-prometheus-stack-<name>`), so the platform
+stack plans on a cluster that does not have the CRD yet.
+
 ### 5. Re-plan sanity check
 
 Re-run plan for each stack. All three must report **no changes**.
