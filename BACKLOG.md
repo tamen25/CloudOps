@@ -37,6 +37,11 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   (`otlp.exporter.seen`/`exported`) carry no unit, which the collector
   patches (`transform/sdk-units`, Argus MET-002). Upgrade the agent and
   drop that transform once its self-metrics carry units.
+- [ ] **M03** — Exemplars on the Node services' histograms (Argus ARG-MET-001
+  on api-gateway, payment, loadgen). `@opentelemetry/sdk-metrics` 2.12 ships
+  exemplar classes but does not wire them into aggregation or export, so
+  there is nothing to turn on; revisit when it does. Tempo's span metrics
+  (on with the mesh) are the metrics-to-traces bridge meanwhile.
 
 ## AWS phase — checks that need a live environment
 
