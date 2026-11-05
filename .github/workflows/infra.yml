@@ -52,7 +52,7 @@ permissions:
 env:
   TARGET_ENVIRONMENT: ${{ inputs.environment || 'dev' }}
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  TF_VERSION: 1.11.0
+  TF_VERSION: 1.13.3
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
