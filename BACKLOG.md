@@ -38,6 +38,11 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   change: docs/reviews/2026-11-05-i04-bootstrap-adoption.md (IAM and S3
   narrower, more services, three documents to render first).
 
+- [ ] **M02** — fraud's OTel Java agent is v2.10. Its exporter self-metrics
+  (`otlp.exporter.seen`/`exported`) carry no unit, which the collector
+  patches (`transform/sdk-units`, Argus MET-002). Upgrade the agent and
+  drop that transform once its self-metrics carry units.
+
 ## AWS phase — checks that need a live environment
 
 Everything above the line is code; these are the parts only an apply can
