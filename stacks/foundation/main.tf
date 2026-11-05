@@ -23,7 +23,7 @@ locals {
 }
 
 module "bootstrap" {
-  count  = var.destroy_all ? 0 : 1
+  count  = var.destroy_all || !var.enable_bootstrap ? 0 : 1
   source = "../../modules/bootstrap"
 
   environment  = var.environment

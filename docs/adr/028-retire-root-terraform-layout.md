@@ -46,5 +46,18 @@ Every apply, plan and destroy goes through the stacks, by hand or with
   stack, after the state bucket exists (`modules/bootstrap/create-s3-bucket.sh`).
 - An environment built from the root, if one existed elsewhere, would need
   its resources imported into the stacks. None is known.
+
+## Correction (2026-11-05)
+
+The second point of the context was wrong. The dev account's state bucket
+held two root states, `main/terraform.tfstate` (2026-04-09) and
+`dev/terraform.tfstate` (2026-06-07), and the bootstrap resources they
+created were still in the account: the GitHub OIDC provider, the
+`cloudops-github-actions` and `cloudops-deployer` roles, the state KMS key,
+the ECR pull-through cache rule, and one Route 53 zone each. Their networking
+had been destroyed. A foundation apply collides with these
+(`EntityAlreadyExists`), so the stack gained `enable_bootstrap`: set false,
+it leaves an existing bootstrap alone, and the Destroy workflow keeps the
+state bucket. Taking them into the foundation state is BACKLOG I04.
 - `terraform.tfvars` stays at the repo root; the stacks read it with
   `-var-file`. Variables only the root used are ignored with a warning.

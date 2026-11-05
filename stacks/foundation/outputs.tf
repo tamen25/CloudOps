@@ -3,26 +3,26 @@
 
 #── Bootstrap ────────────────────────────────────────────────────────────────
 output "bootstrap_bucket_name" {
-  value = var.destroy_all ? null : module.bootstrap[0].bucket_name
+  value = try(module.bootstrap[0].bucket_name, null)
 }
 
 output "bootstrap_kms_key_arn" {
-  value = var.destroy_all ? null : (var.bootstrap_create_kms ? module.bootstrap[0].kms_key_arn : null)
+  value = var.bootstrap_create_kms ? try(module.bootstrap[0].kms_key_arn, null) : null
 }
 
 output "github_actions_role_arn" {
   description = "Role GitHub Actions assumes through OIDC; the AWS_GITHUB_ACTIONS_ROLE_ARN secret"
-  value       = var.destroy_all ? null : module.bootstrap[0].github_actions_role_arn
+  value       = try(module.bootstrap[0].github_actions_role_arn, null)
 }
 
 output "deployer_role_arn" {
   description = "Role a person assumes (with MFA) to run Terraform"
-  value       = var.destroy_all ? null : module.bootstrap[0].deployer_role_arn
+  value       = try(module.bootstrap[0].deployer_role_arn, null)
 }
 
 output "github_token_secret_arn" {
   description = "Secrets Manager ARN of the bootstrap-managed GitHub PAT (empty when github_token is unset)."
-  value       = var.destroy_all || var.github_token == "" ? "" : module.bootstrap[0].github_token_secret_arn
+  value       = var.github_token == "" ? "" : try(module.bootstrap[0].github_token_secret_arn, "")
   sensitive   = true
 }
 

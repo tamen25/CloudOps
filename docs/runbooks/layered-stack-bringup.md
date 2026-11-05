@@ -63,6 +63,16 @@ aws s3 ls "s3://$(grep '^bootstrap_bucket_name' terraform.tfvars | sed 's/.*= *"
 If the bucket does not exist yet, create it with
 `bash modules/bootstrap/create-s3-bucket.sh`.
 
+### An account that is already bootstrapped
+
+If the account already has the GitHub OIDC provider
+(`aws iam list-open-id-connect-providers`), the `<project>-github-actions`
+and `<project>-deployer` roles, or `alias/<project>-tfstate-kms` from
+another state, set `enable_bootstrap = false`. Otherwise the foundation
+apply fails with `EntityAlreadyExists`. The stack then leaves them alone,
+its bootstrap outputs are null, and the Destroy workflow keeps the state
+bucket. The dev account is in this state (ADR 028, correction).
+
 ---
 
 ## Bring-up

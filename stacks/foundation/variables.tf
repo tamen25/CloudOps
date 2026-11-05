@@ -88,6 +88,19 @@ variable "bootstrap_bucket_name" {
   default = ""
 }
 
+variable "enable_bootstrap" {
+  description = <<-EOT
+    Create the account-level bootstrap resources: the GitHub OIDC provider,
+    the github-actions and deployer roles, the state KMS key and the ECR
+    pull-through cache rule. Set false in an account that already has them
+    from another state: creating them again fails with EntityAlreadyExists,
+    and importing them would let this stack's destroy delete what CI and the
+    existing state files depend on.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "bootstrap_create_kms" {
   type    = bool
   default = true

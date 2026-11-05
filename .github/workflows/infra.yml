@@ -124,9 +124,9 @@ jobs:
       - name: Every pinned Helm chart version is published
         run: python3 scripts/check-helm-charts.py
 
-      - name: Terraform module tests
+      - name: Terraform module and stack tests
         run: |
-          for dir in $(git ls-files 'modules/*/tests/*.tftest.hcl' | cut -d/ -f1-2 | sort -u); do
+          for dir in $(git ls-files 'modules/*/tests/*.tftest.hcl' 'stacks/*/tests/*.tftest.hcl' | cut -d/ -f1-2 | sort -u); do
             terraform -chdir="$dir" init -backend=false -input=false
             terraform -chdir="$dir" test
           done
