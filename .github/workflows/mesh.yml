@@ -120,6 +120,17 @@ jobs:
             echo "::error::coverage ${pct}% is below the 70% gate"; exit 1; }
       - name: Build (static linux)
         run: CGO_ENABLED=0 GOOS=linux go build -o /dev/null .
+      # The steps above use go.mod's Go; the image build uses the
+      # Dockerfile's, and GOTOOLCHAIN=local there too, so an older builder
+      # image fails only when someone builds the image.
+      - name: The Dockerfile builds with at least go.mod's Go
+        run: |
+          want=$(awk '$1 == "go" { print $2 }' go.mod)
+          have=$(sed -nE 's/^FROM golang:([0-9.]+).*/\1/p' Dockerfile | head -1)
+          if [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -1)" != "$want" ]; then
+            echo "::error file=apps/${{ matrix.service }}/Dockerfile::builds with Go ${have:-?}; go.mod needs $want"
+            exit 1
+          fi
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
