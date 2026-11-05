@@ -158,3 +158,39 @@ run "the_collector_keeps_the_health_check_extension" {
     error_message = "The collector's service.extensions must include health_check."
   }
 }
+
+# The contrib loki exporter refuses its `labels` block from 0.104 (the
+# collector crashlooped on it); logs go to Loki's OTLP endpoint instead.
+run "logs_go_to_loki_over_otlp" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(yamldecode(helm_release.otel_collector.values[0]).config.exporters), "loki")
+    error_message = "The deprecated loki exporter must not be configured."
+  }
+
+  assert {
+    condition     = yamldecode(helm_release.otel_collector.values[0]).config.exporters["otlphttp/loki"].endpoint == "http://loki-gateway.loki.svc/otlp"
+    error_message = "Logs must go to the Loki gateway's OTLP endpoint."
+  }
+
+  assert {
+    condition     = contains(yamldecode(helm_release.otel_collector.values[0]).config.service.pipelines.logs.exporters, "otlphttp/loki")
+    error_message = "The logs pipeline must use the OTLP exporter."
+  }
+}
+
+# The collector refuses a batch max below the batch size, whose default
+# (8192) is above the max this module sets; found by `otelcol-contrib
+# validate` on the rendered config.
+run "the_batch_limits_are_consistent" {
+  command = plan
+
+  assert {
+    condition = (
+      try(yamldecode(helm_release.otel_collector.values[0]).config.processors.batch.send_batch_size, 8192) <=
+      yamldecode(helm_release.otel_collector.values[0]).config.processors.batch.send_batch_max_size
+    )
+    error_message = "send_batch_max_size must be at least send_batch_size (default 8192)."
+  }
+}

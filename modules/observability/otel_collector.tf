@@ -36,7 +36,7 @@ resource "helm_release" "otel_collector" {
 
     #The chart has no default image and refuses to render without one. The
     #contrib distribution, because this config needs the bearertokenauth
-    #extension and the loki exporter, which the core and k8s ones lack. The
+    #extension, which the core and k8s ones lack. The
     #tag defaults to the chart's appVersion (0.104.0).
     image = { repository = "otel/opentelemetry-collector-contrib" }
 
@@ -108,8 +108,11 @@ resource "helm_release" "otel_collector" {
           ]
         }
 
+        # send_batch_size defaults to 8192, and the collector refuses a
+        # max below it: both are set.
         batch = {
           timeout             = "5s"
+          send_batch_size     = 1000
           send_batch_max_size = 1000
         }
       }
@@ -127,22 +130,14 @@ resource "helm_release" "otel_collector" {
           tls      = { insecure_skip_verify = true }
         }
 
-        #Logs → Loki gateway; promote service.name, level, trace_id as Loki labels
-        loki = {
-          endpoint = "http://loki-gateway.loki.svc/loki/api/v1/push"
-          default_labels_enabled = {
-            exporter = false
-            job      = true
-          }
-          labels = {
-            resource = {
-              "service.name" = "service_name"
-            }
-            attributes = {
-              level    = "level"
-              trace_id = "trace_id"
-            }
-          }
+        #Logs → Loki's native OTLP endpoint (Loki 3, schema v13). The contrib
+        #loki exporter is deprecated, and from 0.104 refuses its `labels`
+        #block. Loki indexes service.name as service_name; severity and
+        #trace_id arrive as structured metadata, queryable without being
+        #index labels.
+        "otlphttp/loki" = {
+          endpoint = "http://loki-gateway.loki.svc/otlp"
+          tls      = { insecure = true }
         }
       })
 
@@ -164,7 +159,7 @@ resource "helm_release" "otel_collector" {
           logs = {
             receivers  = ["otlp"]
             processors = ["memory_limiter", "resource", "batch"]
-            exporters  = concat(["loki"], local.argus_exporter)
+            exporters  = concat(["otlphttp/loki"], local.argus_exporter)
           }
         }
       }
