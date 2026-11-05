@@ -80,6 +80,48 @@ locals {
           include  = local.log_include
           exclude  = local.log_exclude
           start_at = "beginning"
+          #Listing operators replaces the preset's, so its container parser
+          #comes first again. Then: JSON lines (the mesh services log one
+          #object per line with level, msg, trace_id, span_id) become the
+          #record's severity, trace context and body; a non-JSON line on
+          #stderr is crash output (a Go panic, a Python traceback) and is
+          #an error. A non-JSON stdout line keeps no severity rather than a
+          #guessed one.
+          operators = [
+            { type = "container", id = "container-parser", max_log_size = 102400 },
+            {
+              type = "json_parser"
+              id   = "json"
+              #startsWith, not a regex: the expression language rejects "\s"
+              #(an invalid escape), and the services start each line with "{".
+              if         = "body startsWith \"{\""
+              parse_from = "body"
+              parse_to   = "attributes"
+              severity = {
+                parse_from = "attributes.level"
+                mapping = {
+                  debug = ["DEBUG", "debug"]
+                  info  = ["INFO", "info"]
+                  warn  = ["WARN", "WARNING", "warn", "warning"]
+                  error = ["ERROR", "error"]
+                  fatal = ["CRITICAL", "FATAL", "critical", "fatal"]
+                }
+              }
+            },
+            {
+              type     = "trace_parser"
+              if       = "attributes.trace_id != nil"
+              trace_id = { parse_from = "attributes.trace_id" }
+              span_id  = { parse_from = "attributes.span_id" }
+            },
+            { type = "move", if = "attributes.msg != nil", from = "attributes.msg", to = "body" },
+            {
+              type       = "severity_parser"
+              if         = "attributes.level == nil and attributes[\"log.iostream\"] == \"stderr\""
+              parse_from = "attributes[\"log.iostream\"]"
+              mapping    = { error = ["stderr"] }
+            },
+          ]
         }
       }
 

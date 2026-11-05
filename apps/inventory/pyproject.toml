@@ -36,4 +36,6 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["inventory"]
-omit = ["src/inventory/tracing.py"]
+# tracing.py and __main__.py are process wiring (an exporter, a server), run
+# only in the container.
+omit = ["src/inventory/tracing.py", "src/inventory/__main__.py"]
