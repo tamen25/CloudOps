@@ -3,6 +3,7 @@
 // second, fired in 100ms slices) rather than blindly spamming, and tags every
 // request as synthetic so traces/metrics stay filterable. fetchImpl + a clock
 // are injectable so the runner is testable without real time or network.
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { clampRunParams, type RunParams } from './clamp';
 import { pickTemplate, scenarioTemplates, type ScenarioName } from './scenarios';
 
@@ -25,6 +26,8 @@ export interface RunStatus {
 }
 
 const TICK_MS = 100; // 10 slices per second
+
+const tracer = trace.getTracer('loadgen');
 
 export class LoadRunner {
   private deps: Required<Omit<RunnerDeps, 'logger'>> & { logger: NonNullable<RunnerDeps['logger']> };
@@ -123,20 +126,35 @@ export class LoadRunner {
 
     this.inflight++;
     this.status.sent++;
-    try {
-      const res = await this.deps.fetchImpl(`${this.deps.targetBaseUrl}${tpl.path}`, {
-        method: tpl.method,
-        headers,
-        body,
-      });
-      // Chaos requests are EXPECTED to fail; count them as ok-by-design so the
-      // failure rate reflects unexpected failures only.
-      if (res.ok || tpl.fault) this.status.ok++;
-      else this.status.failed++;
-    } catch {
-      this.status.failed++;
-    } finally {
-      this.inflight--;
-    }
+    // Each request is the root of its trace. An INTERNAL span starts it, so
+    // the instrumented fetch is its CLIENT child: a CLIENT root reads as a
+    // server that dropped the trace context (Argus SPA-004 flagged every
+    // trickle trace on the EKS runs).
+    await tracer.startActiveSpan(
+      `loadgen ${scenario}`,
+      { kind: SpanKind.INTERNAL, attributes: { 'loadgen.scenario': scenario, 'loadgen.chaos': Boolean(tpl.fault) } },
+      async (span) => {
+        try {
+          const res = await this.deps.fetchImpl(`${this.deps.targetBaseUrl}${tpl.path}`, {
+            method: tpl.method,
+            headers,
+            body,
+          });
+          // Chaos requests are EXPECTED to fail; count them as ok-by-design so the
+          // failure rate reflects unexpected failures only.
+          if (res.ok || tpl.fault) this.status.ok++;
+          else {
+            this.status.failed++;
+            span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${res.status}` });
+          }
+        } catch (err) {
+          this.status.failed++;
+          span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
+        } finally {
+          this.inflight--;
+          span.end();
+        }
+      },
+    );
   }
 }
