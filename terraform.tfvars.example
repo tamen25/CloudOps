@@ -118,6 +118,10 @@ existing_node_sg_id         = ""
 # ─────────────────────────────────────────────────────────────
 # S3 bucket name must be globally unique across all AWS accounts
 bootstrap_bucket_name = "cloudops-tfstate-bucket-CHANGE_THIS"  # CHANGE THIS
+# false when the account already has the bootstrap resources from another
+# state (OIDC provider, github-actions/deployer roles, state KMS key). The
+# Destroy workflow then keeps the state bucket.
+enable_bootstrap = true
 
 # KMS key for state encryption
 bootstrap_create_kms          = true

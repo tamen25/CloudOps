@@ -340,12 +340,23 @@ jobs:
 
       #── 13. Delete the Terraform state bucket ───────────────────────────────
       #State bucket was created by create-s3-bucket.sh (outside Terraform), so
-      #Terraform destroy does not remove it — we must do so explicitly.
+      #Terraform destroy does not remove it — we must do so explicitly. Not
+      #when enable_bootstrap = false: the bootstrap resources, the bucket and
+      #whatever other state it holds then belong to someone else.
       - name: Empty Terraform state bucket
-        run: empty-s3-bucket "$STATE_BUCKET"
+        run: |
+          if grep -Eq '^[[:space:]]*enable_bootstrap[[:space:]]*=[[:space:]]*false' terraform.tfvars; then
+            echo "enable_bootstrap = false: keeping s3://$STATE_BUCKET"
+            exit 0
+          fi
+          empty-s3-bucket "$STATE_BUCKET"
 
       - name: Delete Terraform state bucket
         run: |
+          if grep -Eq '^[[:space:]]*enable_bootstrap[[:space:]]*=[[:space:]]*false' terraform.tfvars; then
+            echo "enable_bootstrap = false: keeping s3://$STATE_BUCKET"
+            exit 0
+          fi
           if aws s3api head-bucket --bucket "$STATE_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
             aws s3api delete-bucket --bucket "$STATE_BUCKET" --region "$AWS_REGION"
             echo "✓ State bucket $STATE_BUCKET deleted"

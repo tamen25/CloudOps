@@ -24,6 +24,13 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
   ambient (no CNI swap, no sidecars) after the first AWS run, or accept
   the risk (NetworkPolicy and request signatures only) and close.
 
+- [ ] **I04** — The dev account's bootstrap (GitHub OIDC provider, the
+  github-actions and deployer roles, the state KMS key, the ECR cache rule)
+  lives only in the retired root states `dev/` and `main/terraform.tfstate`
+  (ADR 028, correction), so the stacks run with `enable_bootstrap = false`.
+  Import it into `dev/foundation`, then delete the two root states. Until
+  then the Destroy workflow keeps the state bucket.
+
 ## AWS phase — checks that need a live environment
 
 Everything above the line is code; these are the parts only an apply can
