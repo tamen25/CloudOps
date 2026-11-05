@@ -1,7 +1,7 @@
 # Cost and capacity estimate: an Argus run on CloudOps (I03)
 
-**Status:** estimate, for approval before any apply. Nothing in it has been
-created. Prices are AWS on-demand list prices for us-east-1 as of this
+**Status:** approved and run on 2026-11-05; actuals in
+`docs/reviews/2026-11-05-eks-run.md` (≈ 2 h 10 min, memory requests ≈ 8.8 GiB). Prices are AWS on-demand list prices for us-east-1 as of this
 writing; check them on the day.
 
 ## What runs where

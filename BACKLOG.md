@@ -36,11 +36,11 @@ Nothing is applied to AWS without a cost estimate and an explicit yes.
 Everything above the line is code; these are the parts only an apply can
 prove. I03 comes first.
 
-- [ ] **I03** — Approve (or change) the estimate before any apply:
-  `docs/cost/2026-10-20-argus-run-estimate.md` — ≈ $0.62/hr while running,
-  ≈ $4–5 for a 4–6 h session, ≈ $15/day if left up; three t3.large nodes.
 - [ ] **S01** — First apply with the scoped deployer policy; check whether
   a role created by the old oidc.sh still exists with its any-branch trust.
+  (2026-11-05: the only role trusting the GitHub provider is
+  cloudops-github-actions, for pull requests, `feature/*` and `main`; the
+  first run applied as the admin user, so the policy is still untried.)
 - [ ] **S08** — Switch the permissions boundary on and run its runbook's
   verify list (docs/runbooks/security/permissions-boundary.md).
 - [ ] **V01** — Run once and read the output of: the kube-bench job (#32;
@@ -49,8 +49,9 @@ prove. I03 comes first.
   and dynamic label), and the SLO deploy gate (finds its metric).
 - [ ] **I02** — First Chaos Mesh experiment: check the Falco rules against
   the chaos daemon (docs/runbooks/chaos-mesh.md).
-- [ ] **V02** — Run the Destroy workflow once at the end of the first AWS
-  session and confirm nothing is left: `plan -destroy` empty per stack,
+- [ ] **V02** — Run the Destroy workflow once at the end of an AWS session
+  (the first, 2026-11-05, ran its steps by hand and passed the checks; see
+  docs/reviews/2026-11-05-eks-run.md) and confirm nothing is left: `plan -destroy` empty per stack,
   no `<project>-*` buckets, no load balancers for the cluster, no
   `available` EBS volumes tagged `ebs.csi.aws.com/cluster=true`, no
   `/aws/eks/<cluster>` log group.
@@ -61,6 +62,10 @@ prove. I03 comes first.
   private and run it again.
 
 ## Done
+
+- [x] **I03** — the run estimate approved and run on 2026-11-05
+  (docs/reviews/2026-11-05-eks-run.md): ≈ 2 h 10 min billed; memory
+  requests ≈ 8.8 GiB against 13.5 estimated; three t3.large were right.
 
 - [x] **C01** — CI/CD review (docs/reviews/2026-10-20-cicd-review.md): 19
   findings in the AWS paths of the workflows, fixed across #52–#55; a
