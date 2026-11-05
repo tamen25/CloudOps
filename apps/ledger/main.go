@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -95,9 +95,13 @@ func main() {
 	shutdown := initTracer("ledger")
 	defer shutdown()
 
-	handler := withTracing("ledger", NewMux(book, hmacActive, hmacPrevious, nowMillis))
-	log.Printf("ledger listening on :%s", port)
+	logger := newLogger(os.Stdout)
+	slog.SetDefault(logger)
+
+	handler := withTracing("ledger", withAccessLog(logger, NewMux(book, hmacActive, hmacPrevious, nowMillis)))
+	logger.Info("ledger listening", "port", port)
 	if err := newServer(port, handler).ListenAndServe(); err != nil {
-		log.Fatal(err)
+		logger.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

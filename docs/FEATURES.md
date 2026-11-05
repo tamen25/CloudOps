@@ -386,6 +386,12 @@ SECURITY` — table owner cannot bypass.
   `log_collection_skip_workloads`, which export OTLP logs themselves, are
   not read, or each line would arrive twice. The platform stack collects the
   mesh namespace and skips api-gateway, payment, loadgen and fraud.
+  pricing, ledger (Go, `log/slog`) and inventory (Python) log one JSON
+  object per line with `level`, `msg` and, inside a request, the span's
+  `trace_id` and `span_id`; the agent turns these into the record's
+  severity, body and trace context, so their lines filter by level and join
+  their traces. It reads each file from the start and keeps checkpoints on
+  the node, so a restart neither loses nor repeats lines.
 - Loki (logs), Tempo (traces), Mimir (metrics). Per-signal KMS CMKs.
 - Grafana with sidecar-driven config:
   - `grafana_dashboard=1` — dashboards.

@@ -103,3 +103,23 @@ run "the_agent_reads_from_the_start_and_keeps_its_place" {
     error_message = "The agent must start at the beginning of each file and store checkpoints."
   }
 }
+
+# The mesh services log JSON with level and trace IDs; without these
+# operators the lines reach Loki with no severity and no trace context
+# (Argus LOG-002 and ARG-LOG-001 on the EKS runs).
+run "the_agent_parses_level_and_trace_context" {
+  command = plan
+
+  variables {
+    log_collection_namespaces = ["cloudops"]
+  }
+
+  assert {
+    condition = (
+      yamldecode(helm_release.otel_agent[0].values[0]).config.receivers.filelog.operators[0].type == "container" &&
+      anytrue([for o in yamldecode(helm_release.otel_agent[0].values[0]).config.receivers.filelog.operators : o.type == "json_parser" && try(o.severity.parse_from, "") == "attributes.level"]) &&
+      anytrue([for o in yamldecode(helm_release.otel_agent[0].values[0]).config.receivers.filelog.operators : o.type == "trace_parser" && try(o.trace_id.parse_from, "") == "attributes.trace_id"])
+    )
+    error_message = "The agent must keep the container parser first, then set severity from level and trace context from trace_id/span_id."
+  }
+}

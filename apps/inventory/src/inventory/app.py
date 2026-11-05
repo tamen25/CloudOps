@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 
 from inventory.core import InvalidReservation, ReserveLine, reserve
+from inventory.logs import FIELDS, level_for
 from inventory.tracing import init_tracer, instrument_app
 
 RESERVE_TOTAL = Counter("inventory_reserve_total", "Reserve requests", ["reserved"])
@@ -38,6 +40,23 @@ def create_app() -> FastAPI:
     init_tracer("inventory")
     app = FastAPI(title="inventory", docs_url=None, redoc_url=None, openapi_url=None)
     seed = _load_stock()
+    access = logging.getLogger("inventory.access")
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next):
+        # Probes and scrapes would be most of the lines and none of the signal.
+        if request.url.path in ("/healthz", "/readyz", "/metrics"):
+            return await call_next(request)
+        start = time.monotonic()
+        fields = {"method": request.method, "path": request.url.path}
+        try:
+            response = await call_next(request)
+        except Exception:
+            access.exception("request failed", extra={FIELDS: fields})
+            raise
+        fields.update(status=response.status_code, duration_ms=int((time.monotonic() - start) * 1000))
+        access.log(level_for(response.status_code), "request", extra={FIELDS: fields})
+        return response
 
     @app.get("/healthz")
     def healthz():

@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -85,10 +85,14 @@ func main() {
 	shutdownTracer := initTracer("pricing")
 	defer shutdownTracer()
 
-	handler := withTracing("pricing", NewMux())
+	logger := newLogger(os.Stdout)
+	slog.SetDefault(logger)
 
-	log.Printf("pricing listening on :%s", port)
+	handler := withTracing("pricing", withAccessLog(logger, NewMux()))
+
+	logger.Info("pricing listening", "port", port)
 	if err := newServer(port, handler).ListenAndServe(); err != nil {
-		log.Fatal(err)
+		logger.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

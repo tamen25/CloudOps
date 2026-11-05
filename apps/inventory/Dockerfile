@@ -1,5 +1,5 @@
 # Inventory (Python/FastAPI). Multi-stage: build a wheel + install into a venv,
-# then copy the venv onto a slim non-root runtime. uvicorn serves app:app.
+# then copy the venv onto a slim non-root runtime. `python -m inventory` serves app:app.
 
 FROM python:3.12-slim AS builder
 WORKDIR /app
@@ -19,4 +19,5 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz').status==200 else 1)"
-CMD ["uvicorn", "inventory.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# python -m inventory runs uvicorn with JSON logging (src/inventory/__main__.py).
+CMD ["python", "-m", "inventory"]
