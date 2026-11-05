@@ -124,6 +124,11 @@ jobs:
       - name: Every pinned Helm chart version is published
         run: python3 scripts/check-helm-charts.py
 
+      # A Loki selector on a label Loki does not index matches nothing,
+      # silently (the Logs Explorer was empty for that reason).
+      - name: Loki queries select labels Loki has
+        run: python3 scripts/check-loki-queries.py
+
       - name: Terraform module and stack tests
         run: |
           for dir in $(git ls-files 'modules/*/tests/*.tftest.hcl' 'stacks/*/tests/*.tftest.hcl' | cut -d/ -f1-2 | sort -u); do

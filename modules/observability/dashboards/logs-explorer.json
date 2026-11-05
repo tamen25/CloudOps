@@ -22,7 +22,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${loki_ds}" },
-          "expr": "sum(count_over_time({namespace=\"cloudops\", service_name=~\"$service\"}[1m]))",
+          "expr": "sum(count_over_time({k8s_namespace_name=\"cloudops\", service_name=~\"$service\"}[1m]))",
           "legendFormat": "Log volume",
           "refId": "A"
         }
@@ -44,7 +44,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${loki_ds}" },
-          "expr": "sum(count_over_time({namespace=\"cloudops\", level=~\"error|ERROR|Error\"}[1m]))",
+          "expr": "sum(count_over_time({k8s_namespace_name=\"cloudops\"} | severity_text=~\"(?i)error|fatal|critical\" [1m]))",
           "legendFormat": "Errors",
           "refId": "A"
         }
@@ -70,7 +70,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${loki_ds}" },
-          "expr": "{namespace=\"cloudops\", service_name=~\"$service\", level=~\"$level\"}",
+          "expr": "{k8s_namespace_name=\"cloudops\", service_name=~\"$service\"} | severity_text=~\"(?i)$level.*\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -99,14 +99,14 @@
       {
         "current": { "text": ".*", "value": ".*" },
         "datasource": { "type": "loki", "uid": "${loki_ds}" },
-        "definition": "label_values({namespace=\"cloudops\"}, service_name)",
+        "definition": "label_values({k8s_namespace_name=\"cloudops\"}, service_name)",
         "hide": 0,
         "includeAll": true,
         "label": "Service",
         "multi": true,
         "name": "service",
         "options": [],
-        "query": "label_values({namespace=\"cloudops\"}, service_name)",
+        "query": "label_values({k8s_namespace_name=\"cloudops\"}, service_name)",
         "refresh": 2,
         "sort": 1,
         "type": "query"

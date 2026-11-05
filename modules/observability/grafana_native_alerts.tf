@@ -49,7 +49,7 @@ locals {
                 }
                 model = {
                   refId         = "A"
-                  expr          = "sum(count_over_time({namespace=\"${var.application_namespace}\"} |~ \"(?i)error|exception|fatal\"[5m]))"
+                  expr          = "sum(count_over_time({k8s_namespace_name=\"${var.application_namespace}\"} |~ \"(?i)error|exception|fatal\"[5m]))"
                   queryType     = "range"
                   intervalMs    = 1000
                   maxDataPoints = 43200
