@@ -345,7 +345,7 @@ jobs:
 
       - name: Install Cosign
         #Pinned (closes backlog #39).
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           # Installer v4 defaults to cosign v3, which signs in the new bundle
           # format. Whether the cluster's policy-controller admits it is
@@ -461,7 +461,7 @@ jobs:
           echo "grype_exit=$?" >> "$GITHUB_OUTPUT"
 
       - name: Upload Grype SARIF results
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         with:
           sarif_file: grype-results.sarif
@@ -549,7 +549,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload image scan SARIF results
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         with:
           sarif_file: trivy-image.sarif
@@ -932,7 +932,7 @@ jobs:
 
       - name: Install Cosign
         #Pinned (closes backlog #39).
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           # Installer v4 defaults to cosign v3, which signs in the new bundle
           # format. Whether the cluster's policy-controller admits it is
